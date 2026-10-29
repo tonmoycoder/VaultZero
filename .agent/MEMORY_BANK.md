@@ -65,3 +65,13 @@ VaultZero is a 100% offline, cross-platform password manager for Windows Desktop
   - Implemented responsive mobile navigation (`MobileNav.tsx`) for screens < 768px.
   - Verified `npm run build` passes with 0 errors (built in 29s).
   - Tagged: `checkpoint-phase-3-ui-lofi-mobile`.
+- **Phase 4 (Complete):**
+  - Implemented Zero-Server MITM-Proof Local P2P Sync with ephemeral X25519 + SPAKE2 6-digit PIN key exchange and mutual HMAC-SHA256 transcript tags (`p2p.rs`).
+  - Implemented Optical QR Stream Chunking & Reassembly for air-gapped camera sync (`p2p.rs`).
+  - Implemented Offline OCR & Regex Classifier with Ambiguous Character (`0/O`, `1/l/I`) detection and one-click substitution (`ocr.rs`).
+  - Implemented DoD 5220.22-M 3-Pass Secure File Shredder (`0x00`, `0xFF`, CSPRNG, truncation, unlink) (`shredder.rs`).
+  - Implemented Sanitized CSV export preventing Formula Injection (DDE attacks) and Markdown grouped export with spoiler password masks (`export.rs`).
+  - Implemented CSV import with duplicate detection preview.
+  - Implemented OS Hardening: Protected Clipboard (12s auto-clear countdown toast) and toggleable Screen Capture Protection (`SetWindowDisplayAffinity`).
+  - 100% green tests covering P2P key derivation, MITM tamper rejection, optical chunking, OCR parsing, CSV injection, and file shredder (15 passed, 0 failed).
+  - Tagged: `checkpoint-phase-4-sync-ocr-hardening`.

@@ -3,10 +3,14 @@ pub mod brands;
 pub mod crdt;
 pub mod crypto;
 pub mod errors;
+pub mod export;
 pub mod generator;
 pub mod memory;
 pub mod models;
+pub mod ocr;
+pub mod p2p;
 pub mod search;
+pub mod shredder;
 pub mod storage;
 pub mod totp;
 
@@ -15,10 +19,14 @@ pub use brands::{BrandInfo, BrandRegistry};
 pub use crdt::{merge_vault_states, HlcClock};
 pub use crypto::{derive_kek, generate_vault_key, KdfParams};
 pub use errors::{Result, VaultError};
+pub use export::{ImportPreview, VaultExporter};
 pub use generator::{calculate_entropy, generate_passphrase, generate_password, PasswordGenOptions};
 pub use memory::LockedBuffer;
 pub use models::{Category, Entry, EntrySummary, Folder, PasswordHistoryEntry, RecoveryCode, TotpConfig, Vault};
+pub use ocr::{AmbiguousCharacter, OcrParsedResult, OcrSmartParser};
+pub use p2p::{OpticalQrChunk, P2PBeaconPacket, P2PSessionHandshake, P2PSessionKey};
 pub use search::{DomainGroup, SearchEngine, SearchFilter};
+pub use shredder::SecureShredder;
 pub use storage::{StorageEngine, UnlockedVaultSession};
 pub use totp::{decode_base32, generate_totp, parse_otpauth_uri};
 
@@ -26,6 +34,7 @@ pub use totp::{decode_base32, generate_totp, parse_otpauth_uri};
 mod tests {
     use super::*;
     use std::fs;
+    use std::io::Write;
     use tempfile::NamedTempFile;
     use uuid::Uuid;
 
@@ -442,5 +451,112 @@ mod tests {
         let brand2 = BrandRegistry::match_brand("Vacation Home Rental", "https://www.airbnb.com/rooms/123");
         assert!(brand2.is_some());
         assert_eq!(brand2.unwrap().slug, "airbnb");
+    }
+
+    #[test]
+    fn test_p2p_spake2_pairing_and_mitm_rejection() {
+        let pin = "849201";
+
+        // Desktop and Phone ephemeral handshakes
+        let desktop_hs = P2PSessionHandshake::new();
+        let phone_hs = P2PSessionHandshake::new();
+
+        let desktop_pub = desktop_hs.public_key;
+        let phone_pub = phone_hs.public_key;
+
+        // Complete handshake with matching PIN
+        let desktop_session = desktop_hs.complete_handshake(&phone_pub, pin).unwrap();
+        let phone_session = phone_hs.complete_handshake(&desktop_pub, pin).unwrap();
+
+        // Mutual auth tag check
+        assert!(desktop_session.verify_auth_tag(&phone_session.auth_tag));
+        assert!(phone_session.verify_auth_tag(&desktop_session.auth_tag));
+
+        // Encrypt on Desktop -> Decrypt on Phone
+        let payload = b"CRDT_VAULT_DELTA_ENCRYPTED_PAYLOAD_TEST";
+        let encrypted = desktop_session.encrypt_payload(payload).unwrap();
+        let decrypted = phone_session.decrypt_payload(&encrypted).unwrap();
+        assert_eq!(&decrypted, payload);
+
+        // MITM Test: Attacker with wrong PIN
+        let attacker_hs = P2PSessionHandshake::new();
+        let attacker_session = attacker_hs
+            .complete_handshake(&desktop_pub, "999999")
+            .unwrap();
+
+        // Attacker's tag must NOT match desktop's tag
+        assert!(!attacker_session.verify_auth_tag(&desktop_session.auth_tag));
+
+        // Attacker trying to decrypt Desktop's payload must fail
+        assert!(attacker_session.decrypt_payload(&encrypted).is_err());
+    }
+
+    #[test]
+    fn test_optical_qr_chunking_and_reassembly() {
+        let original_data = vec![42u8; 850];
+        let chunks = OpticalQrChunk::split_payload(1337, &original_data, 200);
+        assert_eq!(chunks.len(), 5);
+
+        // Reverse chunks order to test out-of-order reassembly
+        let mut reversed = chunks;
+        reversed.reverse();
+
+        let reassembled = OpticalQrChunk::reassemble(&reversed).unwrap();
+        assert_eq!(reassembled, original_data);
+    }
+
+    #[test]
+    fn test_ocr_smart_regex_parsing() {
+        let raw = r#"
+            Login to GitHub
+            URL: https://github.com/login
+            Username: octocat_admin
+            Email: octo@github.com
+            Password: P0ssw1rd!
+            otpauth://totp/GitHub:octo?secret=JBSWY3DPEHPK3PXP&issuer=GitHub
+            Recovery: 1A2B-3C4D-5E6F
+        "#;
+
+        let parsed = OcrSmartParser::parse(raw);
+        assert_eq!(parsed.url.unwrap(), "https://github.com/login");
+        assert_eq!(parsed.username.unwrap(), "octocat_admin");
+        assert_eq!(parsed.email.unwrap(), "octo@github.com");
+        assert_eq!(parsed.password.unwrap(), "P0ssw1rd!");
+        assert_eq!(parsed.totp_secret.unwrap(), "JBSWY3DPEHPK3PXP");
+        assert_eq!(parsed.recovery_codes.len(), 1);
+        assert_eq!(parsed.recovery_codes[0], "1A2B-3C4D-5E6F");
+
+        // Verify ambiguous characters in "P0ssw1rd!" ('0' and '1')
+        assert_eq!(parsed.ambiguous_characters.len(), 2);
+        let corrected = OcrSmartParser::replace_character("P0ssw1rd!", 1, 'o');
+        assert_eq!(corrected, "Possw1rd!");
+    }
+
+    #[test]
+    fn test_csv_injection_neutralization() {
+        let malicious_inputs = vec![
+            ("=cmd|' /C calc'!A0", "'=cmd|' /C calc'!A0"),
+            ("+12345", "'+12345"),
+            ("-999", "'-999"),
+            ("@SUM(A1:A10)", "'@SUM(A1:A10)"),
+            ("normal_title", "normal_title"),
+        ];
+
+        for (input, expected) in malicious_inputs {
+            assert_eq!(VaultExporter::sanitize_csv_cell(input), expected);
+        }
+    }
+
+    #[test]
+    fn test_dod_3pass_file_shredder() {
+        let mut temp_file = NamedTempFile::new().unwrap();
+        temp_file
+            .write_all(b"SUPER_SECRET_PLAINTEXT_KEYS_TO_DESTROY")
+            .unwrap();
+        let path = temp_file.path().to_path_buf();
+        assert!(path.exists());
+
+        SecureShredder::shred_file(&path).unwrap();
+        assert!(!path.exists());
     }
 }

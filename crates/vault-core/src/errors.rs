@@ -28,6 +28,15 @@ pub enum VaultError {
 
     #[error("Cryptographic error: {0}")]
     CryptoError(String),
+
+    #[error("Storage error: {0}")]
+    Storage(String),
+
+    #[error("Corrupted data: {0}")]
+    Corrupted(String),
+
+    #[error("Authentication error: {0}")]
+    Authentication(String),
 }
 
 pub type Result<T> = std::result::Result<T, VaultError>;

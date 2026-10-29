@@ -3,9 +3,13 @@ use std::sync::Mutex;
 use uuid::Uuid;
 use vault_core::auditor::{SecurityAuditReport, SecurityAuditor};
 use vault_core::brands::{BrandInfo, BrandRegistry};
+use vault_core::export::{ImportPreview, VaultExporter};
 use vault_core::generator::{generate_passphrase, generate_password, PasswordGenOptions};
 use vault_core::models::{Entry, EntrySummary, RecoveryCode};
+use vault_core::ocr::{OcrParsedResult, OcrSmartParser};
+use vault_core::p2p::{OpticalQrChunk, P2PBeaconPacket};
 use vault_core::search::{DomainGroup, SearchEngine, SearchFilter};
+use vault_core::shredder::SecureShredder;
 use vault_core::storage::{StorageEngine, UnlockedVaultSession};
 use vault_core::totp::generate_totp;
 use vault_core::HlcClock;
@@ -338,6 +342,94 @@ pub mod commands {
 
         Ok(())
     }
+
+    #[tauri::command]
+    pub fn classify_ocr_text(text: String) -> OcrParsedResult {
+        OcrSmartParser::parse(&text)
+    }
+
+    #[tauri::command]
+    pub fn shred_file_cmd(path: String) -> Result<(), String> {
+        SecureShredder::shred_file(&path).map_err(|e| e.to_string())
+    }
+
+    #[tauri::command]
+    pub fn export_vault_cmd(format: String, state: State<AppState>) -> Result<String, String> {
+        let session_guard = state.session.lock().unwrap();
+        let session = session_guard
+            .as_ref()
+            .ok_or_else(|| "Vault is locked".to_string())?;
+
+        match format.to_lowercase().as_str() {
+            "csv" => Ok(VaultExporter::export_csv(&session.vault.entries)),
+            "markdown" | "md" => Ok(VaultExporter::export_markdown(&session.vault.entries)),
+            "json" => VaultExporter::export_json(&session.vault.entries).map_err(|e| e.to_string()),
+            _ => Err("Unsupported export format".to_string()),
+        }
+    }
+
+    #[tauri::command]
+    pub fn import_csv_cmd(
+        csv_content: String,
+        state: State<AppState>,
+    ) -> Result<ImportPreview, String> {
+        let mut session_guard = state.session.lock().unwrap();
+        let session = session_guard
+            .as_mut()
+            .ok_or_else(|| "Vault is locked".to_string())?;
+
+        let preview = VaultExporter::parse_csv_import(&csv_content, &session.vault.entries)
+            .map_err(|e| e.to_string())?;
+
+        for entry in &preview.new_entries {
+            session.vault.entries.push(entry.clone());
+        }
+
+        if let Some(ref path) = *state.vault_path.lock().unwrap() {
+            StorageEngine::save_vault(path, session).map_err(|e| e.to_string())?;
+        }
+
+        Ok(preview)
+    }
+
+    #[tauri::command]
+    pub fn generate_p2p_beacon_cmd(device_name: String, port: u16) -> P2PBeaconPacket {
+        P2PBeaconPacket::new("vaultzero-desktop".into(), device_name, port)
+    }
+
+    #[tauri::command]
+    pub fn chunk_optical_payload_cmd(data: String, chunk_size: usize) -> Vec<OpticalQrChunk> {
+        let session_id = (chrono::Utc::now().timestamp_subsec_nanos() ^ 0x5A5A5A5A) as u32;
+        OpticalQrChunk::split_payload(session_id, data.as_bytes(), chunk_size)
+    }
+
+    #[tauri::command]
+    pub fn reassemble_optical_chunks_cmd(chunks: Vec<OpticalQrChunk>) -> Result<String, String> {
+        let bytes = OpticalQrChunk::reassemble(&chunks).map_err(|e| e.to_string())?;
+        String::from_utf8(bytes).map_err(|e| e.to_string())
+    }
+
+    #[tauri::command]
+    pub fn set_screen_protection(window: tauri::Window, enabled: bool) -> Result<(), String> {
+        #[cfg(target_os = "windows")]
+        {
+            use windows_sys::Win32::UI::WindowsAndMessaging::{
+                SetWindowDisplayAffinity, WDA_EXCLUDEFROMCAPTURE, WDA_NONE,
+            };
+            if let Ok(hwnd) = window.hwnd() {
+                let affinity = if enabled {
+                    WDA_EXCLUDEFROMCAPTURE
+                } else {
+                    WDA_NONE
+                };
+                unsafe {
+                    SetWindowDisplayAffinity(hwnd.0 as _, affinity);
+                }
+            }
+        }
+        let _ = (window, enabled);
+        Ok(())
+    }
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -360,6 +452,14 @@ pub fn run() {
             commands::get_totp_code,
             commands::upsert_entry,
             commands::delete_entry,
+            commands::classify_ocr_text,
+            commands::shred_file_cmd,
+            commands::export_vault_cmd,
+            commands::import_csv_cmd,
+            commands::generate_p2p_beacon_cmd,
+            commands::chunk_optical_payload_cmd,
+            commands::reassemble_optical_chunks_cmd,
+            commands::set_screen_protection,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

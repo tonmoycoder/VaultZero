@@ -110,3 +110,29 @@ export interface BrandInfo {
   svg_icon: string;
 }
 
+export interface AmbiguousCharacter {
+  position: number;
+  original_char: string;
+  alternatives: string[];
+}
+
+export interface OcrParsedResult {
+  title: string | null;
+  url: string | null;
+  email: string | null;
+  username: string | null;
+  password: string | null;
+  totp_secret: string | null;
+  recovery_codes: string[];
+  ambiguous_characters: AmbiguousCharacter[];
+  raw_lines: string[];
+}
+
+export interface ImportPreview {
+  total_parsed: number;
+  new_entries: Entry[];
+  duplicate_count: number;
+  duplicate_titles: string[];
+}
+
+

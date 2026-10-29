@@ -5,6 +5,8 @@ import type {
   Entry,
   EntrySecretPayload,
   EntrySummary,
+  ImportPreview,
+  OcrParsedResult,
   SecurityAuditReport,
   TotpResponse,
   VaultStatus,
@@ -450,6 +452,63 @@ export const VaultApi = {
     const e = mockEntries.find(i => i.id === entryId);
     if (e) {
       e.is_deleted = true;
+    }
+  },
+
+  async classifyOcr(text: string): Promise<OcrParsedResult> {
+    if (isTauri()) {
+      return await invoke<OcrParsedResult>('classify_ocr_text', { text });
+    }
+    return {
+      title: 'GitHub',
+      url: 'https://github.com/login',
+      email: 'octo@github.com',
+      username: 'octocat_admin',
+      password: 'P0ssw1rd!',
+      totp_secret: 'JBSWY3DPEHPK3PXP',
+      recovery_codes: ['1A2B-3C4D-5E6F'],
+      ambiguous_characters: [
+        { position: 1, original_char: '0', alternatives: ['O', 'o'] },
+        { position: 5, original_char: '1', alternatives: ['l', 'I', '|'] },
+      ],
+      raw_lines: text.split('\n'),
+    };
+  },
+
+  async shredFile(path: string): Promise<void> {
+    if (isTauri()) {
+      await invoke('shred_file_cmd', { path });
+    }
+  },
+
+  async exportVault(format: 'csv' | 'markdown' | 'json'): Promise<string> {
+    if (isTauri()) {
+      return await invoke<string>('export_vault_cmd', { format });
+    }
+    if (format === 'csv') {
+      return 'title,url,username,email,password\n"GitHub","https://github.com","octocat","octo@github.com","••••••••"';
+    }
+    if (format === 'markdown') {
+      return '# VaultZero Export\n\n## GitHub\n- **Password:** ||secret||';
+    }
+    return JSON.stringify(mockEntries, null, 2);
+  },
+
+  async importCsv(csvContent: string): Promise<ImportPreview> {
+    if (isTauri()) {
+      return await invoke<ImportPreview>('import_csv_cmd', { csvContent });
+    }
+    return {
+      total_parsed: 3,
+      new_entries: [],
+      duplicate_count: 1,
+      duplicate_titles: ['GitHub'],
+    };
+  },
+
+  async setScreenProtection(enabled: boolean): Promise<void> {
+    if (isTauri()) {
+      await invoke('set_screen_protection', { enabled });
     }
   }
 };

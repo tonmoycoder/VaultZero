@@ -1,7 +1,7 @@
 # VaultZero Task Queue
 
 ## Status Overview
-- Current Phase: Phase 4 (MITM-Proof P2P Sync, Offline OCR & OS Hardening)
+- Current Phase: Phase 5 (Red-Team Audit, Emergency Recovery Kit & Production Packaging)
 - Execution Mode: Unattended Autonomous Overnight Mode (Ralph Loop)
 - Platform Targets: Windows Desktop (.exe) & Android Mobile (.apk)
 
@@ -50,17 +50,17 @@
   - [x] Verify `npm run build` and UI verification
   - [x] Create Git tag `checkpoint-phase-3-ui-lofi-mobile`
 
-- [ ] **Phase 4: MITM-Proof P2P Sync, Offline OCR & OS Hardening**
-  - [ ] P2P LAN discovery & SPAKE2 / X25519 authenticated Noise tunnel
-  - [ ] QR pairing and Animated QR optical sync fallback
-  - [ ] Offline OCR & QR Scanner with regex classification & ambiguous character disambiguation
-  - [ ] Protected Clipboard (12s hash-verified clear, sensitive flags)
-  - [ ] Desktop Auto-Type (`Ctrl+Alt+P`) via virtual input
-  - [ ] Screen Capture Protection (WDA_EXCLUDEFROMCAPTURE / FLAG_SECURE)
-  - [ ] Rust-side idle auto-lock & strict CSP
-  - [ ] Smart Exports (.pmv, sanitized .csv, .json, .md) & DoD 3-Pass Secure File Shredder
-  - [ ] Verify `cargo test` & `npm run build`
-  - [ ] Create Git tag `checkpoint-phase-4-sync-ocr-hardening`
+- [x] **Phase 4: MITM-Proof P2P Sync, Offline OCR & OS Hardening**
+  - [x] P2P LAN discovery & SPAKE2 / X25519 authenticated Noise tunnel
+  - [x] QR pairing and Animated QR optical sync fallback
+  - [x] Offline OCR & QR Scanner with regex classification & ambiguous character disambiguation
+  - [x] Protected Clipboard (12s hash-verified clear, sensitive flags)
+  - [x] Desktop Auto-Type (`Ctrl+Alt+P`) via virtual input
+  - [x] Screen Capture Protection (WDA_EXCLUDEFROMCAPTURE / FLAG_SECURE)
+  - [x] Rust-side idle auto-lock & strict CSP
+  - [x] Smart Exports (.pmv, sanitized .csv, .json, .md) & DoD 3-Pass Secure File Shredder
+  - [x] Verify `cargo test` & `npm run build`
+  - [x] Create Git tag `checkpoint-phase-4-sync-ocr-hardening`
 
 - [ ] **Phase 5: Red-Team Audit, Emergency Recovery Kit & Production Packaging**
   - [ ] First-run Onboarding Wizard & Printable Emergency Recovery Kit
