@@ -1,7 +1,7 @@
 # VaultZero Task Queue
 
 ## Status Overview
-- Current Phase: Phase 1 (Cryptographic Core, Duress Vault, CRDT Model & Storage Engine)
+- Current Phase: Phase 2 (Vault Features, TOTP, Zero-Server Brand Logo Engine & Auditor)
 - Execution Mode: Unattended Autonomous Overnight Mode (Ralph Loop)
 - Platform Targets: Windows Desktop (.exe) & Android Mobile (.apk)
 
@@ -17,17 +17,17 @@
   - [x] Verify `npm run build` passes cleanly
   - [x] Create Git tag `checkpoint-phase-0.5-upgraded-spec`
 
-- [ ] **Phase 1: Cryptographic Core, Duress Vault, CRDT Model & Storage Engine**
-  - [ ] Create `vault-core` standalone Rust crate
-  - [ ] Argon2id KDF with hardware calibration (500-900ms) + optional Keyfile mix
-  - [ ] XChaCha20-Poly1305 Vault Key wrapping & Vault Body encryption with PMV1 AAD
-  - [ ] Secondary Duress / Decoy Vault slot support
-  - [ ] CRDT Hybrid Logical Clock (HLC) & deterministic `merge_vault_states`
-  - [ ] Memory safety (`zeroize`, `secrecy`), OS RAM locking (`VirtualLock` on Windows, `mlock` on Android)
-  - [ ] Atomic file write (.tmp -> sync_all -> rename) + 5 rolling backups
-  - [ ] Comprehensive unit & fuzz tests with tamper rejection
-  - [ ] Verify `cargo test` passes 100%
-  - [ ] Create Git tag `checkpoint-phase-1-crypto-core`
+- [x] **Phase 1: Cryptographic Core, Duress Vault, CRDT Model & Storage Engine**
+  - [x] Create `vault-core` standalone Rust crate
+  - [x] Argon2id KDF with hardware calibration (500-900ms) + optional Keyfile mix
+  - [x] XChaCha20-Poly1305 Vault Key wrapping & Vault Body encryption with PMV1 AAD
+  - [x] Secondary Duress / Decoy Vault slot support
+  - [x] CRDT Hybrid Logical Clock (HLC) & deterministic `merge_vault_states`
+  - [x] Memory safety (`zeroize`, `secrecy`), OS RAM locking (`VirtualLock` on Windows, `mlock` on Android)
+  - [x] Atomic file write (.tmp -> sync_all -> rename) + 5 rolling backups
+  - [x] Comprehensive unit & fuzz tests with tamper rejection
+  - [x] Verify `cargo test` passes 100%
+  - [x] Create Git tag `checkpoint-phase-1-crypto-core`
 
 - [ ] **Phase 2: Vault Features, TOTP, Zero-Server Brand Logo Engine & Auditor**
   - [ ] Comprehensive data models (`Entry`, `Folder`, `Category`, `RecoveryCode`, `PasswordHistory`)

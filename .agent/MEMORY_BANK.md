@@ -10,8 +10,8 @@ VaultZero is a 100% offline, cross-platform password manager for Windows Desktop
 ## 2. Directory Structure & Modular Design
 - `/scripts/`: Automated checkpoints (`checkpoint.ps1`) and rollback engine (`rollback.ps1`).
 - `/src-tauri/`: Tauri v2 application entrypoint, IPC commands, and platform abstractions.
-- `/src-tauri/crates/vault-core/`: Standalone pure Rust cryptography, storage, CRDT, and search library.
-- `/src/components/ui/`: Standardized modular UI primitive directory adhering to shadcn/ui conventions. Separating primitives into `/components/ui/` guarantees reusability across views without circular imports.
+- `/crates/vault-core/`: Standalone pure Rust cryptography, storage, CRDT, and search library.
+- `/src/components/ui/`: Standardized modular UI primitive directory adhering to shadcn/ui conventions.
 - `/src/components/`: View-specific components (Sidebar, Header, BentoGrid, SplitInspector, P2PSync, OCRModal, etc.).
 - `/src/lib/`: Shared utility functions (`utils.ts`, audio synthesizer, offline brand catalog).
 
@@ -25,9 +25,18 @@ VaultZero is a 100% offline, cross-platform password manager for Windows Desktop
 
 ## 4. Phase History & Checkpoints
 - **Phase 0.5 (Complete):**
-  - Configured project structure with Vite, React 18, TypeScript, Tailwind CSS, shadcn/ui setup.
+  - Scaffolded Vite, React 18, TypeScript, Tailwind CSS, shadcn/ui structure.
   - Implemented `DitheringShader` component with 8x8/4x4 Bayer matrix, wave/cloud shapes, rAF loop, and visibility observer.
   - Implemented `Component` in `wave-1.tsx` and `DemoOne` in `demo.tsx`.
-  - Configured Tauri v2 configuration (`src-tauri/tauri.conf.json` and default capability).
-  - Validated clean `npm run build` with zero TypeScript or CSS errors.
+  - Configured Tauri v2 configuration (`src-tauri/tauri.conf.json`).
   - Tagged: `checkpoint-phase-0.5-upgraded-spec`.
+- **Phase 1 (Complete):**
+  - Created standalone `vault-core` crate with zero UI dependencies.
+  - Implemented Argon2id KDF with hardware calibration and optional SHA-256 Keyfile mixing.
+  - Implemented two-layer key hierarchy with XChaCha20-Poly1305 Vault Key wrapping and PMV1 header as AAD.
+  - Implemented secondary Duress / Decoy Vault slot support.
+  - Implemented CRDT Hybrid Logical Clock (HLC) and deterministic `merge_vault_states` preserving historical passwords in `password_history`.
+  - Implemented RAM memory locking (`LockedBuffer` with `VirtualLock` on Windows, `mlock` on Android).
+  - Implemented atomic file saves (.tmp -> `sync_all` -> rename) with 5 rolling encrypted backups.
+  - 100% green tests covering unlock, duress decoy, bit-flip tamper rejection, CRDT merge, keyfile mixing, and HLC monotonicity.
+  - Tagged: `checkpoint-phase-1-crypto-core`.
