@@ -1,0 +1,34 @@
+# Dependencies
+node_modules/
+package-lock.json
+
+# Rust build output
+target/
+src-tauri/target/
+Cargo.lock
+
+# Web build output
+dist/
+dist-ssr/
+
+# IDE and OS
+.vscode/
+.idea/
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+Thumbs.db
+.DS_Store
+
+# Logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Vault test artifacts
+*.pmv
+*.pmv.bak*
+*.tmp
