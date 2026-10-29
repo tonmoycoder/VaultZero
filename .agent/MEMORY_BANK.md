@@ -40,3 +40,13 @@ VaultZero is a 100% offline, cross-platform password manager for Windows Desktop
   - Implemented atomic file saves (.tmp -> `sync_all` -> rename) with 5 rolling encrypted backups.
   - 100% green tests covering unlock, duress decoy, bit-flip tamper rejection, CRDT merge, keyfile mixing, and HLC monotonicity.
   - Tagged: `checkpoint-phase-1-crypto-core`.
+- **Phase 2 (Complete):**
+  - Implemented data models: `Entry`, `Folder`, `Category`, `RecoveryCode`, `PasswordHistoryEntry`.
+  - Implemented RFC 6238 TOTP generator with SHA1/SHA256/SHA512 and `otpauth://` URI parser (`totp.rs`).
+  - Implemented 30+ official offline brand vectors & hex colors with auto-matching (`brands.rs`).
+  - Implemented CSPRNG password generator and EFF Diceware 7776-wordlist passphrase generator (`generator.rs`).
+  - Implemented offline security auditor for compromised, reused, and weak passwords (`auditor.rs`).
+  - Implemented in-memory search engine (<50ms for 1000+ entries) and domain grouping (`search.rs`).
+  - Implemented narrow Tauri IPC boundary (`src-tauri/src/lib.rs` and `main.rs`) exposing safe summaries and on-demand secret retrieval.
+  - 100% green tests in `cargo test --workspace` (10 passed, 0 failed).
+  - Tagged: `checkpoint-phase-2-vault-features`.

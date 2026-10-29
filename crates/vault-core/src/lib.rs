@@ -1,16 +1,26 @@
+pub mod auditor;
+pub mod brands;
 pub mod crdt;
 pub mod crypto;
 pub mod errors;
+pub mod generator;
 pub mod memory;
 pub mod models;
+pub mod search;
 pub mod storage;
+pub mod totp;
 
+pub use auditor::{SecurityAuditReport, SecurityAuditor};
+pub use brands::{BrandInfo, BrandRegistry};
 pub use crdt::{merge_vault_states, HlcClock};
 pub use crypto::{derive_kek, generate_vault_key, KdfParams};
 pub use errors::{Result, VaultError};
+pub use generator::{calculate_entropy, generate_passphrase, generate_password, PasswordGenOptions};
 pub use memory::LockedBuffer;
 pub use models::{Category, Entry, EntrySummary, Folder, PasswordHistoryEntry, RecoveryCode, TotpConfig, Vault};
+pub use search::{DomainGroup, SearchEngine, SearchFilter};
 pub use storage::{StorageEngine, UnlockedVaultSession};
+pub use totp::{decode_base32, generate_totp, parse_otpauth_uri};
 
 #[cfg(test)]
 mod tests {
@@ -107,12 +117,11 @@ mod tests {
 
         // Read raw data and tamper with a single bit in header
         let mut raw_data = fs::read(path).unwrap();
-        let tamper_idx = 10; // inside header params/salt
-        raw_data[tamper_idx] ^= 0x01; // flip 1 bit
+        let tamper_idx = 10;
+        raw_data[tamper_idx] ^= 0x01;
 
         fs::write(path, &raw_data).unwrap();
 
-        // Decryption must fail due to MAC / AAD failure
         let res = StorageEngine::unlock_vault(path, master_pwd, None);
         assert!(res.is_err());
     }
@@ -124,7 +133,6 @@ mod tests {
 
         let entry_id = Uuid::new_v4();
 
-        // Local has old password at hlc 100
         let local_entry = Entry {
             id: entry_id,
             title: "Netflix".to_string(),
@@ -152,7 +160,6 @@ mod tests {
         };
         local.entries.push(local_entry);
 
-        // Remote has updated password at hlc 200
         let remote_entry = Entry {
             id: entry_id,
             title: "Netflix".to_string(),
@@ -180,13 +187,11 @@ mod tests {
         };
         remote.entries.push(remote_entry);
 
-        // Merge local & remote
         let merged = merge_vault_states(&local, &remote);
         assert_eq!(merged.entries.len(), 1);
         let m_entry = &merged.entries[0];
         assert_eq!(m_entry.password, "NewUpdatedPassword2");
         assert_eq!(m_entry.notes, "Updated on phone");
-        // Check that old password was pushed to password_history!
         assert_eq!(m_entry.password_history.len(), 1);
         assert_eq!(m_entry.password_history[0].password, "OldPassword1");
     }
@@ -246,15 +251,12 @@ mod tests {
 
         StorageEngine::create_vault(path, &vault, master_pwd, Some(keyfile_data), None, Some(kdf)).unwrap();
 
-        // Unlock with correct keyfile
         let session = StorageEngine::unlock_vault(path, master_pwd, Some(keyfile_data)).unwrap();
         assert_eq!(session.vault.entries.len(), 0);
 
-        // Unlock without keyfile must fail
         let res_no_kf = StorageEngine::unlock_vault(path, master_pwd, None);
         assert!(res_no_kf.is_err());
 
-        // Unlock with wrong keyfile must fail
         let res_wrong_kf = StorageEngine::unlock_vault(path, master_pwd, Some(b"WrongKeyfileContent"));
         assert!(res_wrong_kf.is_err());
     }
@@ -268,5 +270,177 @@ mod tests {
             assert!(next >= last, "HLC clock must be strictly monotonic");
             last = next;
         }
+    }
+
+    #[test]
+    fn test_rfc_6238_totp_vectors() {
+        // RFC 6238 test secret "12345678901234567890" in Base32 is GEZDGNBVGY3TQOJQGEZDGNBVGY3TQOJQ
+        let secret = "GEZDGNBVGY3TQOJQGEZDGNBVGY3TQOJQ";
+
+        // At T = 59s:
+        let (code, remaining) = generate_totp(secret, 59, 30, 6, "SHA1").unwrap();
+        assert_eq!(code, "287082");
+        assert_eq!(remaining, 1);
+
+        // Test URI parsing
+        let uri = "otpauth://totp/GitHub:octocat?secret=JBSWY3DPEHPK3PXP&issuer=GitHub&algorithm=SHA1&digits=6&period=30";
+        let config = parse_otpauth_uri(uri).unwrap();
+        assert_eq!(config.secret, "JBSWY3DPEHPK3PXP");
+        assert_eq!(config.algorithm, "SHA1");
+        assert_eq!(config.digits, 6);
+        assert_eq!(config.period, 30);
+    }
+
+    #[test]
+    fn test_in_memory_search_benchmark_1000_entries() {
+        let mut entries = Vec::with_capacity(1000);
+        for i in 0..1000 {
+            let entry = Entry {
+                id: Uuid::new_v4(),
+                title: format!("Service #{}", i),
+                url: format!("https://service{}.example.com", i),
+                username: format!("user_{}", i),
+                email: format!("user_{}@example.com", i),
+                password: format!("Pass#{}", i),
+                notes: format!("Some notes for item {}", i),
+                folder_id: None,
+                category: if i % 2 == 0 { Category::Logins } else { Category::Payments },
+                tags: vec![format!("tag{}", i % 10)],
+                favorite: i % 5 == 0,
+                brand_color: None,
+                brand_icon_slug: None,
+                custom_icon_base64: None,
+                totp_config: None,
+                recovery_codes: vec![],
+                last_autofill: None,
+                created_at: 1000,
+                updated_at: 1000,
+                password_history: vec![],
+                hlc_timestamp: 1000,
+                device_id: "test".into(),
+                is_deleted: false,
+            };
+            entries.push(entry.to_summary());
+        }
+
+        let start = std::time::Instant::now();
+        let filter = SearchFilter {
+            query: "Service #42".into(),
+            ..Default::default()
+        };
+        let results = SearchEngine::search(&entries, &filter);
+        let elapsed = start.elapsed();
+
+        assert!(!results.is_empty());
+        assert!(
+            elapsed.as_millis() < 50,
+            "Search across 1000 entries took {}ms (must be < 50ms)",
+            elapsed.as_millis()
+        );
+    }
+
+    #[test]
+    fn test_security_auditor_counts() {
+        let mut entries = Vec::new();
+
+        // 1. Compromised entry
+        entries.push(Entry {
+            id: Uuid::new_v4(),
+            title: "Old Site".into(),
+            url: "https://example.com".into(),
+            username: "admin".into(),
+            email: "".into(),
+            password: "password123".into(), // Compromised
+            notes: "".into(),
+            folder_id: None,
+            category: Category::Logins,
+            tags: vec![],
+            favorite: false,
+            brand_color: None,
+            brand_icon_slug: None,
+            custom_icon_base64: None,
+            totp_config: None,
+            recovery_codes: vec![],
+            last_autofill: None,
+            created_at: 0,
+            updated_at: 0,
+            password_history: vec![],
+            hlc_timestamp: 0,
+            device_id: "".into(),
+            is_deleted: false,
+        });
+
+        // 2 & 3. Reused entries
+        let reused_pass = "UniqueStrongReusedPass#987";
+        for i in 0..2 {
+            entries.push(Entry {
+                id: Uuid::new_v4(),
+                title: format!("Reused Site {}", i),
+                url: format!("https://reused{}.com", i),
+                username: "user".into(),
+                email: "".into(),
+                password: reused_pass.into(),
+                notes: "".into(),
+                folder_id: None,
+                category: Category::Logins,
+                tags: vec![],
+                favorite: false,
+                brand_color: None,
+                brand_icon_slug: None,
+                custom_icon_base64: None,
+                totp_config: None,
+                recovery_codes: vec![],
+                last_autofill: None,
+                created_at: 0,
+                updated_at: 0,
+                password_history: vec![],
+                hlc_timestamp: 0,
+                device_id: "".into(),
+                is_deleted: false,
+            });
+        }
+
+        // 4. Weak entry
+        entries.push(Entry {
+            id: Uuid::new_v4(),
+            title: "Weak Site".into(),
+            url: "https://weak.com".into(),
+            username: "user".into(),
+            email: "".into(),
+            password: "abc".into(), // < 10 chars, weak
+            notes: "".into(),
+            folder_id: None,
+            category: Category::Logins,
+            tags: vec![],
+            favorite: false,
+            brand_color: None,
+            brand_icon_slug: None,
+            custom_icon_base64: None,
+            totp_config: None,
+            recovery_codes: vec![],
+            last_autofill: None,
+            created_at: 0,
+            updated_at: 0,
+            password_history: vec![],
+            hlc_timestamp: 0,
+            device_id: "".into(),
+            is_deleted: false,
+        });
+
+        let report = SecurityAuditor::audit(&entries);
+        assert!(report.compromised_count >= 1);
+        assert_eq!(report.reused_count, 2);
+        assert!(report.weak_count >= 1);
+    }
+
+    #[test]
+    fn test_brand_matching() {
+        let brand1 = BrandRegistry::match_brand("My Github Account", "https://github.com/tonmoy");
+        assert!(brand1.is_some());
+        assert_eq!(brand1.unwrap().slug, "github");
+
+        let brand2 = BrandRegistry::match_brand("Vacation Home Rental", "https://www.airbnb.com/rooms/123");
+        assert!(brand2.is_some());
+        assert_eq!(brand2.unwrap().slug, "airbnb");
     }
 }

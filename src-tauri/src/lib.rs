@@ -1,0 +1,366 @@
+use std::path::PathBuf;
+use std::sync::Mutex;
+use uuid::Uuid;
+use vault_core::auditor::{SecurityAuditReport, SecurityAuditor};
+use vault_core::brands::{BrandInfo, BrandRegistry};
+use vault_core::generator::{generate_passphrase, generate_password, PasswordGenOptions};
+use vault_core::models::{Entry, EntrySummary, RecoveryCode};
+use vault_core::search::{DomainGroup, SearchEngine, SearchFilter};
+use vault_core::storage::{StorageEngine, UnlockedVaultSession};
+use vault_core::totp::generate_totp;
+use vault_core::HlcClock;
+
+pub struct AppState {
+    pub session: Mutex<Option<UnlockedVaultSession>>,
+    pub vault_path: Mutex<Option<PathBuf>>,
+    pub hlc: HlcClock,
+}
+
+impl Default for AppState {
+    fn default() -> Self {
+        Self {
+            session: Mutex::new(None),
+            vault_path: Mutex::new(None),
+            hlc: HlcClock::new(1),
+        }
+    }
+}
+
+#[derive(serde::Serialize)]
+pub struct VaultStatus {
+    pub is_unlocked: bool,
+    pub is_duress: bool,
+    pub entry_count: usize,
+    pub vault_path: Option<String>,
+}
+
+#[derive(serde::Serialize)]
+pub struct EntrySecretPayload {
+    pub password: String,
+    pub notes: String,
+    pub recovery_codes: Vec<RecoveryCode>,
+}
+
+#[derive(serde::Serialize)]
+pub struct TotpResponse {
+    pub code: String,
+    pub remaining_seconds: u64,
+}
+
+pub mod commands {
+    use super::*;
+    use tauri::State;
+
+    #[tauri::command]
+    pub fn is_vault_unlocked(state: State<AppState>) -> bool {
+        state.session.lock().unwrap().is_some()
+    }
+
+    #[tauri::command]
+    pub fn get_vault_status(state: State<AppState>) -> VaultStatus {
+        let session_guard = state.session.lock().unwrap();
+        let path_guard = state.vault_path.lock().unwrap();
+
+        match &*session_guard {
+            Some(s) => VaultStatus {
+                is_unlocked: true,
+                is_duress: s.is_duress,
+                entry_count: s.vault.entries.iter().filter(|e| !e.is_deleted).count(),
+                vault_path: path_guard.as_ref().map(|p| p.to_string_lossy().to_string()),
+            },
+            None => VaultStatus {
+                is_unlocked: false,
+                is_duress: false,
+                entry_count: 0,
+                vault_path: path_guard.as_ref().map(|p| p.to_string_lossy().to_string()),
+            },
+        }
+    }
+
+    #[tauri::command]
+    pub fn lock_vault(state: State<AppState>) -> Result<(), String> {
+        let mut session_guard = state.session.lock().unwrap();
+        *session_guard = None;
+        Ok(())
+    }
+
+    #[tauri::command]
+    pub fn create_vault(
+        path: String,
+        master_password: String,
+        keyfile_content: Option<String>,
+        duress_password: Option<String>,
+        state: State<AppState>,
+    ) -> Result<(), String> {
+        let p = PathBuf::from(&path);
+        let vault = vault_core::models::Vault::new("desktop-device".into());
+
+        let kf_bytes = keyfile_content.as_ref().map(|s| s.as_bytes());
+        let d_pwd = duress_password.as_deref().filter(|s| !s.is_empty());
+
+        StorageEngine::create_vault(&p, &vault, &master_password, kf_bytes, d_pwd, None)
+            .map_err(|e| e.to_string())?;
+
+        let session = StorageEngine::unlock_vault(&p, &master_password, kf_bytes)
+            .map_err(|e| e.to_string())?;
+
+        *state.session.lock().unwrap() = Some(session);
+        *state.vault_path.lock().unwrap() = Some(p);
+
+        Ok(())
+    }
+
+    #[tauri::command]
+    pub fn unlock_vault(
+        path: String,
+        master_password: String,
+        keyfile_content: Option<String>,
+        state: State<AppState>,
+    ) -> Result<VaultStatus, String> {
+        let p = PathBuf::from(&path);
+        let kf_bytes = keyfile_content.as_ref().map(|s| s.as_bytes());
+
+        let session = StorageEngine::unlock_vault(&p, &master_password, kf_bytes)
+            .map_err(|e| e.to_string())?;
+
+        let is_duress = session.is_duress;
+        let entry_count = session.vault.entries.iter().filter(|e| !e.is_deleted).count();
+
+        *state.session.lock().unwrap() = Some(session);
+        *state.vault_path.lock().unwrap() = Some(p.clone());
+
+        Ok(VaultStatus {
+            is_unlocked: true,
+            is_duress,
+            entry_count,
+            vault_path: Some(p.to_string_lossy().to_string()),
+        })
+    }
+
+    #[tauri::command]
+    pub fn list_entries(
+        filter: Option<SearchFilter>,
+        state: State<AppState>,
+    ) -> Result<Vec<EntrySummary>, String> {
+        let session_guard = state.session.lock().unwrap();
+        let session = session_guard
+            .as_ref()
+            .ok_or_else(|| "Vault is locked".to_string())?;
+
+        let summaries: Vec<EntrySummary> = session
+            .vault
+            .entries
+            .iter()
+            .map(|e| e.to_summary())
+            .collect();
+
+        match filter {
+            Some(f) => Ok(SearchEngine::search(&summaries, &f)),
+            None => Ok(summaries.into_iter().filter(|e| !e.is_deleted).collect()),
+        }
+    }
+
+    #[tauri::command]
+    pub fn get_domain_groups(state: State<AppState>) -> Result<Vec<DomainGroup>, String> {
+        let session_guard = state.session.lock().unwrap();
+        let session = session_guard
+            .as_ref()
+            .ok_or_else(|| "Vault is locked".to_string())?;
+
+        let summaries: Vec<EntrySummary> = session
+            .vault
+            .entries
+            .iter()
+            .map(|e| e.to_summary())
+            .collect();
+
+        Ok(SearchEngine::group_by_domain(&summaries))
+    }
+
+    #[tauri::command]
+    pub fn get_security_audit(state: State<AppState>) -> Result<SecurityAuditReport, String> {
+        let session_guard = state.session.lock().unwrap();
+        let session = session_guard
+            .as_ref()
+            .ok_or_else(|| "Vault is locked".to_string())?;
+
+        Ok(SecurityAuditor::audit(&session.vault.entries))
+    }
+
+    #[tauri::command]
+    pub fn get_brands() -> Vec<BrandInfo> {
+        BrandRegistry::all_brands()
+    }
+
+    #[tauri::command]
+    pub fn generate_password_cmd(
+        length: usize,
+        uppercase: bool,
+        lowercase: bool,
+        numbers: bool,
+        symbols: bool,
+        exclude_ambiguous: bool,
+    ) -> String {
+        let opts = PasswordGenOptions {
+            length,
+            include_uppercase: uppercase,
+            include_lowercase: lowercase,
+            include_numbers: numbers,
+            include_symbols: symbols,
+            exclude_ambiguous,
+        };
+        generate_password(&opts)
+    }
+
+    #[tauri::command]
+    pub fn generate_passphrase_cmd(words: usize, separator: String, capitalize: bool) -> String {
+        generate_passphrase(words, &separator, capitalize)
+    }
+
+    #[tauri::command]
+    pub fn reveal_entry_secret(
+        entry_id: String,
+        state: State<AppState>,
+    ) -> Result<EntrySecretPayload, String> {
+        let uid = Uuid::parse_str(&entry_id).map_err(|e| e.to_string())?;
+        let session_guard = state.session.lock().unwrap();
+        let session = session_guard
+            .as_ref()
+            .ok_or_else(|| "Vault is locked".to_string())?;
+
+        let entry = session
+            .vault
+            .entries
+            .iter()
+            .find(|e| e.id == uid && !e.is_deleted)
+            .ok_or_else(|| "Entry not found".to_string())?;
+
+        Ok(EntrySecretPayload {
+            password: entry.password.clone(),
+            notes: entry.notes.clone(),
+            recovery_codes: entry.recovery_codes.clone(),
+        })
+    }
+
+    #[tauri::command]
+    pub fn get_totp_code(entry_id: String, state: State<AppState>) -> Result<TotpResponse, String> {
+        let uid = Uuid::parse_str(&entry_id).map_err(|e| e.to_string())?;
+        let session_guard = state.session.lock().unwrap();
+        let session = session_guard
+            .as_ref()
+            .ok_or_else(|| "Vault is locked".to_string())?;
+
+        let entry = session
+            .vault
+            .entries
+            .iter()
+            .find(|e| e.id == uid && !e.is_deleted)
+            .ok_or_else(|| "Entry not found".to_string())?;
+
+        let totp_cfg = entry
+            .totp_config
+            .as_ref()
+            .ok_or_else(|| "Entry does not have 2FA/TOTP configured".to_string())?;
+
+        let now_epoch = chrono::Utc::now().timestamp() as u64;
+        let (code, remaining) = generate_totp(
+            &totp_cfg.secret,
+            now_epoch,
+            totp_cfg.period,
+            totp_cfg.digits,
+            &totp_cfg.algorithm,
+        )
+        .map_err(|e| e.to_string())?;
+
+        Ok(TotpResponse {
+            code,
+            remaining_seconds: remaining,
+        })
+    }
+
+    #[tauri::command]
+    pub fn upsert_entry(mut entry: Entry, state: State<AppState>) -> Result<EntrySummary, String> {
+        let mut session_guard = state.session.lock().unwrap();
+        let session = session_guard
+            .as_mut()
+            .ok_or_else(|| "Vault is locked".to_string())?;
+
+        let now = chrono::Utc::now().timestamp() as u64;
+        let hlc_ts = state.hlc.now();
+
+        entry.hlc_timestamp = hlc_ts;
+        entry.updated_at = now;
+
+        if let Some(existing) = session.vault.entries.iter_mut().find(|e| e.id == entry.id) {
+            if existing.password != entry.password && !existing.password.is_empty() {
+                entry
+                    .password_history
+                    .push(vault_core::models::PasswordHistoryEntry {
+                        password: existing.password.clone(),
+                        changed_at: existing.updated_at,
+                    });
+            }
+            *existing = entry.clone();
+        } else {
+            if entry.created_at == 0 {
+                entry.created_at = now;
+            }
+            session.vault.entries.push(entry.clone());
+        }
+
+        if let Some(ref path) = *state.vault_path.lock().unwrap() {
+            StorageEngine::save_vault(path, session).map_err(|e| e.to_string())?;
+        }
+
+        Ok(entry.to_summary())
+    }
+
+    #[tauri::command]
+    pub fn delete_entry(entry_id: String, state: State<AppState>) -> Result<(), String> {
+        let uid = Uuid::parse_str(&entry_id).map_err(|e| e.to_string())?;
+        let mut session_guard = state.session.lock().unwrap();
+        let session = session_guard
+            .as_mut()
+            .ok_or_else(|| "Vault is locked".to_string())?;
+
+        let now = chrono::Utc::now().timestamp() as u64;
+        let hlc_ts = state.hlc.now();
+
+        if let Some(entry) = session.vault.entries.iter_mut().find(|e| e.id == uid) {
+            entry.is_deleted = true;
+            entry.updated_at = now;
+            entry.hlc_timestamp = hlc_ts;
+        }
+
+        if let Some(ref path) = *state.vault_path.lock().unwrap() {
+            StorageEngine::save_vault(path, session).map_err(|e| e.to_string())?;
+        }
+
+        Ok(())
+    }
+}
+
+#[cfg_attr(mobile, tauri::mobile_entry_point)]
+pub fn run() {
+    tauri::Builder::default()
+        .manage(AppState::default())
+        .invoke_handler(tauri::generate_handler![
+            commands::is_vault_unlocked,
+            commands::get_vault_status,
+            commands::lock_vault,
+            commands::create_vault,
+            commands::unlock_vault,
+            commands::list_entries,
+            commands::get_domain_groups,
+            commands::get_security_audit,
+            commands::get_brands,
+            commands::generate_password_cmd,
+            commands::generate_passphrase_cmd,
+            commands::reveal_entry_secret,
+            commands::get_totp_code,
+            commands::upsert_entry,
+            commands::delete_entry,
+        ])
+        .run(tauri::generate_context!())
+        .expect("error while running tauri application");
+}
