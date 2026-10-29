@@ -26,6 +26,7 @@ interface SidebarProps {
   entries: EntrySummary[];
   onAddNew: () => void;
   onOpenGenerator: () => void;
+  onOpenEmergencyKit: () => void;
   onLockVault: () => void;
   isDuress: boolean;
 }
@@ -38,6 +39,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
   entries,
   onAddNew,
   onOpenGenerator,
+  onOpenEmergencyKit,
   onLockVault,
   isDuress,
 }) => {
@@ -179,6 +181,14 @@ export const Sidebar: React.FC<SidebarProps> = ({
           >
             <Radio className="w-4 h-4 text-blue-400" />
             <span>P2P Sync & Share</span>
+          </button>
+
+          <button
+            onClick={onOpenEmergencyKit}
+            className="flex items-center gap-2.5 px-2.5 py-2 rounded-xl text-sm font-medium text-muted-foreground hover:text-foreground hover:bg-secondary/50 transition-all"
+          >
+            <FileKey className="w-4 h-4 text-amber-400" />
+            <span>Emergency Kit (PDF)</span>
           </button>
         </div>
 

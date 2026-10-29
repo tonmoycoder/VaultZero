@@ -21,12 +21,12 @@ impl VaultExporter {
             return String::new();
         }
 
-        let first = value.chars().next().unwrap();
-        if matches!(first, '=' | '+' | '-' | '@' | '\t' | '\r') {
-            format!("'{}", value)
-        } else {
-            value.to_string()
+        if let Some(first) = value.chars().next() {
+            if matches!(first, '=' | '+' | '-' | '@' | '\t' | '\r') {
+                return format!("'{}", value);
+            }
         }
+        value.to_string()
     }
 
     /// Exports entries to sanitized CSV
