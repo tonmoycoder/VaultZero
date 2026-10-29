@@ -31,3 +31,4 @@ pub enum VaultError {
 }
 
 pub type Result<T> = std::result::Result<T, VaultError>;
+

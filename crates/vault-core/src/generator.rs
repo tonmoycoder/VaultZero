@@ -148,3 +148,4 @@ pub fn calculate_entropy(password: &str) -> f64 {
 
     (password.len() as f64) * (pool_size as f64).log2()
 }
+

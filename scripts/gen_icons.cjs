@@ -29,3 +29,4 @@ icoHeader.writeUInt32LE(22, 18);
 const icoBuf = Buffer.concat([icoHeader, pngBuf]);
 fs.writeFileSync(path.join(iconsDir, "icon.ico"), icoBuf);
 console.log("Icons created successfully!");
+

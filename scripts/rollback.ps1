@@ -18,3 +18,4 @@ Write-Host "Rolling back to tag: $TagName"
 git reset --hard "$TagName"
 git clean -fd
 Write-Host "Rolled back to $TagName cleanly."
+

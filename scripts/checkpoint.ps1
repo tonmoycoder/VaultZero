@@ -12,3 +12,4 @@ git add -A
 git commit -m "$Message"
 git tag -f "$TagName"
 Write-Host "Checkpoint $TagName created successfully."
+
