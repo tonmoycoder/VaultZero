@@ -30,4 +30,5 @@ yarn-error.log*
 *.pmv
 *.pmv.bak*
 *.tmp
+*.lnk
 
