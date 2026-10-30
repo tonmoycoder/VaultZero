@@ -25,3 +25,4 @@ if %ERRORLEVEL% equ 0 (
 :: Fallback to default browser
 start http://localhost:1420
 exit
+
