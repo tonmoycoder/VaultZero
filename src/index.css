@@ -1,45 +1,190 @@
+@import url('https://fonts.googleapis.com/css2?family=Hind+Siliguri:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&family=Noto+Sans+Bengali:wght@400;500;600;700&family=Outfit:wght@400;500;600;700&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap');
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
 @layer base {
-  :root {
+  /* Default: Liquid Glass Dark Mode */
+  :root, html.dark {
     --background: 224 71% 4%;
-    --foreground: 213 31% 91%;
+    --foreground: 210 40% 98%;
 
-    --card: 224 71% 4%;
-    --card-foreground: 213 31% 91%;
+    --card: 222 47% 7%;
+    --card-foreground: 210 40% 98%;
 
-    --popover: 224 71% 4%;
-    --popover-foreground: 215 20.2% 65.1%;
+    --popover: 222 47% 6%;
+    --popover-foreground: 215 20% 75%;
 
-    --primary: 210 100% 50%;
-    --primary-foreground: 222.2 47.4% 11.2%;
+    --primary: 210 100% 56%;
+    --primary-foreground: 222 47% 6%;
 
-    --secondary: 222.2 47.4% 11.2%;
+    --secondary: 220 30% 12%;
     --secondary-foreground: 210 40% 98%;
 
-    --muted: 223 47% 11%;
-    --muted-foreground: 215.4 16.3% 56.9%;
+    --muted: 220 25% 10%;
+    --muted-foreground: 215 16% 65%;
 
-    --accent: 216 34% 17%;
+    --accent: 217 33% 18%;
     --accent-foreground: 210 40% 98%;
 
-    --destructive: 0 63% 31%;
+    --destructive: 0 72% 51%;
     --destructive-foreground: 210 40% 98%;
 
-    --border: 216 34% 17%;
-    --input: 216 34% 17%;
-    --ring: 216 34% 17%;
+    --border: 217 33% 18%;
+    --input: 217 33% 18%;
+    --ring: 210 100% 56%;
 
-    --radius: 0.5rem;
+    --radius: 0.85rem;
+    color-scheme: dark;
+  }
+
+  /* Liquid Glass Light Mode: Soft pastel peach, lavender & sky ambient */
+  html.light {
+    --background: 210 33% 99%;
+    --foreground: 222 47% 11%;
+
+    --card: 0 0% 100%;
+    --card-foreground: 222 47% 11%;
+
+    --popover: 0 0% 100%;
+    --popover-foreground: 222 47% 11%;
+
+    --primary: 212 96% 48%;
+    --primary-foreground: 0 0% 100%;
+
+    --secondary: 214 32% 91%;
+    --secondary-foreground: 222 47% 11%;
+
+    --muted: 210 40% 96.1%;
+    --muted-foreground: 215 16% 40%;
+
+    --accent: 214 32% 91%;
+    --accent-foreground: 222 47% 11%;
+
+    --destructive: 0 84% 60%;
+    --destructive-foreground: 0 0% 100%;
+
+    --border: 214 32% 88%;
+    --input: 214 32% 88%;
+    --ring: 212 96% 48%;
+
+    color-scheme: light;
+  }
+
+  /* Cozy Zen Lofi Mode: Warm golden amber & lofi coffee ambient */
+  html.zen {
+    --background: 24 35% 8%;
+    --foreground: 36 60% 95%;
+
+    --card: 24 30% 11%;
+    --card-foreground: 36 60% 95%;
+
+    --popover: 24 30% 10%;
+    --popover-foreground: 36 50% 80%;
+
+    --primary: 38 92% 50%;
+    --primary-foreground: 24 35% 8%;
+
+    --secondary: 26 25% 16%;
+    --secondary-foreground: 36 60% 95%;
+
+    --muted: 24 25% 14%;
+    --muted-foreground: 36 30% 65%;
+
+    --accent: 38 70% 25%;
+    --accent-foreground: 36 60% 95%;
+
+    --destructive: 0 75% 55%;
+    --destructive-foreground: 36 60% 95%;
+
+    --border: 30 25% 20%;
+    --input: 30 25% 20%;
+    --ring: 38 92% 50%;
+
+    color-scheme: dark;
   }
 }
 
+/* Typography Rules */
 body {
   margin: 0;
-  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  font-family: 'Plus Jakarta Sans', 'Outfit', 'Hind Siliguri', 'Noto Sans Bengali', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
   user-select: none;
   overflow-x: hidden;
+  transition: background-color 0.3s ease, color 0.3s ease;
 }
 
+/* Monospace for passwords and recovery codes */
+.font-mono, input[type="password"], code, pre {
+  font-family: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace !important;
+}
+
+/* Bengali font rendering */
+:lang(bn) {
+  font-family: 'Hind Siliguri', 'Noto Sans Bengali', 'Plus Jakarta Sans', sans-serif;
+}
+
+/* Ultra-Thin Translucent Glass Scrollbars (Fixing Windows thick white bars) */
+::-webkit-scrollbar {
+  width: 5px;
+  height: 5px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: rgba(148, 163, 184, 0.25);
+  border-radius: 9999px;
+  backdrop-filter: blur(8px);
+  transition: background 0.2s ease;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(148, 163, 184, 0.45);
+}
+
+/* Liquid Glass Ambient Gradient for Light Mode */
+html.light body {
+  background: linear-gradient(135deg, #FDFBF9 0%, #F5F3FF 50%, #F0F9FF 100%);
+  background-attachment: fixed;
+}
+
+/* Liquid Glass Ambient for Dark Mode */
+html.dark body {
+  background: radial-gradient(circle at 50% 0%, #0F172A 0%, #020617 100%);
+  background-attachment: fixed;
+}
+
+/* Cozy Zen Lofi Ambient */
+html.zen body {
+  background: radial-gradient(circle at 50% 0%, #20130D 0%, #0D0705 100%);
+  background-attachment: fixed;
+}
+
+/* Glassmorphism Utilities */
+.liquid-glass {
+  background: rgba(255, 255, 255, 0.7);
+  backdrop-filter: blur(24px) saturate(180%);
+  -webkit-backdrop-filter: blur(24px) saturate(180%);
+  border: 1px solid rgba(255, 255, 255, 0.8);
+  box-shadow: 0 8px 32px 0 rgba(15, 23, 42, 0.06);
+}
+
+.dark .liquid-glass, html.dark .liquid-glass {
+  background: rgba(15, 23, 42, 0.75);
+  backdrop-filter: blur(24px) saturate(190%);
+  -webkit-backdrop-filter: blur(24px) saturate(190%);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.35);
+}
+
+.zen .liquid-glass, html.zen .liquid-glass {
+  background: rgba(30, 20, 15, 0.8);
+  backdrop-filter: blur(24px) saturate(160%);
+  -webkit-backdrop-filter: blur(24px) saturate(160%);
+  border: 1px solid rgba(245, 158, 11, 0.15);
+  box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.45);
+}

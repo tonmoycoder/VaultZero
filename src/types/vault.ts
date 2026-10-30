@@ -1,5 +1,12 @@
 export type Category = 'Logins' | 'Bookmarks' | 'Safenotes' | 'Identities' | 'Payments';
 
+export interface Folder {
+  id: string;
+  name: string;
+  icon?: string | null;
+  created_at?: number;
+}
+
 export interface RecoveryCode {
   code: string;
   used: boolean;

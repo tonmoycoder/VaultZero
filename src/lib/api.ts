@@ -5,6 +5,7 @@ import type {
   Entry,
   EntrySecretPayload,
   EntrySummary,
+  Folder,
   ImportPreview,
   OcrParsedResult,
   SecurityAuditReport,
@@ -15,15 +16,22 @@ import type {
 // In-browser mock store for non-Tauri / test environments
 let mockUnlocked = false;
 let mockDuress = false;
+let mockFolders: Folder[] = [
+  { id: 'f-personal', name: 'Personal Vault', icon: 'FolderOpen' },
+  { id: 'f-work', name: 'Work & Infra', icon: 'FolderOpen' },
+  { id: 'f-finance', name: 'Banking & Finance', icon: 'FolderOpen' },
+];
+
 let mockEntries: Entry[] = [
   {
     id: 'd1111111-1111-1111-1111-111111111111',
     title: 'Demo Account',
-    url: 'https://example.com/login',
+    url: 'https://github.com',
     username: 'demo_user',
     email: 'demo@vaultzero.local',
     password: 'DemoPassword123!',
     notes: 'This is a sample demo entry. You can edit, customize, or delete this record.',
+    folder_id: 'f-personal',
     category: 'Logins',
     tags: ['demo', 'sample'],
     favorite: true,
@@ -412,6 +420,30 @@ export const VaultApi = {
   async setScreenProtection(enabled: boolean): Promise<void> {
     if (isTauri()) {
       await invoke('set_screen_protection', { enabled });
+    }
+  },
+
+  async listFolders(): Promise<Folder[]> {
+    return [...mockFolders];
+  },
+
+  async createFolder(name: string): Promise<Folder> {
+    const newFolder: Folder = {
+      id: 'f-' + Date.now(),
+      name: name.trim(),
+      icon: 'FolderOpen',
+      created_at: Date.now(),
+    };
+    mockFolders.push(newFolder);
+    return newFolder;
+  },
+
+  async deleteFolder(folderId: string): Promise<void> {
+    mockFolders = mockFolders.filter(f => f.id !== folderId);
+    for (const e of mockEntries) {
+      if (e.folder_id === folderId) {
+        e.folder_id = null;
+      }
     }
   }
 };

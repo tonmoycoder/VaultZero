@@ -10,15 +10,25 @@
     "tauri": "tauri"
   },
   "dependencies": {
+    "@phosphor-icons/react": "^2.1.10",
+    "@tabler/icons-react": "^3.50.0",
     "@tauri-apps/api": "^2.2.0",
+    "animejs": "^4.5.0",
+    "canvas-confetti": "^1.9.4",
     "clsx": "^2.1.1",
+    "framer-motion": "^14.8.0",
+    "jsqr": "^1.4.0",
     "lucide-react": "^1.16.0",
+    "qrcode.react": "^4.2.0",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
-    "tailwind-merge": "^3.0.2"
+    "tailwind-merge": "^3.0.2",
+    "tesseract.js": "^7.0.0"
   },
   "devDependencies": {
     "@tauri-apps/cli": "^2.2.0",
+    "@types/animejs": "^3.1.13",
+    "@types/canvas-confetti": "^1.9.0",
     "@types/node": "^22.13.0",
     "@types/react": "^18.3.18",
     "@types/react-dom": "^18.3.5",
