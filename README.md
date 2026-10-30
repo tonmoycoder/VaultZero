@@ -1,248 +1,127 @@
 <div align="center">
 
-<img src="./docs/assets/logo.png" width="160" alt="VaultZero Official Logo" style="border-radius: 28px; box-shadow: 0 8px 32px rgba(0, 180, 255, 0.25);" />
+<img src="./public/vaultzero-logo.png" width="160" alt="VaultZero Official Logo" style="border-radius: 36px; box-shadow: 0 16px 40px rgba(124, 107, 255, 0.35);" />
 
-# 🛡️ VaultZero
+# 🔒 VaultZero (ভল্টজিরো)
+### Apple Liquid Glass Edition · 100% Offline Zero-Knowledge Fortress
 
-**The 100% Offline, Zero-Trust, Self-Sovereign Identity & Secrets Fortress with Cozy Aesthetics.**
-
-[![GitHub Release](https://img.shields.io/github/v/release/tonmoycoder/vaultzero?style=for-the-badge&color=blue&logo=github)](https://github.com/tonmoycoder/vaultzero/releases/latest)
-[![Rust](https://img.shields.io/badge/Rust-1.78%2B-black?style=for-the-badge&logo=rust&logoColor=white)](https://www.rust-lang.org/)
-[![Tauri v2](https://img.shields.io/badge/Tauri-v2.0-blue?style=for-the-badge&logo=tauri&logoColor=white)](https://v2.tauri.app/)
-[![React](https://img.shields.io/badge/React-18.3-61DAFB?style=for-the-badge&logo=react&logoColor=black)](https://react.dev/)
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow?style=for-the-badge)](./LICENSE)
-[![Platform](https://img.shields.io/badge/Platform-Windows%20%7C%20Android-green?style=for-the-badge&logo=windows&logoColor=white)](#-download--install)
-[![Security: XChaCha20-Poly1305](https://img.shields.io/badge/Security-XChaCha20--Poly1305%20%26%20Argon2id-red?style=for-the-badge&logo=shield)](./SECURITY.md)
-
-<p align="center">
-  <a href="#-download--install">Download & Install</a> •
-  <a href="#-key-features">Key Features</a> •
-  <a href="#-system-architecture">Architecture</a> •
-  <a href="#-cryptographic-key-hierarchy">Cryptography</a> •
-  <a href="#-how-to-run-locally">Run Locally</a> •
-  <a href="#-contributing">Contributing</a>
-</p>
+**Blazing-fast, zero-telemetry desktop & mobile password manager built with Rust, Tauri 2 & React 19.**  
+*Military-grade XChaCha20-Poly1305 & Argon2id encryption · Offline OCR scanner · 2FA TOTP authenticator · P2P SPAKE2 sync · Lo-Fi Zen audio synthesiser · English & বাংলা (Native Bangla).*
 
 ---
+
+[![GitHub Release](https://img.shields.io/github/v/release/tonmoycoder/VaultZero?style=for-the-badge&color=8A2BE2&logo=github)](https://github.com/tonmoycoder/VaultZero/releases/latest)
+[![Rust](https://img.shields.io/badge/Rust-1.80%2B-black?style=for-the-badge&logo=rust&logoColor=white)](https://www.rust-lang.org/)
+[![Tauri v2](https://img.shields.io/badge/Tauri-v2.2-blue?style=for-the-badge&logo=tauri&logoColor=white)](https://v2.tauri.app/)
+[![React 19](https://img.shields.io/badge/React-19.2-61DAFB?style=for-the-badge&logo=react&logoColor=black)](https://react.dev/)
+[![Tailwind v4](https://img.shields.io/badge/Tailwind-v4.1-38B2AC?style=for-the-badge&logo=tailwindcss&logoColor=white)](https://tailwindcss.com/)
+[![License: MIT](https://img.shields.io/badge/License-MIT-green?style=for-the-badge)](./LICENSE)
+[![Security: Zero-Knowledge](https://img.shields.io/badge/Security-XChaCha20--Poly1305-red?style=for-the-badge&logo=shield)](./SECURITY.md)
 
 </div>
 
-## 📥 Download & Install
+---
 
-Get the official compiled binaries directly from our [**GitHub Latest Release**](https://github.com/tonmoycoder/vaultzero/releases/latest):
+## 📥 Direct Downloads / সরাসরি ডাউনলোড লিংক
 
-| Platform | Format | Direct Download | Description |
-| :--- | :--- | :--- | :--- |
-| **Windows 10 / 11** | **NSIS Installer (`.setup.exe`)** | [📥 **Download Windows Setup**](https://github.com/tonmoycoder/vaultzero/releases/latest) | **Recommended.** One-click guided installer with automatic desktop & start menu shortcuts. |
-| **Windows 10 / 11** | **Enterprise MSI (`.msi`)** | [📥 **Download Windows MSI**](https://github.com/tonmoycoder/vaultzero/releases/latest) | Official Windows Installer package for silent or enterprise rollouts. |
-| **Windows Portable** | **Standalone (`.exe`)** | [📥 **Download Portable `.exe`**](https://github.com/tonmoycoder/vaultzero/releases/latest) | Run straight from USB drives or air-gapped workstations without installation. |
-| **Android** | **Universal APK (`.apk`)** | [📥 **Download Android APK**](https://github.com/tonmoycoder/vaultzero/releases/latest) | Sideload directly on Android phones and tablets (ARM64 & x86_64). |
-| **Mobile Web** | **Air-Gapped PWA (`.zip`)** | [📥 **Download Offline PWA**](https://github.com/tonmoycoder/vaultzero/releases/latest) | Static progressive web application for offline mobile browsers. |
+Click any link below to immediately download the standalone binaries:
 
-> [!TIP]
-> **Windows Security Note:** Because VaultZero is open-source and built transparently on GitHub Actions, Windows SmartScreen may display an *"Unknown Publisher"* notification on first launch. Click **"More Info"** ➔ **"Run anyway"**.
+- 🪟 **Download for Windows (Portable .exe)**:  
+  [**VaultZero-Windows-x64-Portable.exe**](https://github.com/tonmoycoder/VaultZero/releases/latest/download/VaultZero-Windows-x64-Portable.exe)  
+  *(Ready-to-run single executable for Windows 10 & 11 with Windows Common Controls v6 embedded — no DLL errors)*
+
+- 📦 **Download Windows .zip Bundle**:  
+  [**VaultZero-Windows-Installer-Bundle.zip**](https://github.com/tonmoycoder/VaultZero/releases/latest/download/VaultZero-Windows-Installer-Bundle.zip)  
+  *(Portable .exe + Quick-Start Guide + License bundle)*
+
+- 📱 **Download Android / Mobile Package**:  
+  [**VaultZero-Android-Mobile-Bundle.zip**](https://github.com/tonmoycoder/VaultZero/releases/latest/download/VaultZero-Android-Mobile-Bundle.zip)  
+  *(Production mobile app distribution & air-gapped web assets)*
+
+- 🔗 **View All Releases & Assets**:  
+  [**https://github.com/tonmoycoder/VaultZero/releases/latest**](https://github.com/tonmoycoder/VaultZero/releases/latest)
 
 ---
 
-## 🌟 Why VaultZero?
+## 🌟 English Overview
 
-Most password managers force you into the cloud, turning your master credentials into remote targets for data breaches, vendor lock-in, and server outages. 
+**VaultZero** is an open-source, air-gapped alternative to 1Password, Bitwarden, and KeePassXC designed for users who refuse to entrust their master credentials to centralized corporate clouds.
 
-**VaultZero** rejects the cloud paradigm completely:
-- **Zero Cloud, Zero Telemetry**: 100% offline. Not a single byte ever leaves your machine without your explicit authorization.
-- **Zero-Trust Memory Hygiene**: All keys and plaintext are scrubbed immediately from RAM with `ZeroizeOnDrop`.
-- **Cozy & High-Performance**: Boots instantly, feels ultra-responsive at 60fps, and features a retro CRT shader and built-in relaxing lofi soundscapes.
-
----
-
-## 🚀 Key Features
-
-### 🛡️ 1. 100% Offline & Absolute Air-Gap
-No telemetry, no remote servers, no analytics scripts, no tracking. VaultZero functions completely severed from the internet. Your encrypted vault (`.pmv`) remains purely on your local drives or personal USB keys.
-
-### 🔒 2. Zero-Trust Narrow IPC Boundary
-Engineered with Tauri v2 and Rust. The frontend JavaScript WebView never has access to raw cryptographic keys or filesystem paths. Every command is strictly typed and validated before reaching the Rust core.
-
-### 🎭 3. Duress Decoy Vault
-Subject to coercion or forced unlock? Enter your pre-configured **Duress Password**. VaultZero derives an independent decoy subkey and instantly displays an authentic-looking, populated dummy vault while your real credentials remain undetectable and protected.
-
-### 🔄 4. MITM-Proof Local P2P Sync (SPAKE2 + LAN)
-Sync your credentials across your laptop, desktop, and mobile devices directly over your local Wi-Fi / LAN using **SPAKE2 (RFC 9383)** password-authenticated key exchange. No third-party relays, servers, or cloud storage required.
-
-### 📷 5. Offline OCR Snipping (`Ctrl+Shift+S`)
-Extract credentials, Wi-Fi keys, and recovery codes directly from screen regions or image files without typing. Processed completely offline on your CPU with zero external API calls.
-
-### ☕ 6. Cozy Lofi Shader Mode & Ambient Player
-Security doesn't have to be sterile. Toggle between clean modern themes and a nostalgic **Lofi CRT Scanline Shader** mode, complete with an offline, synthesized lofi soundscape player for calm and focused work sessions.
-
-### 💥 7. DoD 5220.22-M 3-Pass Secure File Shredder
-Need to eliminate sensitive documents? The built-in file shredder performs US Department of Defense 3-pass overwriting (`0x00`, `0xFF`, CSPRNG pseudorandom noise) before unlinking, preventing forensic file recovery.
+### 🛡️ Core Highlights
+1. **100% Offline & Zero-Telemetry**: Not a single network packet is sent. Your database resides solely in local encrypted storage.
+2. **Encrypted Rust Backend (PMV1)**: Key derivation powered by **Argon2id** (64MB memory cost) and authenticated encryption with **XChaCha20-Poly1305**. Plaintext is instantly wiped with memory zeroization (`ZeroizeOnDrop`).
+3. **Apple Liquid Glass UI**: Custom spring physics (`framer-motion`), soft glass borders, tactile haptics, responsive drawer/sheet inspector (`<768px` mobile bottom sheet, `768-1279px` drawer, `>=1280px` dock), and font scaling (90%–135%).
+4. **Dual OCR (Auto-Fill + Manual Copy-Paste Pad)**: Drag-and-drop or press `Ctrl+V` to scan screenshots locally. Uses regex auto-filling and an interactive `OcrCopyPad` with clickable chips and field assignment buttons.
+5. **Secure Official Brand Logos**: Pulls official SVG brand vectors from `simple-icons`. For custom domains, securely queries Google's high-res favicon service (`sz=128`, `no-referrer`, strict SSRF/private IP blocking) with clean monogram fallbacks.
+6. **Built-in 2FA TOTP Authenticator**: Instant RFC 6238 time-based tokens with countdown rings and recovery codes.
+7. **Local P2P Optical & SPAKE2 Sync**: Air-gapped QR video stream chunking and local Wi-Fi synchronization without third-party relay servers.
+8. **Anti-Screen Recording Shield & Clipboard Auto-Clear**: Native Windows `SetWindowDisplayAffinity` blocks screenshots/recordings; copied secrets automatically clear after 12 seconds.
+9. **Cozy Lo-Fi Ambient Synthesizer**: Pure Web Audio API procedural synthesizer with real-time AnalyserNode canvas visualizer pill (no external YouTube/streams).
 
 ---
 
-## 🏛️ System Architecture
+## 🇧🇩 বাংলা বিবরণ (বাংলায় পরিচিতি)
+
+**ভল্টজিরো (VaultZero)** হলো ১০০% অফলাইন, জিরো-নলেজ ও অত্যন্ত দ্রুতগতির ডেস্কটপ ও মোবাইল পাসওয়ার্ড ম্যানেজার। এটি ক্লাউডভিত্তিক দুর্বলতা ও ট্র্যাকিং সম্পূর্ণ বর্জন করে আপনার ডিভাইসেই সমস্ত তথ্য সুরক্ষিত রাখে।
+
+### ✨ প্রধান বৈশিষ্ট্যসমূহ:
+- **সম্পূর্ণ অফলাইন ও জিরো-ট্র্যাকিং**: কোনো ইন্টারনেট কানেকশন বা ক্লাউড সার্ভারের প্রয়োজন নেই।
+- **সামরিক মানের এনক্রিপশন**: Argon2id + XChaCha20-Poly1305 দিয়ে আপনার সমস্ত ডাটা সুরক্ষিত এবং র্যাম থেকে তাত্ক্ষণিক ডেটা মুছে ফেলা হয়।
+- **ডুয়াল ওসিআর স্ক্যানার (Auto-Fill + Copy Pad)**: যেকোনো স্ক্রিনশট ড্র্যাগ-অ্যান্ড-ড্রপ বা `Ctrl+V` দিয়ে পেস্ট করলে স্বয়ংক্রিয়ভাবে টাইটেল, ইউজারনেম, পাসওয়ার্ড ও ওয়েবসাইট পূরণ হয়ে যায়; পাশাপাশি এডিটেবল প্যাড ও ক্লিকেবল চিপস দিয়ে যেকোনো ঘরে তথ্য বসানো যায়।
+- **অফিশিয়াল লোগো ফেচার**: সাধারণ ব্রাউজিংয়ের জন্য simple-icons এবং বৈধ ডোমেইনের জন্য গুগল হাই-রেজুলিউশন সার্ভিস থেকে নিরাপদ HTTPS লোগো প্রদর্শন; ভুল কোম্পানির লোগো কখনো দেখায় না।
+- **স্বাভাবিক ও প্রাঞ্জল বাংলা ভাষা**: যেকোনো সময় এক ক্লিকেই পুরো ইন্টারফেস প্রাঞ্জল বাংলায় রূপান্তর করা যায়।
+- **অ্যান্টি-রেকর্ডিং শিল্ড ও অটো-ক্লিপবোর্ড ক্লিয়ার**: কোনো স্ক্রিন রেকর্ডার বা স্পাইওয়্যার অ্যাপের ভেতরে থাকা পাসওয়ার্ড রেকর্ড করতে পারে না এবং ক্লিপবোর্ড থেকে ১২ সেকেন্ডের মধ্যে সংবেদনশীল তথ্য স্বয়ংক্রিয়ভাবে মুছে যায়।
+- **লোফি অ্যাম্বিয়েন্ট সিন্থেসাইজার**: কোনো ইউটিউব ভিডিও ছাড়া সম্পূর্ণ নিজস্ব অডিও কোডে তৈরি রিল্যাক্সিং সাউন্ড ও লাইভ ক্যানভাস ভিজ্যুয়ালাইজার।
+
+---
+
+## 🛠️ Tech Stack & Architecture
 
 ```mermaid
-flowchart TD
-    subgraph Frontend["Frontend Layer (WebView2 / Chromium)"]
-        UI["React 18 & Vite & TailwindCSS"]
-        State["Zustand Client State (Zero Master Keys)"]
-        LofiShader["Cozy Lofi CRT Shader & WebGL Audio"]
-        UI --> State
-        UI --> LofiShader
-    end
+graph TD
+    UI["Liquid Glass React 19 UI\n(Tailwind v4 · Framer Motion)"]
+    IPC["Tauri 2 IPC Bridge\n(window.__TAURI_INTERNALS__)"]
+    Core["crates/vault-core\n(Rust Engine)"]
+    Crypto["Argon2id + XChaCha20-Poly1305\n(Zeroize memory protection)"]
+    Storage["Encrypted Local DB\n(PMV1 File Format)"]
+    P2P["Optical QR & SPAKE2\n(Local Air-Gapped Sync)"]
 
-    subgraph IPC["Zero-Trust IPC Gatekeeper"]
-        TauriBridge["Type-Safe Narrow Rust IPC (No String-Eval)"]
-    end
-
-    subgraph CoreRust["Rust Core Engine (Zeroize Memory)"]
-        VaultCore["vault-core: Vault Store & Session"]
-        CryptoCore["vault-crypto: Argon2id & XChaCha20-Poly1305"]
-        SyncEngine["vault-sync: SPAKE2 MITM-Proof Local P2P"]
-        OCREngine["vault-ocr: 100% Offline Credential Snipping"]
-        Shredder["vault-shredder: DoD 5220.22-M 3-Pass Erasure"]
-        BackupEngine["vault-backup: Encrypted Container Backup"]
-        
-        VaultCore --> CryptoCore
-        VaultCore --> SyncEngine
-        VaultCore --> OCREngine
-        VaultCore --> Shredder
-        VaultCore --> BackupEngine
-    end
-
-    subgraph Storage["Encrypted Disk Storage"]
-        EncPayload[".pmv Encrypted Binary Container"]
-        AuditLog["Local HMAC Audit Logs"]
-    end
-
-    State <==>|Tauri Commands / Events| TauriBridge
-    TauriBridge <==> VaultCore
-    CryptoCore <==>|Atomic Direct I/O| EncPayload
-    VaultCore --> AuditLog
+    UI -->|JSON-RPC Commands| IPC
+    IPC --> Core
+    Core --> Crypto
+    Core --> Storage
+    Core --> P2P
 ```
 
 ---
 
-## 🔐 Cryptographic Key Hierarchy
+## 💻 Running Locally
 
-```mermaid
-flowchart TD
-    MasterPass["User Master Password (Raw String)"]
-    DuressPass["Duress / Decoy Password (Optional)"]
-    CSPRNGSalt["32-Byte CSPRNG Salt (Stored in Header)"]
+### Prerequisites
+- [Node.js](https://nodejs.org/) v20+
+- [Rust](https://rustup.rs/) v1.80+
 
-    MasterPass & CSPRNGSalt --> Argon2id["Argon2id KDF (m=64MiB, t=3, p=4)"]
-    DuressPass & CSPRNGSalt --> DecoyArgon2id["Argon2id Decoy KDF"]
-
-    Argon2id --> MasterKey["256-Bit Master Root Key (ZeroizeOnDrop)"]
-    DecoyArgon2id --> DecoyMasterKey["256-Bit Decoy Root Key (ZeroizeOnDrop)"]
-
-    MasterKey --> HKDF["HKDF-SHA256 Key Derivation"]
-    
-    HKDF --> EncKey["Payload Encryption Key (XChaCha20-Poly1305)"]
-    HKDF --> AuthKey["HMAC-SHA256 Integrity Key"]
-    HKDF --> SearchKey["Hashed Index Search Subkey"]
-
-    EncKey --> AEAD["XChaCha20-Poly1305 (24-byte Nonce per Chunk)"]
-    AEAD --> EncryptedRecords["Encrypted Vault Records (.pmv)"]
-    
-    DecoyMasterKey --> DecoyAEAD["Decoy XChaCha20-Poly1305 Engine"]
-    DecoyAEAD --> DecoyRecords["Decoy Realistic Credentials Container"]
-
-    MemoryWipe["Scope Exit / Lock Trigger"] -->|zeroize::Zeroize| MasterKey & EncKey & AuthKey
-```
-
----
-
-## ⌨️ Keyboard Shortcuts
-
-| Shortcut | Action | Description |
-| :--- | :--- | :--- |
-| <kbd>Ctrl</kbd> + <kbd>K</kbd> | **Command Palette** | Instant global search across passwords, notes, credit cards, and tags. |
-| <kbd>Ctrl</kbd> + <kbd>L</kbd> | **Panic Lock** | Instantly purges memory keys with zeroize and returns to master unlock screen. |
-| <kbd>Ctrl</kbd> + <kbd>Shift</kbd> + <kbd>S</kbd> | **Offline OCR Snip** | Freeze screen and snip a region to extract textual credentials locally. |
-| <kbd>Ctrl</kbd> + <kbd>N</kbd> | **New Secret** | Opens modal to create a new password or identity record. |
-| <kbd>Ctrl</kbd> + <kbd>Shift</kbd> + <kbd>D</kbd> | **Toggle Cozy Lofi** | Switches between clean modern mode and retro CRT scanline shader mode. |
-| <kbd>Ctrl</kbd> + <kbd>Shift</kbd> + <kbd>Y</kbd> | **P2P Sync Center** | Opens the SPAKE2 local peer-to-peer sync pairing dialog. |
-
----
-
-## 💻 How to Run Locally
-
-Running VaultZero locally for development is fast and straightforward.
-
-### 1. Prerequisites
-- **Node.js** (v18.0 or newer) & **npm**: [Download Node.js](https://nodejs.org/)
-- **Rust** (v1.78+ stable): [Install Rust via rustup](https://rustup.rs/)
-- **Windows C++ Compiler**: Visual Studio Build Tools (C++ Desktop development) or LLVM-MinGW
-
-### 2. Setup & Development
 ```bash
-# 1. Clone the repository
-git clone https://github.com/tonmoycoder/vaultzero.git
-cd vaultzero
+# Clone the repository
+git clone https://github.com/tonmoycoder/VaultZero.git
+cd VaultZero
 
-# 2. Install dependencies
+# Install dependencies
 npm install
 
-# 3. Launch in development mode (starts Vite + Tauri desktop window)
-npm run tauri dev
-```
+# Run Vite web development server
+npm run dev
 
-### 3. Build Windows Installer & Executable Locally
-```bash
-# Compile web frontend and generate Windows installers (.msi and .setup.exe)
-npm run tauri build
-```
-Generated installers will be located in:
-- `src-tauri/target/release/bundle/nsis/` (NSIS Setup installer)
-- `src-tauri/target/release/bundle/msi/` (WiX MSI installer)
+# Run Playwright end-to-end tests
+npx playwright test
 
----
-
-## 🧪 Testing
-
-Execute the workspace unit test suite:
-```bash
-cargo test --workspace
-```
-
-Verify frontend TypeScript type safety:
-```bash
-npm run build
+# Build desktop release executable
+cargo build --release -p vaultzero-app
 ```
 
 ---
 
-## 🤝 How to Contribute
+## 📜 License & Security
 
-We welcome contributions from everyone! Whether you are fixing a typo, improving cryptographic performance, or designing retro shader themes:
-
-1. **Fork the Repository**: Click "Fork" at the top right of this page.
-2. **Create a Feature Branch**:
-   ```bash
-   git checkout -b feature/awesome-addition
-   ```
-3. **Commit your Changes**:
-   ```bash
-   git commit -m "feat: add biometric quick-unlock on supported hardware"
-   ```
-4. **Push to your Branch**:
-   ```bash
-   git push origin feature/awesome-addition
-   ```
-5. **Open a Pull Request**: Submit your PR with a clear summary of your changes. Check [CONTRIBUTING.md](./CONTRIBUTING.md) for style conventions and security checklists.
-
----
-
-## 🔒 Security Policy
-
-For security vulnerability disclosures, threat models, and safe key management details, please refer to our [SECURITY.md](./SECURITY.md).
-
----
-
-## 📄 License
-
-VaultZero is free, libre, and open-source software distributed under the **[MIT License](./LICENSE)**.  
-Copyright © 2026 **Tanver Islam Tonmoy** ([@tonmoycoder](https://github.com/tonmoycoder)).
+- **License**: Released under the permissive [MIT License](./LICENSE).
+- **Security Policy**: For responsible vulnerability disclosure, please refer to [SECURITY.md](./SECURITY.md).

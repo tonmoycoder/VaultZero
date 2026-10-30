@@ -4,3 +4,6 @@ PATH = { value = "C:\\Users\\Tonmoy\\llvm-mingw-20261020-ucrt-x86_64\\bin", rela
 [target.x86_64-pc-windows-gnu]
 linker = "x86_64-w64-mingw32-gcc.exe"
 ar = "x86_64-w64-mingw32-ar.exe"
+rustflags = [
+    "-L", "C:\\Users\\Tonmoy\\llvm-mingw-20261020-ucrt-x86_64\\x86_64-w64-mingw32\\lib"
+]

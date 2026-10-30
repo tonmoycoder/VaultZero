@@ -1,584 +1,631 @@
-import { useState, useEffect, useMemo } from 'react';
-import { Sidebar } from '@/components/sidebar/Sidebar';
-import { Header } from '@/components/header/Header';
-import { BentoGridView } from '@/components/views/BentoGridView';
-import { SplitInspectorView } from '@/components/views/SplitInspectorView';
-import { SecurityCenterView } from '@/components/views/SecurityCenterView';
-import { AuthenticatorView } from '@/components/views/AuthenticatorView';
-import { P2PSyncView } from '@/components/views/P2PSyncView';
-import { EntryModal } from '@/components/views/EntryModal';
-import { PasswordGeneratorModal } from '@/components/views/PasswordGeneratorModal';
-import { CommandPalette } from '@/components/views/CommandPalette';
-import { LockScreen } from '@/components/views/LockScreen';
-import { MobileNav } from '@/components/views/MobileNav';
-import { OcrSnippingModal } from '@/components/views/OcrSnippingModal';
-import { ExportShredModal } from '@/components/views/ExportShredModal';
-import { EmergencyRecoveryKitModal } from '@/components/views/EmergencyRecoveryKitModal';
-import { UpdateModal } from '@/components/views/UpdateModal';
-import { DitheringShader } from '@/components/ui/dithering-shader';
-import { lofiAudio } from '@/lib/lofi-audio';
-import { VaultApi } from '@/lib/api';
-import { extractPublicDomain } from '@/lib/brand-fetcher';
-import { useI18n } from '@/lib/i18n';
-import { ShieldCheck, Clock, Scissors, FileText, FolderIcon } from 'lucide-react';
-import type {
-  BrandInfo,
-  Category,
-  DomainGroup,
-  Entry,
-  EntrySummary,
-  Folder,
-  SecurityAuditReport,
-  VaultStatus,
-} from '@/types/vault';
+import {
+  ArrowsLeftRight,
+  CheckCircle,
+  Fingerprint,
+  HandTap,
+  House,
+  LockKey,
+  Plus,
+  Sparkle,
+  Star,
+  ToggleLeft,
+  Wrench,
+  X,
+} from "@phosphor-icons/react";
+import { useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
+import { AnimatePresence, LayoutGroup, motion } from "framer-motion";
+import CommandPalette from "./components/CommandPalette";
+import InspectorHost from "./components/InspectorHost";
+import GlassSelection from "./components/GlassSelection";
+import AmbientScene from "./components/AmbientScene";
+import LockScreen from "./components/LockScreen";
+import TactileProvider, { hapticSuccess } from "./components/Tactile";
+import { AddItemModal, OcrModal } from "./components/captureModals";
+import Sidebar, { MobileQuickMenu, type ToolName } from "./components/Sidebar";
+import {
+  AuthenticatorModal,
+  EmergencyKitModal,
+  GeneratorModal,
+  SyncModal,
+} from "./components/toolModals";
+import SecurityCenterModal from "./components/SecurityCenter";
+import { Avatar, Modal, Toggle, Tooltip } from "./components/ui";
+import TextSizeControl, { DEFAULT_TEXT_STEP, TEXT_STEPS, stepLabel } from "./components/TextSize";
+import LofiPlayer from "./components/LofiPlayer";
+import VaultHome from "./components/VaultHome";
+import {
+  checkGitHubUpdate,
+  initialItems,
+  invokeTauri,
+  isTauri,
+  t,
+  type BrandKey,
+  type Language,
+  type Theme,
+  type VaultItem,
+} from "./lib/vault";
+import { cn } from "./utils/cn";
+import { useMediaQuery } from "./lib/motion";
 
-export function App() {
-  const { isBn } = useI18n();
+function readStoredTheme(): Theme {
+  if (typeof window === "undefined") return "light";
+  const stored = window.localStorage.getItem("vaultzero-theme");
+  return stored === "dark" || stored === "lofi" || stored === "light" ? stored : "light";
+}
 
-  // Vault state
-  const [vaultStatus, setVaultStatus] = useState<VaultStatus | null>(null);
-  const [entries, setEntries] = useState<EntrySummary[]>([]);
-  const [brands, setBrands] = useState<BrandInfo[]>([]);
-  const [domainGroups, setDomainGroups] = useState<DomainGroup[]>([]);
-  const [auditReport, setAuditReport] = useState<SecurityAuditReport | null>(null);
-  const [folders, setFolders] = useState<Folder[]>([]);
+function readStoredLanguage(): Language {
+  if (typeof window === "undefined") return "en";
+  return window.localStorage.getItem("vaultzero-language") === "bn" ? "bn" : "en";
+}
 
-  // Theme state ('light' | 'dark' | 'zen')
-  const [currentTheme, setCurrentTheme] = useState<'light' | 'dark' | 'zen'>(() => {
-    return (localStorage.getItem('vaultzero_theme') as 'light' | 'dark' | 'zen') || 'dark';
-  });
+type FeelSettings = { press: boolean; haptics: boolean };
 
-  // View & Filter states
-  const [selectedCategory, setSelectedCategory] = useState<Category | 'All' | 'Favorites'>('All');
-  const [selectedFolderId, setSelectedFolderId] = useState<string | null>(null);
-  const [activeView, setActiveView] = useState<'entries' | 'security' | 'p2p' | 'generator' | 'totp'>('entries');
-  const [viewMode, setViewMode] = useState<'grid' | 'split'>('grid');
-  const [searchQuery, setSearchQuery] = useState<string>('');
-  const [selectedBrandKey, setSelectedBrandKey] = useState<string | null>(null);
-  const [selectedFilter, setSelectedFilter] = useState<'all' | 'compromised' | 'reused' | 'weak'>('all');
-  const [selectedEntry, setSelectedEntry] = useState<EntrySummary | null>(null);
-
-  // Modals
-  const [isEntryModalOpen, setIsEntryModalOpen] = useState<boolean>(false);
-  const [entryToEdit, setEntryToEdit] = useState<EntrySummary | null>(null);
-  const [isGeneratorOpen, setIsGeneratorOpen] = useState<boolean>(false);
-  const [isCommandPaletteOpen, setIsCommandPaletteOpen] = useState<boolean>(false);
-  const [isOcrOpen, setIsOcrOpen] = useState<boolean>(false);
-  const [isExportShredOpen, setIsExportShredOpen] = useState<boolean>(false);
-  const [isEmergencyKitOpen, setIsEmergencyKitOpen] = useState<boolean>(false);
-  const [isUpdateModalOpen, setIsUpdateModalOpen] = useState<boolean>(false);
-
-  // Protected Clipboard 12s Auto-Clear state
-  const [clipboardCount, setClipboardCount] = useState<number>(0);
-
-  // Screen Capture Protection
-  const [screenProtection, setScreenProtection] = useState<boolean>(false);
-
-  // Cozy Lofi / Zen Mode
-  const [lofiActive, setLofiActive] = useState<boolean>(false);
-
-  // Sync theme to document root
-  useEffect(() => {
-    document.documentElement.className = currentTheme;
-    localStorage.setItem('vaultzero_theme', currentTheme);
-    if (currentTheme === 'zen') {
-      setLofiActive(true);
-    }
-  }, [currentTheme]);
-
-  const refreshVault = async () => {
-    try {
-      const status = await VaultApi.getStatus();
-      setVaultStatus(status);
-
-      if (status.is_unlocked) {
-        const [loadedEntries, loadedBrands, loadedGroups, loadedAudit, loadedFolders] = await Promise.all([
-          VaultApi.listEntries(),
-          VaultApi.getBrands(),
-          VaultApi.getDomainGroups(),
-          VaultApi.getSecurityAudit(),
-          VaultApi.listFolders(),
-        ]);
-        setEntries(loadedEntries);
-        setBrands(loadedBrands);
-        setDomainGroups(loadedGroups);
-        setAuditReport(loadedAudit);
-        setFolders(loadedFolders);
-
-        if (loadedEntries.length > 0 && !selectedEntry) {
-          setSelectedEntry(loadedEntries[0]);
-        }
-      }
-    } catch (err) {
-      console.error('Failed to refresh vault state:', err);
-    }
-  };
-
-  useEffect(() => {
-    refreshVault();
-  }, []);
-
-  // 12s Clipboard Auto-Clear Timer Loop
-  useEffect(() => {
-    let interval: number;
-    if (clipboardCount > 0) {
-      interval = window.setInterval(() => {
-        setClipboardCount((prev) => {
-          if (prev <= 1) {
-            navigator.clipboard.writeText('');
-            return 0;
-          }
-          return prev - 1;
-        });
-      }, 1000);
-    }
-    return () => clearInterval(interval);
-  }, [clipboardCount]);
-
-  // Global Keyboard Shortcuts (Ctrl+L, Ctrl+K, Ctrl+Shift+S)
-  useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'l') {
-        e.preventDefault();
-        handleLockVault();
-      } else if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k') {
-        e.preventDefault();
-        setIsCommandPaletteOpen(true);
-      } else if ((e.ctrlKey || e.metaKey) && e.shiftKey && e.key.toLowerCase() === 's') {
-        e.preventDefault();
-        setIsOcrOpen(true);
-      }
-    };
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
-  }, []);
-
-  const handleLockVault = async () => {
-    try {
-      await VaultApi.lock();
-      await refreshVault();
-      setSelectedEntry(null);
-    } catch (err) {
-      console.error('Failed to lock vault:', err);
-    }
-  };
-
-  const handleToggleLofi = () => {
-    const nextState = !lofiActive;
-    setLofiActive(nextState);
-    if (nextState) {
-      lofiAudio.start();
-    } else {
-      lofiAudio.stop();
-    }
-  };
-
-  const handleToggleScreenProtection = async () => {
-    const next = !screenProtection;
-    try {
-      await VaultApi.setScreenProtection(next);
-      setScreenProtection(next);
-    } catch (err) {
-      console.error('Failed to toggle screen capture protection:', err);
-    }
-  };
-
-  const handleAddNew = () => {
-    setEntryToEdit(null);
-    setIsEntryModalOpen(true);
-  };
-
-  const handleEditEntry = (entry: EntrySummary) => {
-    setEntryToEdit(entry);
-    setIsEntryModalOpen(true);
-  };
-
-  const handleDeleteEntry = async (entryId: string) => {
-    try {
-      await VaultApi.deleteEntry(entryId);
-      await refreshVault();
-      if (selectedEntry?.id === entryId) {
-        setSelectedEntry(null);
-      }
-    } catch (err) {
-      console.error('Failed to delete entry:', err);
-    }
-  };
-
-  const handleCreateFolder = async (name: string) => {
-    try {
-      const newFolder = await VaultApi.createFolder(name);
-      setFolders((prev) => [...prev, newFolder]);
-    } catch (err) {
-      console.error('Failed to create folder:', err);
-    }
-  };
-
-  const handleDeleteFolder = async (folderId: string) => {
-    try {
-      await VaultApi.deleteFolder(folderId);
-      setFolders((prev) => prev.filter((f) => f.id !== folderId));
-      if (selectedFolderId === folderId) {
-        setSelectedFolderId(null);
-      }
-    } catch (err) {
-      console.error('Failed to delete folder:', err);
-    }
-  };
-
-  const handleClearFilters = () => {
-    setSelectedCategory('All');
-    setSelectedFolderId(null);
-    setSelectedBrandKey(null);
-    setSelectedFilter('all');
-    setSearchQuery('');
-  };
-
-  // Filter and search entries pipeline
-  const filteredEntries = useMemo(() => {
-    return entries.filter((entry) => {
-      // Category filter
-      if (selectedCategory === 'Favorites' && !entry.favorite) return false;
-      if (selectedCategory !== 'All' && selectedCategory !== 'Favorites' && entry.category !== selectedCategory) {
-        return false;
-      }
-
-      // Folder filter
-      if (selectedFolderId && entry.folder_id !== selectedFolderId) {
-        return false;
-      }
-
-      // Dynamic Brand key filter
-      if (selectedBrandKey) {
-        const domain = (entry.domain || '').toLowerCase();
-        const extracted = (extractPublicDomain(entry.url || '') || '').toLowerCase();
-        const title = (entry.title || '').toLowerCase();
-        const target = selectedBrandKey.toLowerCase();
-        if (domain !== target && extracted !== target && !title.includes(target)) {
-          return false;
-        }
-      }
-
-      // Security audit health filter
-      if (selectedFilter === 'compromised' && !auditReport?.compromised_ids.includes(entry.id)) {
-        return false;
-      }
-      if (selectedFilter === 'reused' && !auditReport?.reused_ids.includes(entry.id)) {
-        return false;
-      }
-      if (selectedFilter === 'weak' && !auditReport?.weak_ids.includes(entry.id)) {
-        return false;
-      }
-
-      // Search query
-      if (searchQuery.trim()) {
-        const q = searchQuery.toLowerCase();
-        const matchTitle = entry.title.toLowerCase().includes(q);
-        const matchUser = entry.username.toLowerCase().includes(q);
-        const matchUrl = entry.url.toLowerCase().includes(q);
-        const matchTags = entry.tags.some((t) => t.toLowerCase().includes(q));
-        if (!matchTitle && !matchUser && !matchUrl && !matchTags) return false;
-      }
-
-      return true;
-    });
-  }, [entries, selectedCategory, selectedFolderId, selectedBrandKey, selectedFilter, searchQuery, auditReport]);
-
-  if (!vaultStatus) {
-    return (
-      <div className="h-screen w-screen flex items-center justify-center bg-background text-foreground">
-        <div className="flex flex-col items-center gap-3">
-          <div className="w-8 h-8 border-4 border-primary border-t-transparent rounded-full animate-spin" />
-          <p className="text-sm text-muted-foreground font-mono">
-            {isBn ? 'জিরো-ট্রাস্ট এনক্লেভ প্রস্তুত হচ্ছে...' : 'Initializing Zero-Trust Enclave...'}
-          </p>
-        </div>
-      </div>
-    );
+function readStoredFeel(): FeelSettings {
+  if (typeof window === "undefined") return { press: true, haptics: true };
+  try {
+    const raw = window.localStorage.getItem("vaultzero-feel");
+    if (!raw) return { press: true, haptics: true };
+    const parsed = JSON.parse(raw) as Partial<FeelSettings>;
+    return { press: parsed.press !== false, haptics: parsed.haptics !== false };
+  } catch {
+    return { press: true, haptics: true };
   }
+}
 
-  // If vault is locked, render LockScreen
-  if (!vaultStatus.is_unlocked) {
+function readStoredTextStep(): number {
+  if (typeof window === "undefined") return DEFAULT_TEXT_STEP;
+  const raw = window.localStorage.getItem("vaultzero-text-step");
+  if (raw === null) return DEFAULT_TEXT_STEP;
+  const stored = Number(raw);
+  return Number.isInteger(stored) && stored >= 0 && stored < TEXT_STEPS.length ? stored : DEFAULT_TEXT_STEP;
+}
+
+type ModalName = ToolName | "mobileMenu";
+
+function MobileNav({
+  active,
+  folder,
+  lang,
+  onNav,
+  onTool,
+}: {
+  active: string;
+  folder: string | null;
+  lang: Language;
+  onNav: (id: string) => void;
+  onTool: (tool: ModalName) => void;
+}) {
+  const groupId = useId();
+  const navButton = (label: string, icon: typeof House, selected: boolean, onClick: () => void) => {
+    const NavIcon = icon;
     return (
-      <LockScreen
-        onUnlocked={() => {
-          refreshVault();
-        }}
-      />
+      <button
+        key={label}
+        onClick={onClick}
+        className="relative flex h-[44px] min-w-0 flex-1 flex-col items-center justify-center gap-[3px] rounded-[14px] transition-colors"
+        style={{ color: selected ? "var(--accent)" : "var(--text-faint)" }}
+        data-glass-option="true"
+        aria-label={label}
+        aria-current={selected ? "page" : undefined}
+      >
+        {selected && <GlassSelection id="mobile-active" />}
+        <NavIcon size={18} weight={selected ? "fill" : "duotone"} />
+        <span className="truncate text-[6.5px] font-semibold leading-none">{label}</span>
+        {selected && <span className="absolute bottom-[3px] h-[2px] w-3 rounded-full bg-[var(--accent)]" />}
+      </button>
     );
-  }
+  };
 
   return (
-    <div className="h-screen w-screen flex flex-col bg-background text-foreground relative overflow-hidden select-none">
-      {/* Optional Cozy Lofi CRT Scanline & Grain Shader Background */}
-      {lofiActive && (
-        <div className="absolute inset-0 z-0 pointer-events-none opacity-45">
-          <DitheringShader />
-        </div>
-      )}
-
-      {/* Main App Container */}
-      <div
-        className={`relative z-10 w-full h-full flex overflow-hidden transition-all duration-300 ${
-          lofiActive ? 'backdrop-blur-2xl bg-slate-950/75 border-white/10' : ''
-        }`}
+    <LayoutGroup id={groupId}>
+    <motion.nav layoutRoot
+      className="glass-strong fixed bottom-[max(10px,env(safe-area-inset-bottom))] left-1/2 z-[60] flex w-[calc(100%-24px)] max-w-[430px] -translate-x-1/2 items-center gap-0.5 rounded-[21px] p-1.5 lg:hidden"
+      style={{ boxShadow: "0 20px 50px rgba(8,10,30,.28), var(--inset-hi)" }}
+      aria-label="Mobile navigation"
+    >
+      {navButton(t(lang, "allItems"), House, active === "all" && !folder, () => onNav("all"))}
+      {navButton(t(lang, "favorites"), Star, active === "favorites", () => onNav("favorites"))}
+      <button
+        onClick={() => onTool("add")}
+        className="primary-button mx-1 flex h-[42px] w-[42px] shrink-0 items-center justify-center rounded-[15px]"
+        aria-label={t(lang, "addNew")}
       >
-        {/* Left Sidebar (Desktop Only) */}
-        <div className="hidden md:flex">
-          <Sidebar
-            selectedCategory={selectedCategory}
-            onSelectCategory={(cat) => {
-              setSelectedCategory(cat);
-              setSelectedFolderId(null);
-            }}
-            selectedFolderId={selectedFolderId}
-            onSelectFolder={(fId) => {
-              setSelectedFolderId(fId);
-              if (fId) setSelectedCategory('All');
-            }}
-            folders={folders}
-            onCreateFolder={handleCreateFolder}
-            onDeleteFolder={handleDeleteFolder}
-            activeView={activeView}
-            onSelectView={setActiveView}
-            entries={entries}
-            onAddNew={handleAddNew}
-            onOpenGenerator={() => setIsGeneratorOpen(true)}
-            onOpenEmergencyKit={() => setIsEmergencyKitOpen(true)}
-            onLockVault={handleLockVault}
-            isDuress={vaultStatus.is_duress}
-          />
-        </div>
-
-        {/* Center Content Workspace */}
-        <div className="flex-1 flex flex-col min-w-0 overflow-hidden pb-16 md:pb-0">
-          <Header
-            searchQuery={searchQuery}
-            onSearchChange={setSearchQuery}
-            viewMode={viewMode}
-            onViewModeChange={setViewMode}
-            lofiActive={lofiActive}
-            onToggleLofi={handleToggleLofi}
-            onLockVault={handleLockVault}
-            onOpenCommandPalette={() => setIsCommandPaletteOpen(true)}
-            onAddNew={handleAddNew}
-            entries={entries}
-            selectedBrandKey={selectedBrandKey}
-            onSelectBrandKey={setSelectedBrandKey}
-            auditReport={auditReport}
-            selectedFilter={selectedFilter}
-            onSelectFilter={setSelectedFilter}
-            currentTheme={currentTheme}
-            onThemeChange={setCurrentTheme}
-            onOpenUpdateModal={() => setIsUpdateModalOpen(true)}
-          />
-
-          {/* Top Quick Actions Bar: OCR, Export, Anti-Spy, Active Filters Indicator */}
-          <div className="flex items-center justify-between px-6 py-2 bg-secondary/20 border-b border-border/50 text-xs">
-            <div className="flex items-center gap-2">
-              <button
-                onClick={() => setIsOcrOpen(true)}
-                className="flex items-center gap-1.5 px-3 py-1 rounded-lg bg-secondary/60 hover:bg-secondary text-muted-foreground hover:text-foreground border border-border/60 transition-all"
-                title="Ctrl+Shift+S"
-              >
-                <Scissors className="w-3.5 h-3.5 text-cyan-400" />
-                <span>{isBn ? 'ওসিআর স্নাইপিং (Ctrl+Shift+S)' : 'OCR Snipping (Ctrl+Shift+S)'}</span>
-              </button>
-
-              <button
-                onClick={() => setIsExportShredOpen(true)}
-                className="flex items-center gap-1.5 px-3 py-1 rounded-lg bg-secondary/60 hover:bg-secondary text-muted-foreground hover:text-foreground border border-border/60 transition-all"
-              >
-                <FileText className="w-3.5 h-3.5 text-primary" />
-                <span>{isBn ? 'এক্সপোর্ট ও ফাইল শ্রেডার' : 'Export & Shredder'}</span>
-              </button>
-
-              {/* Active Folder Indicator */}
-              {selectedFolderId && (
-                <div className="hidden sm:flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-primary/10 border border-primary/20 text-primary font-mono text-[11px]">
-                  <FolderIcon className="w-3 h-3" />
-                  <span>
-                    {folders.find((f) => f.id === selectedFolderId)?.name || 'Folder'}
-                  </span>
-                  <button
-                    onClick={() => setSelectedFolderId(null)}
-                    className="ml-1 hover:text-foreground"
-                  >
-                    ×
-                  </button>
-                </div>
-              )}
-            </div>
-
-            <button
-              onClick={handleToggleScreenProtection}
-              title={
-                isBn
-                  ? 'উইন্ডোজের SetWindowDisplayAffinity API ব্যবহার করে স্ক্রিন রেকর্ডার, OBS বা স্ক্রিনশটে পাসওয়ার্ড সম্পূর্ণ কালো/লুকানো রাখবে।'
-                  : 'Hardware-enforced SetWindowDisplayAffinity blocks OBS, Discord, and screenshot captures.'
-              }
-              className={`flex items-center gap-1.5 px-3 py-1 rounded-lg border transition-all ${
-                screenProtection
-                  ? 'bg-emerald-500/15 border-emerald-500/30 text-emerald-400 font-semibold shadow-sm'
-                  : 'bg-secondary/40 border-border/60 text-muted-foreground hover:text-foreground'
-              }`}
-            >
-              <ShieldCheck className="w-3.5 h-3.5" />
-              <span>
-                {isBn ? 'স্ক্রিন ক্যাপচার সুরক্ষা: ' : 'Anti-Screen Recording: '}
-                {screenProtection ? (isBn ? 'সক্রিয়' : 'ACTIVE') : (isBn ? 'বন্ধ' : 'OFF')}
-              </span>
-            </button>
-          </div>
-
-          {/* Dynamic View Panels */}
-          {activeView === 'entries' && (
-            <>
-              {viewMode === 'grid' ? (
-                <BentoGridView
-                  entries={filteredEntries}
-                  brands={brands}
-                  domainGroups={domainGroups}
-                  onSelectEntry={(entry) => {
-                    setSelectedEntry(entry);
-                    setViewMode('split');
-                  }}
-                  onEditEntry={handleEditEntry}
-                  onAddNew={handleAddNew}
-                  onClearFilter={handleClearFilters}
-                />
-              ) : (
-                <SplitInspectorView
-                  entries={filteredEntries}
-                  selectedEntry={selectedEntry}
-                  onSelectEntry={setSelectedEntry}
-                  brands={brands}
-                  onEditEntry={handleEditEntry}
-                  onDeleteEntry={handleDeleteEntry}
-                  onAddNew={handleAddNew}
-                  onClearFilter={handleClearFilters}
-                />
-              )}
-            </>
-          )}
-
-          {activeView === 'security' && (
-            <SecurityCenterView
-              auditReport={auditReport}
-              entries={entries}
-              brands={brands}
-              onSelectEntry={(entry) => {
-                setSelectedEntry(entry);
-                setActiveView('entries');
-                setViewMode('split');
-              }}
-              onRefreshAudit={refreshVault}
-            />
-          )}
-
-          {activeView === 'totp' && (
-            <AuthenticatorView
-              entries={entries}
-              brands={brands}
-              onAddNew={handleAddNew}
-              onSelectEntry={(entry) => {
-                setSelectedEntry(entry);
-                setActiveView('entries');
-                setViewMode('split');
-              }}
-            />
-          )}
-
-          {activeView === 'generator' && (
-            <div className="flex-1 flex items-center justify-center p-6">
-              <div className="w-full max-w-lg">
-                <PasswordGeneratorModal
-                  isOpen={true}
-                  onClose={() => setActiveView('entries')}
-                />
-              </div>
-            </div>
-          )}
-
-          {activeView === 'p2p' && <P2PSyncView />}
-        </div>
-      </div>
-
-      {/* 12s Protected Clipboard Countdown Toast */}
-      {clipboardCount > 0 && (
-        <div className="fixed bottom-20 right-6 z-50 flex items-center gap-3 p-3.5 rounded-2xl bg-slate-900 border border-primary/40 text-white shadow-2xl animate-in slide-in-from-bottom duration-300">
-          <Clock className="w-5 h-5 text-primary animate-pulse" />
-          <div className="flex flex-col">
-            <span className="text-xs font-bold text-foreground">
-              {isBn ? 'সুরক্ষিত ক্লিপবোর্ড' : 'Protected Clipboard'}
-            </span>
-            <span className="text-[11px] font-mono text-muted-foreground">
-              {isBn ? 'মুছে যাবে: ' : 'Auto-clearing in '}
-              <strong className="text-primary">{clipboardCount}s</strong>
-            </span>
-          </div>
-        </div>
-      )}
-
-      {/* Mobile Bottom Navigation (< 768px) */}
-      <MobileNav activeView={activeView} onSelectView={setActiveView} />
-
-      {/* Modals & Dialogs */}
-      <EntryModal
-        isOpen={isEntryModalOpen}
-        onClose={() => setIsEntryModalOpen(false)}
-        entryToEdit={entryToEdit}
-        brands={brands}
-        onSaved={() => refreshVault()}
-        onOpenGenerator={() => setIsGeneratorOpen(true)}
-      />
-
-      <PasswordGeneratorModal
-        isOpen={isGeneratorOpen && activeView !== 'generator'}
-        onClose={() => setIsGeneratorOpen(false)}
-      />
-
-      <CommandPalette
-        isOpen={isCommandPaletteOpen}
-        onClose={() => setIsCommandPaletteOpen(false)}
-        entries={entries}
-        onSelectEntry={(entry) => {
-          setSelectedEntry(entry);
-          setActiveView('entries');
-          setViewMode('split');
-        }}
-        onOpenGenerator={() => setIsGeneratorOpen(true)}
-        onOpenSecurity={() => setActiveView('security')}
-        onToggleLofi={handleToggleLofi}
-        onLockVault={handleLockVault}
-      />
-
-      <OcrSnippingModal
-        isOpen={isOcrOpen}
-        onClose={() => setIsOcrOpen(false)}
-        onCredentialExtracted={(_data: Partial<Entry>) => {
-          setIsEntryModalOpen(true);
-        }}
-      />
-
-      <ExportShredModal
-        isOpen={isExportShredOpen}
-        onClose={() => setIsExportShredOpen(false)}
-        onImportComplete={() => refreshVault()}
-      />
-
-      <EmergencyRecoveryKitModal
-        isOpen={isEmergencyKitOpen}
-        onClose={() => setIsEmergencyKitOpen(false)}
-        vaultStatus={vaultStatus}
-      />
-
-      <UpdateModal
-        isOpen={isUpdateModalOpen}
-        onClose={() => setIsUpdateModalOpen(false)}
-      />
-    </div>
+        <Plus size={19} weight="bold" />
+      </button>
+      {navButton("Sync", ArrowsLeftRight, false, () => onTool("sync"))}
+      {navButton("More", Wrench, false, () => onTool("mobileMenu"))}
+    </motion.nav>
+    </LayoutGroup>
   );
 }
 
-export default App;
+export default function App() {
+  const [items, setItems] = useState<VaultItem[]>(initialItems);
+  const [theme, setTheme] = useState<Theme>(readStoredTheme);
+  const [language, setLanguage] = useState<Language>(readStoredLanguage);
+  const [active, setActive] = useState("all");
+  const [folder, setFolder] = useState<string | null>(null);
+  const [brandFilter, setBrandFilter] = useState<BrandKey | "all">("all");
+  const [query, setQuery] = useState("");
+  const [selectedId, setSelectedId] = useState<string | null>("google");
+  const [detailOpen, setDetailOpen] = useState(() => window.matchMedia("(min-width: 1280px)").matches);
+  const [editingItem, setEditingItem] = useState<VaultItem | undefined>();
+  const [draft, setDraft] = useState<Partial<VaultItem> | undefined>();
+  const [textStep, setTextStep] = useState<number>(readStoredTextStep);
+  const [modal, setModal] = useState<ModalName | null>(null);
+  const [commandOpen, setCommandOpen] = useState(false);
+  const [locked, setLocked] = useState(false);
+  const [feel, setFeel] = useState<FeelSettings>(readStoredFeel);
+  const [toast, setToast] = useState<string | null>(null);
+  const toastTimer = useRef<number | null>(null);
+  const dockedInspector = useMediaQuery("(min-width: 1280px)");
+
+  const lang = language;
+  const selectedItem = items.find((item) => item.id === selectedId) ?? items[0] ?? null;
+
+  const notify = useCallback((message: string) => {
+    setToast(message);
+    if (toastTimer.current) window.clearTimeout(toastTimer.current);
+    toastTimer.current = window.setTimeout(() => setToast(null), 3200);
+  }, []);
+
+  useEffect(() => {
+    checkGitHubUpdate("v2.1.0").then((res) => {
+      if (res?.hasUpdate && res.latestVersion) {
+        notify(`Update available: ${res.latestVersion}`);
+      }
+    });
+    if (isTauri()) {
+      invokeTauri("set_screen_protection", { enabled: true });
+    }
+  }, [notify]);
+
+  useEffect(() => {
+    document.documentElement.setAttribute("data-theme", theme);
+    window.localStorage.setItem("vaultzero-theme", theme);
+  }, [theme]);
+
+  useEffect(() => {
+    window.localStorage.setItem("vaultzero-language", language);
+  }, [language]);
+
+  useEffect(() => {
+    window.localStorage.setItem("vaultzero-feel", JSON.stringify(feel));
+  }, [feel]);
+
+  useEffect(() => {
+    document.documentElement.style.setProperty("--font-scale", String(TEXT_STEPS[textStep]));
+    document.documentElement.dataset.textStep = String(textStep);
+    window.localStorage.setItem("vaultzero-text-step", String(textStep));
+  }, [textStep]);
+
+  useEffect(() => {
+    return () => {
+      if (toastTimer.current) window.clearTimeout(toastTimer.current);
+    };
+  }, []);
+
+  useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (locked) return;
+      const target = event.target as HTMLElement | null;
+      const typing = target?.tagName === "INPUT" || target?.tagName === "TEXTAREA" || target?.tagName === "SELECT" || target?.isContentEditable;
+      if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "k") {
+        event.preventDefault();
+        setCommandOpen((value) => !value);
+        return;
+      }
+      const mod = event.metaKey || event.ctrlKey;
+      if (mod && event.shiftKey && event.key.toLowerCase() === "s") {
+        event.preventDefault();
+        setModal("ocr");
+        return;
+      }
+      if (mod && event.shiftKey && event.key.toLowerCase() === "y") {
+        event.preventDefault();
+        setModal("sync");
+        return;
+      }
+      if (mod && event.shiftKey && event.key.toLowerCase() === "d") {
+        event.preventDefault();
+        setTheme((current) => (current === "lofi" ? "light" : "lofi"));
+        return;
+      }
+      if (mod && !event.shiftKey && event.key.toLowerCase() === "l") {
+        event.preventDefault();
+        setLocked(true);
+        setModal(null);
+        setCommandOpen(false);
+        return;
+      }
+      if (mod && !event.shiftKey && event.key.toLowerCase() === "n") {
+        event.preventDefault();
+        setEditingItem(undefined);
+        setDraft(undefined);
+        setModal("add");
+        return;
+      }
+      if (!typing && !modal && !commandOpen && event.key.toLowerCase() === "n" && !mod) {
+        event.preventDefault();
+        setEditingItem(undefined);
+        setDraft(undefined);
+        setModal("add");
+      }
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [modal, commandOpen, locked]);
+
+  const filteredItems = useMemo(() => {
+    let result = items;
+    if (folder) {
+      result = result.filter((item) => item.folder === folder);
+    } else if (active === "favorites") {
+      result = result.filter((item) => item.favorite);
+    } else if (active === "logins") {
+      result = result.filter((item) => item.category === "login");
+    } else if (active === "notes") {
+      result = result.filter((item) => item.category === "note");
+    } else if (active === "identities") {
+      result = result.filter((item) => item.category === "identity");
+    } else if (active === "payments") {
+      result = result.filter((item) => item.category === "payment");
+    }
+    if (brandFilter !== "all") result = result.filter((item) => item.brand === brandFilter);
+    if (query.trim()) {
+      const needle = query.toLowerCase();
+      result = result.filter((item) =>
+        `${item.title} ${item.username} ${item.url} ${item.category} ${(item.tags ?? []).join(" ")}`.toLowerCase().includes(needle),
+      );
+    }
+    return result;
+  }, [items, folder, active, brandFilter, query]);
+
+  const handleNav = (id: string) => {
+    setActive(id);
+    setFolder(null);
+    setBrandFilter("all");
+  };
+
+  const handleFolder = (name: string | null) => {
+    setFolder((current) => (current === name ? null : name));
+    setActive("all");
+    setBrandFilter("all");
+  };
+
+  const handleSelect = (item: VaultItem) => {
+    setSelectedId(item.id);
+    setDetailOpen(true);
+  };
+
+  const closeInspector = useCallback(() => {
+    setDetailOpen(false);
+  }, []);
+
+  const handleNavSafe = (id: string) => {
+    handleNav(id);
+    closeInspector();
+  };
+
+  const handleFavorite = (item: VaultItem) => {
+    setItems((current) => current.map((candidate) => candidate.id === item.id ? { ...candidate, favorite: !candidate.favorite } : candidate));
+    notify(item.favorite ? `${item.title} removed from favorites` : `${item.title} added to favorites`);
+  };
+
+  const handleCreate = (item: VaultItem) => {
+    hapticSuccess();
+    setItems((current) => current.some((entry) => entry.id === item.id)
+      ? current.map((entry) => entry.id === item.id ? item : entry)
+      : [item, ...current]);
+    setSelectedId(item.id);
+    setActive("all");
+    setFolder(null);
+    setBrandFilter("all");
+    setQuery("");
+    setDetailOpen(true);
+  };
+
+  const openTool = (tool: ToolName) => {
+    if (tool === "add") { setEditingItem(undefined); setDraft(undefined); }
+    setModal(tool);
+  };
+
+  const openModalTool = (tool: ModalName) => {
+    if (tool === "add") { setEditingItem(undefined); setDraft(undefined); }
+    setModal(tool);
+  };
+
+  const changeTextStep = (index: number) => {
+    setTextStep(index);
+    notify(`Text size: ${stepLabel(index)} (${Math.round(TEXT_STEPS[index] * 100)}%)`);
+  };
+
+  const openSeedItem = (item: VaultItem) => {
+    setModal(null);
+    setSelectedId(item.id);
+    setDetailOpen(true);
+  };
+
+  const handleEdit = (item: VaultItem) => {
+    setDraft(undefined);
+    setEditingItem(item);
+    setModal("add");
+  };
+
+  // OCR hands its parsed fields to the normal add form so everything stays editable.
+  const handleScanDraft = (scanned: Partial<VaultItem>) => {
+    setEditingItem(undefined);
+    setDraft(scanned);
+    setModal("add");
+  };
+
+  const changeTheme = (nextTheme: Theme) => {
+    setTheme(nextTheme);
+    notify(nextTheme === "lofi" ? "Cozy lofi zen mode on" : `${nextTheme === "dark" ? "Liquid glass dark" : "Liquid glass light"} theme on`);
+  };
+
+  const lockVault = () => {
+    hapticSuccess();
+    setLocked(true);
+    setModal(null);
+    setCommandOpen(false);
+    setDetailOpen(false);
+  };
+
+  const updateFeel = (patch: Partial<FeelSettings>) => {
+    setFeel((current) => ({ ...current, ...patch }));
+  };
+
+  return (
+    <TactileProvider press={feel.press} haptics={feel.haptics}>
+    <div className="app-canvas" data-theme={theme}>
+      <AmbientScene theme={theme} />
+      <span
+        className="ambient-blob"
+        aria-hidden="true"
+        style={{ width: 340, height: 340, left: "23%", top: "8%", background: "var(--orb-2)" }}
+      />
+      <span
+        className="ambient-blob"
+        aria-hidden="true"
+        style={{ width: 280, height: 280, right: "13%", bottom: "2%", background: "var(--orb-4)", animationDelay: "-5s" }}
+      />
+      <span
+        className="ambient-blob hidden lg:block"
+        aria-hidden="true"
+        style={{ width: 240, height: 240, left: "47%", bottom: "24%", background: "var(--orb-3)", opacity: 0.22, animationDelay: "-10s" }}
+      />
+
+      <div
+        className="vault-shell relative z-10 mx-auto flex h-[100dvh] w-full max-w-[1780px] gap-0 p-0 lg:p-4"
+        inert={locked || modal !== null || commandOpen || (detailOpen && !dockedInspector)}
+      >
+        <Sidebar
+          lang={lang}
+          active={active}
+          folder={folder}
+          items={items}
+          onNav={handleNav}
+          onFolder={handleFolder}
+          onTool={openTool}
+          onAdd={() => openTool("add")}
+          onLock={lockVault}
+          onOpenMobileMenu={() => setModal("mobileMenu")}
+        />
+
+        <main
+          className={cn(
+            "thin-scrollbar min-w-0 flex-1 overflow-y-auto px-3 pb-[90px] pt-3 sm:px-4 lg:overflow-hidden lg:px-0 lg:pb-0 lg:pt-0",
+            !detailOpen && "xl:pr-0",
+          )}
+        >
+          <VaultHome
+            lang={lang}
+            theme={theme}
+            active={active}
+            folder={folder}
+            items={filteredItems}
+            allItems={items}
+            query={query}
+            brandFilter={brandFilter}
+            selectedId={detailOpen ? selectedId : null}
+            onTheme={changeTheme}
+            onLanguage={setLanguage}
+            onQuery={setQuery}
+            onBrandFilter={setBrandFilter}
+            onSelect={handleSelect}
+            onTool={openTool}
+            onAdd={() => openTool("add")}
+            onNotify={notify}
+            onFavorite={handleFavorite}
+            textStep={textStep}
+            onTextStep={changeTextStep}
+          />
+        </main>
+
+        <InspectorHost
+          item={selectedItem}
+          open={detailOpen && !locked}
+          suspended={modal !== null || commandOpen}
+          lang={lang}
+          onClose={closeInspector}
+          onNotify={notify}
+          onTool={openTool}
+          onEdit={handleEdit}
+          onFavorite={handleFavorite}
+        />
+      </div>
+
+      <MobileNav active={active} folder={folder} lang={lang} onNav={handleNavSafe} onTool={openModalTool} />
+
+      <AnimatePresence>
+      {commandOpen && !locked && (
+        <CommandPalette
+          key="command-palette"
+          items={items}
+          lang={lang}
+          theme={theme}
+          onClose={() => setCommandOpen(false)}
+          onSelectItem={(item) => { handleSelect(item); setCommandOpen(false); }}
+          onTool={openTool}
+          onTheme={changeTheme}
+          onLanguage={setLanguage}
+          feel={feel}
+          onToggleFeel={updateFeel}
+          onLock={lockVault}
+        />
+      )}
+      </AnimatePresence>
+
+      <AnimatePresence mode="wait">
+      {modal === "add" && (
+        <AddItemModal key="add" initialItem={editingItem} draft={draft} onClose={() => setModal(null)} onCreate={handleCreate} onNotify={notify} />
+      )}
+      {modal === "generator" && <GeneratorModal key="generator" onClose={() => setModal(null)} onNotify={notify} />}
+      {modal === "authenticator" && (
+        <AuthenticatorModal
+          key="authenticator"
+          items={items}
+          onClose={() => setModal(null)}
+          onNotify={notify}
+          onOpenSync={() => setModal("sync")}
+        />
+      )}
+      {modal === "security" && (
+        <SecurityCenterModal
+          key="security"
+          items={items}
+          onClose={() => setModal(null)}
+          onNotify={notify}
+          onReview={openSeedItem}
+          onOpenAuthenticator={() => setModal("authenticator")}
+        />
+      )}
+      {modal === "sync" && <SyncModal key="sync" onClose={() => setModal(null)} onNotify={notify} />}
+      {modal === "emergency" && <EmergencyKitModal key="emergency" onClose={() => setModal(null)} onNotify={notify} />}
+      {modal === "ocr" && (
+        <OcrModal key="ocr" onClose={() => setModal(null)} onCreate={handleCreate} onDraft={handleScanDraft} onNotify={notify} />
+      )}
+      {modal === "mobileMenu" && (
+        <Modal
+          key="mobile-menu"
+          onClose={() => setModal(null)}
+          title="Quick access"
+          subtitle="Your vault, tools and local privacy — in one place."
+          icon={<Sparkle size={20} weight="duotone" />}
+          width="max-w-[440px]"
+        >
+          <div className="glass-soft mb-3 flex items-center gap-3 rounded-[15px] border border-[var(--border-soft)] p-3">
+            <Avatar size={38} />
+            <div className="min-w-0 flex-1">
+              <p className="text-[11px] font-semibold text-main">Ayaan Rahman</p>
+              <p className="mt-0.5 text-[8px] text-faint">{items.length} items · local vault</p>
+            </div>
+            <div className="flex items-center gap-1 rounded-full border px-2 py-1 text-[7px] font-semibold text-[var(--success)]" style={{ borderColor: "color-mix(in srgb, var(--success) 20%, transparent)", background: "var(--success-soft)" }}>
+              <span className="h-1 w-1 rounded-full bg-current" /> OFFLINE
+            </div>
+          </div>
+          <MobileQuickMenu
+            lang={lang}
+            items={items}
+            onTool={(tool) => setModal(tool)}
+            onNav={(id) => { handleNav(id); setModal(null); }}
+          />
+
+          <div className="mt-3 rounded-[16px] border border-[var(--border-soft)] bg-[var(--glass-soft)] p-3">
+            <div className="mb-2.5 flex items-center justify-between gap-3">
+              <p className="flex items-center gap-1.5 text-[8px] font-bold uppercase tracking-[0.13em] text-faint">Text size</p>
+              <TextSizeControl index={textStep} onChange={changeTextStep} />
+            </div>
+            {theme === "lofi" && (
+              <div className="mb-3 flex items-center justify-between gap-3">
+                <p className="flex items-center gap-1.5 text-[8px] font-bold uppercase tracking-[0.13em] text-faint">Soundscape</p>
+                <LofiPlayer active onNotify={notify} />
+              </div>
+            )}
+            <div className="mb-2.5 flex items-center justify-between">
+              <p className="flex items-center gap-1.5 text-[8px] font-bold uppercase tracking-[0.13em] text-faint">
+                <HandTap size={12} weight="duotone" style={{ color: "var(--accent)" }} /> Feel & feedback
+              </p>
+              <span className="rounded-full px-1.5 py-0.5 text-[6.5px] font-bold uppercase tracking-[0.08em] text-[var(--success)]" style={{ background: "var(--success-soft)" }}>
+                Material expressive
+              </span>
+            </div>
+            <div className="space-y-1">
+              <div className="flex items-center justify-between gap-3 rounded-[11px] px-1 py-1.5">
+                <div className="flex items-center gap-2">
+                  <span className="flex h-6 w-6 items-center justify-center rounded-[8px] bg-[var(--accent-soft)] text-accent"><ToggleLeft size={13} weight="duotone" /></span>
+                  <div>
+                    <p className="text-[9.5px] font-semibold text-main">Springy press physics</p>
+                    <p className="text-[7px] text-faint">Ripples & compress on every tap</p>
+                  </div>
+                </div>
+                <Toggle checked={feel.press} onChange={(value) => updateFeel({ press: value })} label="Springy press physics" />
+              </div>
+              <div className="flex items-center justify-between gap-3 rounded-[11px] px-1 py-1.5">
+                <div className="flex items-center gap-2">
+                  <span className="flex h-6 w-6 items-center justify-center rounded-[8px] bg-[var(--accent-soft)] text-accent"><Fingerprint size={13} weight="duotone" /></span>
+                  <div>
+                    <p className="text-[9.5px] font-semibold text-main">Haptic feedback</p>
+                    <p className="text-[7px] text-faint">Gentle taps on supported devices</p>
+                  </div>
+                </div>
+                <Toggle checked={feel.haptics} onChange={(value) => updateFeel({ haptics: value })} label="Haptic feedback" />
+              </div>
+            </div>
+            <div className="mt-2 flex gap-1.5 border-t border-[var(--border-soft)] pt-2.5">
+              <Tooltip label="Panic lock · Ctrl L">
+                <button onClick={lockVault} className="secondary-button flex h-8 flex-1 items-center justify-center gap-1.5 rounded-[10px] text-[8.5px] font-semibold">
+                  <LockKey size={12} weight="duotone" /> Lock vault
+                </button>
+              </Tooltip>
+              <Tooltip label="Offline OCR · Ctrl Shift S">
+                <button onClick={() => setModal("ocr")} className="secondary-button flex h-8 flex-1 items-center justify-center gap-1.5 rounded-[10px] text-[8.5px] font-semibold">
+                  <Sparkle size={12} weight="duotone" /> Snip
+                </button>
+              </Tooltip>
+            </div>
+          </div>
+        </Modal>
+      )}
+      </AnimatePresence>
+
+      {locked && (
+        <LockScreen
+          onUnlock={() => {
+            setLocked(false);
+            notify("Vault unlocked locally · XChaCha20-Poly1305");
+          }}
+          onEmergency={() => {
+            setLocked(false);
+            setModal("emergency");
+          }}
+        />
+      )}
+
+      <AnimatePresence>
+      {toast && (
+        <motion.div
+          key="notification"
+          initial={{ opacity: 0, y: 16, scale: 0.96 }}
+          animate={{ opacity: 1, y: 0, scale: 1 }}
+          exit={{ opacity: 0, y: 12, transition: { duration: 0.18 } }}
+          className="glass-strong fixed bottom-[94px] left-1/2 z-[200] flex max-w-[calc(100%-24px)] -translate-x-1/2 items-center gap-2.5 rounded-full py-2 pl-3 pr-2.5 lg:bottom-6"
+          style={{ boxShadow: "0 18px 48px rgba(8,10,30,.3), var(--inset-hi)" }}
+          role="status"
+          aria-live="polite"
+        >
+          <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full text-[var(--success)]" style={{ background: "var(--success-soft)" }}>
+            <CheckCircle size={14} weight="fill" />
+          </span>
+          <span className="truncate text-[9.5px] font-medium text-main">{toast}</span>
+          <button onClick={() => setToast(null)} className="ml-1 flex h-5 w-5 shrink-0 items-center justify-center rounded-full text-faint hover:text-main" aria-label="Dismiss notification">
+            <X size={10} weight="bold" />
+          </button>
+        </motion.div>
+      )}
+      </AnimatePresence>
+    </div>
+    </TactileProvider>
+  );
+}
