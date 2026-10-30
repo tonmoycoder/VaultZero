@@ -83,3 +83,11 @@ VaultZero is a 100% offline, cross-platform password manager for Windows Desktop
   - Generated and logged SHA-256 release checksum: `804160252C1ACAEC580B6FE5518AA9A78F5D8A28F3D341311A13D18E70008B97`.
   - Created comprehensive `RELEASE_REPORT.md`.
   - Tagged: `checkpoint-phase-5-production-ready`.
+
+- **v1.0.0 Open-Source Release (Complete):**
+  - Copied executable to Desktop (`$HOME\Desktop\VaultZero.exe`) and verified live process execution.
+  - Authored world-class `README.md` with badges, architecture and cryptographic key-hierarchy Mermaid diagrams, and feature guide.
+  - Created `LICENSE` (MIT, Copyright 2026 Tonmoy Islam / tonmoycoder), `CONTRIBUTING.md`, and `SECURITY.md`.
+  - Created GitHub Issue template (`bug_report.md`) and Pull Request template (`PULL_REQUEST_TEMPLATE.md`).
+  - Implemented GitHub Actions CI/CD workflows (`ci.yml` and `release-builds.yml`) for automated testing and cross-platform binary builds (Windows .exe + Android .apk / PWA) directly on GitHub Releases.
+  - Tagged: `v1.0.0`.
