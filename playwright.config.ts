@@ -9,7 +9,7 @@ export default defineConfig({
   reporter: "list",
   outputDir: ".artifacts/test-results",
   use: {
-    baseURL: "http://127.0.0.1:5173",
+    baseURL: "http://127.0.0.1:1420",
     browserName: "chromium",
     viewport: { width: 1440, height: 900 },
     screenshot: "only-on-failure",
@@ -17,8 +17,8 @@ export default defineConfig({
     launchOptions: { args: ["--no-sandbox"] },
   },
   webServer: {
-    command: "npm run dev -- --host 0.0.0.0 --port 5173",
-    url: "http://127.0.0.1:5173",
+    command: "npm run dev -- --host 0.0.0.0 --port 1420",
+    url: "http://127.0.0.1:1420",
     reuseExistingServer: true,
   },
 });

@@ -23,7 +23,7 @@ export default defineConfig({
   },
   clearScreen: false,
   server: {
-    port: 5173,
+    port: 1420,
     strictPort: true,
     host: "0.0.0.0",
     watch: {
