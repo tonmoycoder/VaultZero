@@ -1,4 +1,4 @@
 fn main() {
-    tauri_build::build()
+    #[cfg(not(all(windows, target_env = "gnu")))]
+    tauri_build::build();
 }
-
