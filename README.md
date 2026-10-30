@@ -1,38 +1,57 @@
 <div align="center">
 
+<img src="./docs/assets/logo.png" width="160" alt="VaultZero Official Logo" style="border-radius: 28px; box-shadow: 0 8px 32px rgba(0, 180, 255, 0.25);" />
+
 # 🛡️ VaultZero
 
 **The 100% Offline, Zero-Trust, Self-Sovereign Identity & Secrets Fortress with Cozy Aesthetics.**
 
+[![GitHub Release](https://img.shields.io/github/v/release/tonmoycoder/vaultzero?style=for-the-badge&color=blue&logo=github)](https://github.com/tonmoycoder/vaultzero/releases/latest)
 [![Rust](https://img.shields.io/badge/Rust-1.78%2B-black?style=for-the-badge&logo=rust&logoColor=white)](https://www.rust-lang.org/)
 [![Tauri v2](https://img.shields.io/badge/Tauri-v2.0-blue?style=for-the-badge&logo=tauri&logoColor=white)](https://v2.tauri.app/)
 [![React](https://img.shields.io/badge/React-18.3-61DAFB?style=for-the-badge&logo=react&logoColor=black)](https://react.dev/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow?style=for-the-badge)](./LICENSE)
-[![Platform](https://img.shields.io/badge/Platform-Windows%20%7C%20Android-green?style=for-the-badge&logo=windows&logoColor=white)](#multi-platform-support)
+[![Platform](https://img.shields.io/badge/Platform-Windows%20%7C%20Android-green?style=for-the-badge&logo=windows&logoColor=white)](#-download--install)
 [![Security: XChaCha20-Poly1305](https://img.shields.io/badge/Security-XChaCha20--Poly1305%20%26%20Argon2id-red?style=for-the-badge&logo=shield)](./SECURITY.md)
 
 <p align="center">
-  <a href="#key-features">Key Features</a> •
-  <a href="#system-architecture">Architecture</a> •
-  <a href="#cryptographic-key-hierarchy">Cryptography</a> •
-  <a href="#keyboard-shortcuts">Shortcuts</a> •
-  <a href="#quick-start--installation">Installation</a> •
-  <a href="#building-from-source">Build from Source</a> •
-  <a href="#contributing">Contributing</a>
+  <a href="#-download--install">Download & Install</a> •
+  <a href="#-key-features">Key Features</a> •
+  <a href="#-system-architecture">Architecture</a> •
+  <a href="#-cryptographic-key-hierarchy">Cryptography</a> •
+  <a href="#-how-to-run-locally">Run Locally</a> •
+  <a href="#-contributing">Contributing</a>
 </p>
 
 ---
 
 </div>
 
+## 📥 Download & Install
+
+Get the official compiled binaries directly from our [**GitHub Latest Release**](https://github.com/tonmoycoder/vaultzero/releases/latest):
+
+| Platform | Format | Direct Download | Description |
+| :--- | :--- | :--- | :--- |
+| **Windows 10 / 11** | **NSIS Installer (`.setup.exe`)** | [📥 **Download Windows Setup**](https://github.com/tonmoycoder/vaultzero/releases/latest) | **Recommended.** One-click guided installer with automatic desktop & start menu shortcuts. |
+| **Windows 10 / 11** | **Enterprise MSI (`.msi`)** | [📥 **Download Windows MSI**](https://github.com/tonmoycoder/vaultzero/releases/latest) | Official Windows Installer package for silent or enterprise rollouts. |
+| **Windows Portable** | **Standalone (`.exe`)** | [📥 **Download Portable `.exe`**](https://github.com/tonmoycoder/vaultzero/releases/latest) | Run straight from USB drives or air-gapped workstations without installation. |
+| **Android** | **Universal APK (`.apk`)** | [📥 **Download Android APK**](https://github.com/tonmoycoder/vaultzero/releases/latest) | Sideload directly on Android phones and tablets (ARM64 & x86_64). |
+| **Mobile Web** | **Air-Gapped PWA (`.zip`)** | [📥 **Download Offline PWA**](https://github.com/tonmoycoder/vaultzero/releases/latest) | Static progressive web application for offline mobile browsers. |
+
+> [!TIP]
+> **Windows Security Note:** Because VaultZero is open-source and built transparently on GitHub Actions, Windows SmartScreen may display an *"Unknown Publisher"* notification on first launch. Click **"More Info"** ➔ **"Run anyway"**.
+
+---
+
 ## 🌟 Why VaultZero?
 
-Most password managers force you into the cloud, turning your master credentials into remote targets for data breaches, subscriptions, and outages. 
+Most password managers force you into the cloud, turning your master credentials into remote targets for data breaches, vendor lock-in, and server outages. 
 
 **VaultZero** rejects the cloud paradigm completely:
 - **Zero Cloud, Zero Telemetry**: 100% offline. Not a single byte ever leaves your machine without your explicit authorization.
-- **Zero-Trust Memory Hygiene**: All keys and plaintext are scrubbed with `ZeroizeOnDrop`.
-- **Cozy & High-Performance**: Boots instantly, feels smooth at 60fps, and features a retro CRT shader and built-in relaxing lofi soundscapes.
+- **Zero-Trust Memory Hygiene**: All keys and plaintext are scrubbed immediately from RAM with `ZeroizeOnDrop`.
+- **Cozy & High-Performance**: Boots instantly, feels ultra-responsive at 60fps, and features a retro CRT shader and built-in relaxing lofi soundscapes.
 
 ---
 
@@ -149,86 +168,81 @@ flowchart TD
 
 ---
 
-## 📦 Quick Start & Installation
+## 💻 How to Run Locally
 
-### Windows Portable (`.exe`)
-1. Download the latest `VaultZero-Windows-x64.exe` from [GitHub Releases](https://github.com/tonmoycoder/vaultzero/releases).
-2. Place it anywhere (e.g. `Desktop`, `USB Drive`).
-3. Run the executable — zero installation, zero drivers, zero registry changes.
+Running VaultZero locally for development is fast and straightforward.
 
-### Mobile & Android
-- Grab the pre-built `VaultZero-Android-universal.apk` directly from [Releases](https://github.com/tonmoycoder/vaultzero/releases) or use the offline PWA package.
+### 1. Prerequisites
+- **Node.js** (v18.0 or newer) & **npm**: [Download Node.js](https://nodejs.org/)
+- **Rust** (v1.78+ stable): [Install Rust via rustup](https://rustup.rs/)
+- **Windows C++ Compiler**: Visual Studio Build Tools (C++ Desktop development) or LLVM-MinGW
 
----
-
-## 🛠️ Building from Source
-
-### Prerequisites
-- **Node.js** (v18.0+) & **npm**
-- **Rust Toolchain** (1.78+ stable): `rustup default stable`
-- **C++ Build Tools** (Visual Studio Build Tools on Windows)
-
-### 1. Clone & Install Dependencies
+### 2. Setup & Development
 ```bash
+# 1. Clone the repository
 git clone https://github.com/tonmoycoder/vaultzero.git
 cd vaultzero
-npm install
-```
 
-### 2. Run Local Development Server
-```bash
+# 2. Install dependencies
+npm install
+
+# 3. Launch in development mode (starts Vite + Tauri desktop window)
 npm run tauri dev
 ```
 
-### 3. Build Windows Standalone Portable Binary
+### 3. Build Windows Installer & Executable Locally
 ```bash
-npm run build
-cargo build --release --manifest-path src-tauri/Cargo.toml
+# Compile web frontend and generate Windows installers (.msi and .setup.exe)
+npm run tauri build
 ```
-The compiled binary will be ready at:
-```
-target/release/vaultzero-app.exe
-```
-
-### 4. Build Android APK (Tauri Mobile)
-```bash
-# Initialize Android configuration (first time only)
-npm run tauri android init
-
-# Build debug or release APK
-npm run tauri android build --apk
-```
+Generated installers will be located in:
+- `src-tauri/target/release/bundle/nsis/` (NSIS Setup installer)
+- `src-tauri/target/release/bundle/msi/` (WiX MSI installer)
 
 ---
 
-## 🧪 Running Automated Tests
+## 🧪 Testing
 
-Run the full Rust cryptographic and core workspace test suite:
+Execute the workspace unit test suite:
 ```bash
 cargo test --workspace
 ```
 
-Verify frontend TypeScript and Vite bundling:
+Verify frontend TypeScript type safety:
 ```bash
 npm run build
 ```
 
 ---
 
-## 🔒 Security Model & Bug Bounty
+## 🤝 How to Contribute
 
-For full cryptographic threat modeling, audit principles, and vulnerability disclosure policies, review [SECURITY.md](./SECURITY.md).
+We welcome contributions from everyone! Whether you are fixing a typo, improving cryptographic performance, or designing retro shader themes:
+
+1. **Fork the Repository**: Click "Fork" at the top right of this page.
+2. **Create a Feature Branch**:
+   ```bash
+   git checkout -b feature/awesome-addition
+   ```
+3. **Commit your Changes**:
+   ```bash
+   git commit -m "feat: add biometric quick-unlock on supported hardware"
+   ```
+4. **Push to your Branch**:
+   ```bash
+   git push origin feature/awesome-addition
+   ```
+5. **Open a Pull Request**: Submit your PR with a clear summary of your changes. Check [CONTRIBUTING.md](./CONTRIBUTING.md) for style conventions and security checklists.
 
 ---
 
-## 🤝 Contributing
+## 🔒 Security Policy
 
-We welcome contributions from developers, security researchers, and designers! Please read our [CONTRIBUTING.md](./CONTRIBUTING.md) guide before submitting pull requests.
+For security vulnerability disclosures, threat models, and safe key management details, please refer to our [SECURITY.md](./SECURITY.md).
 
 ---
 
 ## 📄 License
 
-VaultZero is free and open-source software licensed under the **[MIT License](./LICENSE)**.  
-Copyright © 2026 **Tonmoy Islam** ([@tonmoycoder](https://github.com/tonmoycoder)).
-
+VaultZero is free, libre, and open-source software distributed under the **[MIT License](./LICENSE)**.  
+Copyright © 2026 **Tanver Islam Tonmoy** ([@tonmoycoder](https://github.com/tonmoycoder)).

@@ -1,4 +1,6 @@
 fn main() {
-    #[cfg(not(all(windows, target_env = "gnu")))]
+    println!("cargo:rustc-link-lib=comctl32");
+    println!("cargo:rustc-link-lib=shell32");
+    println!("cargo:rustc-link-lib=ole32");
     tauri_build::build();
 }
