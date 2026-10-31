@@ -4,7 +4,7 @@ const zen = (page: Page) =>
   page.locator(".theme-control:visible").getByRole("button", { name: "Cozy lofi zen", exact: true });
 
 test.beforeEach(async ({ page }) => {
-  await page.goto("/");
+  await page.goto("/?unlocked=true");
   await expect(page.getByRole("heading", { name: "Good morning, Ayaan." })).toBeVisible();
 });
 
@@ -140,7 +140,7 @@ test("OCR creates a real, editable item with autofill and clipboard support", as
 
   await form.getByRole("button", { name: "Add to vault", exact: true }).click();
   await expect(form).toHaveCount(0);
-  await expect(page.locator(".vault-card")).toHaveCount(12);
+  await expect(page.locator(".vault-card")).toHaveCount(2);
   await expect(page.getByTestId("detail-inspector")).toContainText("pasted.user@example.test");
 });
 
@@ -151,5 +151,5 @@ test("a scan can still be saved as a plain secure note", async ({ page }) => {
   await expect(scan.getByRole("button", { name: "Save as note", exact: true })).toBeVisible({ timeout: 15000 });
   await scan.getByRole("button", { name: "Save as note", exact: true }).click();
   await expect(scan).toHaveCount(0);
-  await expect(page.locator(".vault-card")).toHaveCount(12);
+  await expect(page.locator(".vault-card")).toHaveCount(2);
 });

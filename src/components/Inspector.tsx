@@ -2,6 +2,7 @@ import {
   ArrowSquareOut,
   Check,
   Clock,
+  ClockCountdown,
   Copy,
   Eye,
   EyeSlash,
@@ -16,6 +17,7 @@ import {
   Sparkle,
   Star,
   Timer,
+  Trash,
   X,
 } from "@phosphor-icons/react";
 import { useEffect, useId, useState, type PointerEvent, type ReactNode } from "react";
@@ -71,15 +73,18 @@ function InspectorBody({
   onNotify,
   onTool,
   onInspectSecurity,
+  onRestorePassword,
 }: {
   item: VaultItem;
   lang: Language;
   onNotify: (message: string) => void;
   onTool?: (tool: "authenticator" | "generator" | "security") => void;
   onInspectSecurity: () => void;
+  onRestorePassword?: (item: VaultItem, restoredPassword: string) => void;
 }) {
   const [revealed, setRevealed] = useState(false);
   const [codesRevealed, setCodesRevealed] = useState(false);
+  const [revealedHistoryIndex, setRevealedHistoryIndex] = useState<number | null>(null);
   const brand = brands[item.brand];
   const strength = strengthMeta[item.strength];
   const { remaining, progress } = useCountdown();
@@ -89,7 +94,13 @@ function InspectorBody({
   return (
     <div className="inspector-body thin-scrollbar min-h-0 flex-1 overflow-y-auto px-3 pb-4 pt-1">
       {/* Item hero */}
-      <div className="relative overflow-hidden rounded-[18px] border p-3.5" style={{ borderColor: "var(--border)", background: `linear-gradient(145deg, ${brand.tint}, var(--glass-soft))` }}>
+      <div
+        className="relative overflow-hidden rounded-[18px] border p-3.5"
+        style={{
+          borderColor: "var(--border)",
+          background: `linear-gradient(145deg, ${brand.tint}, var(--glass-soft))`,
+        }}
+      >
         <div
           aria-hidden
           className="absolute -right-10 -top-12 h-36 w-36 rounded-full opacity-25 blur-3xl"
@@ -150,7 +161,7 @@ function InspectorBody({
             }}
             className={cn(
               "flex h-[33px] items-center justify-center gap-1.5 rounded-[10px] text-[10px] font-semibold",
-              siteUrl ? "primary-button" : "secondary-button cursor-default opacity-55",
+              siteUrl ? "primary-button" : "secondary-button cursor-default opacity-55"
             )}
           >
             <ArrowSquareOut size={12} weight="bold" />
@@ -252,6 +263,59 @@ function InspectorBody({
         </button>
       )}
 
+      {/* Password History Time Machine */}
+      <div className="glass-soft mt-2.5 overflow-hidden rounded-[16px] border border-[var(--border-soft)]">
+        <div className="flex items-center justify-between border-b border-[var(--border-soft)] px-3 py-2">
+          <span className="flex items-center gap-1.5 text-[8.5px] font-semibold text-main">
+            <ClockCountdown size={12} weight="duotone" className="text-accent" />
+            {t(lang, "passwordHistory")}
+          </span>
+          <span className="font-mono text-[7.5px] text-faint">
+            {item.passwordHistory?.length || 0}
+          </span>
+        </div>
+        <div className="divide-y divide-[var(--border-soft)]">
+          {item.passwordHistory && item.passwordHistory.length > 0 ? (
+            item.passwordHistory.map((hist, idx) => (
+              <div key={idx} className="flex items-center justify-between gap-2 px-3 py-2 text-[8.5px]">
+                <div className="min-w-0 flex-1">
+                  <p className="truncate font-mono text-[9.5px] text-muted">
+                    {revealedHistoryIndex === idx ? hist.password : "••••••••••••"}
+                  </p>
+                  <p className="text-[7.5px] text-faint">{hist.changedAt}</p>
+                </div>
+                <div className="flex items-center gap-1">
+                  <button
+                    type="button"
+                    onClick={() =>
+                      setRevealedHistoryIndex(revealedHistoryIndex === idx ? null : idx)
+                    }
+                    className="flex h-6 w-6 items-center justify-center rounded-full text-faint hover:text-main"
+                    title="Toggle reveal"
+                  >
+                    {revealedHistoryIndex === idx ? <EyeSlash size={11} /> : <Eye size={11} />}
+                  </button>
+                  {onRestorePassword && (
+                    <button
+                      type="button"
+                      onClick={() => onRestorePassword(item, hist.password)}
+                      className="secondary-button h-6 rounded-md px-2 text-[7.5px] font-semibold text-accent"
+                      title="Restore this past password"
+                    >
+                      {t(lang, "restorePassword")}
+                    </button>
+                  )}
+                </div>
+              </div>
+            ))
+          ) : (
+            <p className="px-3 py-2.5 text-[8px] italic text-faint">
+              {t(lang, "noPasswordHistory")}
+            </p>
+          )}
+        </div>
+      </div>
+
       {/* Recovery codes */}
       {item.recoveryCodes && (
         <div className="glass-soft mt-2.5 overflow-hidden rounded-[16px] border border-[var(--border-soft)]">
@@ -325,7 +389,9 @@ export default function DetailInspector({
   onNotify,
   onTool,
   onEdit,
+  onDelete,
   onFavorite,
+  onRestorePassword,
   onDragHandlePointerDown,
   mode = "panel",
 }: {
@@ -335,7 +401,9 @@ export default function DetailInspector({
   onNotify: (message: string) => void;
   onTool?: (tool: "authenticator" | "generator" | "security") => void;
   onEdit: (item: VaultItem) => void;
+  onDelete?: (item: VaultItem) => void;
   onFavorite: (item: VaultItem) => void;
+  onRestorePassword?: (item: VaultItem, restoredPassword: string) => void;
   onDragHandlePointerDown?: (event: PointerEvent) => void;
   mode?: "panel" | "drawer" | "sheet";
 }) {
@@ -344,13 +412,14 @@ export default function DetailInspector({
   const { reduceMotion } = useMotionSettings();
   useEffect(() => { setTab("details"); }, [item?.id]);
   if (!item) return null;
+
   return (
     <div
       className={cn(
         "glass inspector-surface flex h-full min-h-0 flex-col overflow-hidden",
         mode === "panel" && "rounded-[28px]",
         mode === "drawer" && "h-full w-full rounded-[26px]",
-        mode === "sheet" && "h-full w-full rounded-t-[28px]",
+        mode === "sheet" && "h-full w-full rounded-t-[28px]"
       )}
       style={{
         boxShadow: mode === "panel" ? undefined : "0 40px 100px rgba(5,8,24,.4), var(--inset-hi)",
@@ -368,7 +437,7 @@ export default function DetailInspector({
         <button
           className="sheet-drag-handle flex shrink-0 justify-center pb-2 pt-3"
           onPointerDown={onDragHandlePointerDown}
-          onClick={(event) => { if (event.detail === 0) onClose(); }}
+          onClick={onClose}
           aria-label="Drag down to close details"
           data-no-tactile="true"
         >
@@ -397,6 +466,22 @@ export default function DetailInspector({
               <PencilSimple size={13} weight="duotone" />
             </button>
           </Tooltip>
+          {onDelete && (
+            <Tooltip label={t(lang, "delete")}>
+              <button
+                onClick={() => {
+                  if (window.confirm(t(lang, "confirmDelete"))) {
+                    onDelete(item);
+                    onClose();
+                  }
+                }}
+                className="flex h-7 w-7 items-center justify-center rounded-full text-muted transition-colors hover:bg-[var(--danger-soft)] hover:text-[var(--danger)]"
+                aria-label={t(lang, "delete")}
+              >
+                <Trash size={13} weight="duotone" />
+              </button>
+            </Tooltip>
+          )}
           <Tooltip label="Vault security" up>
             <button
               onClick={() => onTool?.("security")}
@@ -455,7 +540,14 @@ export default function DetailInspector({
             transition={{ duration: reduceMotion ? 0 : 0.16, ease: "easeOut" }}
           >
             {tab === "details" ? (
-              <InspectorBody item={item} lang={lang} onNotify={onNotify} onTool={onTool} onInspectSecurity={() => setTab("security")} />
+              <InspectorBody
+                item={item}
+                lang={lang}
+                onNotify={onNotify}
+                onTool={onTool}
+                onInspectSecurity={() => setTab("security")}
+                onRestorePassword={onRestorePassword}
+              />
             ) : (
               <ItemSecurity item={item} onGenerate={() => onTool?.("generator")} onAuthenticator={() => onTool?.("authenticator")} />
             )}

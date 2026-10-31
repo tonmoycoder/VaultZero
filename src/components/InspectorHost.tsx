@@ -13,7 +13,9 @@ type InspectorProps = {
   onNotify: (message: string) => void;
   onTool: (tool: "authenticator" | "generator" | "security") => void;
   onEdit: (item: VaultItem) => void;
+  onDelete?: (item: VaultItem) => void;
   onFavorite: (item: VaultItem) => void;
+  onRestorePassword?: (item: VaultItem, restoredPassword: string) => void;
 };
 
 function FloatingInspector({ mode, suspended, ...props }: InspectorProps & {
@@ -66,7 +68,7 @@ function FloatingInspector({ mode, suspended, ...props }: InspectorProps & {
         dragConstraints={{ top: 0, bottom: 0 }}
         dragElastic={{ top: 0, bottom: 0.65 }}
         onDragEnd={(_, info) => {
-          if (info.offset.y > 90 || info.velocity.y > 550) props.onClose();
+          if (info.offset.y > 50 || info.velocity.y > 300) props.onClose();
         }}
       >
         <DetailInspector

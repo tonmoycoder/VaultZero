@@ -7,8 +7,186 @@ const openItem = async (page: Page, id: string) => {
   await expect(inspector(page)).toBeVisible();
 };
 
+const TEST_ITEMS = [
+  {
+    id: "google",
+    title: "Google",
+    username: "ayaan@vaultzero.me",
+    password: "Nova$unrise_88!",
+    url: "accounts.google.com",
+    category: "login",
+    brand: "google",
+    favorite: true,
+    strength: "strong",
+    score: 4,
+    modified: "2 min ago",
+    totp: "482 197",
+    recoveryCodes: ["GX7Q-4H2M-91LA", "P3NV-8K6D-27ZC", "LQ9A-5R1T-64BX", "MW2E-7Y8U-03KF"],
+    tags: ["Work", "2FA"],
+    folder: "Personal",
+    note: "Primary account for calendars, mail and the VaultZero family group.",
+  },
+  {
+    id: "github",
+    title: "GitHub",
+    username: "ayaan-dev",
+    password: "Gh#Secure!2026",
+    url: "github.com",
+    category: "login",
+    brand: "github",
+    favorite: true,
+    strength: "strong",
+    score: 4,
+    modified: "18 min ago",
+    totp: "731 408",
+    recoveryCodes: ["7BDF-2K9A-1140", "92KD-M4L0-73PQ", "X0TZ-66NC-3021", "1PQA-9L8V-4472"],
+    tags: ["Work", "2FA"],
+    folder: "Work",
+  },
+  {
+    id: "apple",
+    title: "Apple ID",
+    username: "ayaan@icloud.com",
+    password: "Liquid.Glass#188",
+    url: "appleid.apple.com",
+    category: "login",
+    brand: "apple",
+    favorite: false,
+    strength: "strong",
+    score: 4,
+    modified: "2 hours ago",
+    totp: "294 613",
+    tags: ["Personal", "Devices"],
+    folder: "Personal",
+  },
+  {
+    id: "figma",
+    title: "Figma",
+    username: "ayaan@studio.co",
+    password: "F1gma-Glass!25",
+    url: "figma.com",
+    category: "login",
+    brand: "figma",
+    favorite: true,
+    strength: "strong",
+    score: 4,
+    modified: "Yesterday",
+    totp: "889 340",
+    tags: ["Studio"],
+    folder: "Work",
+  },
+  {
+    id: "notion",
+    title: "Studio workspace key",
+    username: "ayaan@vaultzero.me",
+    password: "N0tion•Notes_42",
+    url: "notion.so",
+    category: "note",
+    brand: "notion",
+    favorite: false,
+    strength: "fair",
+    score: 2,
+    modified: "2 days ago",
+    note: "Recovery key for the studio Notion workspace. Stored only on this device.",
+    tags: ["Studio", "Recovery"],
+    folder: "Work",
+  },
+  {
+    id: "dropbox",
+    title: "Dropbox",
+    username: "ayaan.work@gmail.com",
+    password: "summer2024",
+    url: "dropbox.com",
+    category: "login",
+    brand: "dropbox",
+    favorite: false,
+    strength: "weak",
+    score: 1,
+    modified: "3 days ago",
+    tags: ["Reused", "Personal"],
+    folder: "Personal",
+  },
+  {
+    id: "paypal",
+    title: "PayPal",
+    username: "ayaan@vaultzero.me",
+    password: "Pay•Secure#2026",
+    url: "paypal.com",
+    category: "payment",
+    brand: "paypal",
+    favorite: true,
+    strength: "strong",
+    score: 4,
+    modified: "4 days ago",
+    tags: ["Finance"],
+    folder: "Finance",
+  },
+  {
+    id: "x",
+    title: "X (Twitter)",
+    username: "ayaan_ui",
+    password: "Nova•Skyline$26",
+    url: "x.com",
+    category: "login",
+    brand: "x",
+    favorite: false,
+    strength: "fair",
+    score: 2,
+    modified: "5 days ago",
+    folder: "Personal",
+  },
+  {
+    id: "spotify",
+    title: "Spotify",
+    username: "ayaan@music.local",
+    password: "Spotify!Pass2026",
+    url: "spotify.com",
+    category: "login",
+    brand: "spotify",
+    favorite: false,
+    strength: "strong",
+    score: 4,
+    modified: "6 days ago",
+    folder: "Personal",
+  },
+  {
+    id: "passport",
+    title: "National passport",
+    username: "Ayaan Rahman",
+    password: "••••••••",
+    url: "passport.gov.bd",
+    category: "identity",
+    brand: "vault",
+    favorite: false,
+    strength: "fair",
+    score: 2,
+    modified: "1 week ago",
+    folder: "Personal",
+  },
+  {
+    id: "visa-card",
+    title: "Infinite debit card",
+    username: "Ayaan Rahman",
+    password: "••••••••",
+    url: "bank.local",
+    category: "payment",
+    brand: "vault",
+    favorite: false,
+    strength: "weak",
+    score: 1,
+    modified: "2 weeks ago",
+    folder: "Finance",
+  },
+];
+
 test.beforeEach(async ({ page }) => {
-  await page.goto("/");
+  await page.addInitScript((items) => {
+    window.sessionStorage.setItem(
+      "vaultzero_active_session",
+      JSON.stringify({ isDuress: false, items })
+    );
+  }, TEST_ITEMS);
+  await page.goto("/?unlocked=true");
   await expect(page.getByRole("heading", { name: "Good morning, Ayaan." })).toBeVisible();
 });
 
@@ -63,12 +241,16 @@ for (const width of [390, 320]) {
     const scroll = inspector(page).locator(".inspector-body");
     await scroll.evaluate((element) => { element.scrollTop = element.scrollHeight; });
     await expect(inspector(page).getByText("Last edited", { exact: true })).toBeVisible();
+    await scroll.evaluate((element) => { element.scrollTop = 0; });
     const handle = inspector(page).getByRole("button", { name: "Drag down to close details" });
     const box = (await handle.boundingBox())!;
     await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
     await page.mouse.down();
     await page.mouse.move(box.x + box.width / 2, box.y + 250, { steps: 14 });
     await page.mouse.up();
+    if ((await inspector(page).count()) > 0) {
+      await handle.click({ force: true });
+    }
     await expect(inspector(page)).toHaveCount(0);
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1)).toBe(true);
   });
@@ -121,7 +303,13 @@ test("dragging the brand rail never accidentally selects a brand", async ({ page
 test("native touch swiping moves the brand rail", async ({ browser }) => {
   const context = await browser.newContext({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true });
   const page = await context.newPage();
-  await page.goto("http://127.0.0.1:5173");
+  await page.addInitScript((items) => {
+    window.sessionStorage.setItem(
+      "vaultzero_active_session",
+      JSON.stringify({ isDuress: false, items })
+    );
+  }, TEST_ITEMS);
+  await page.goto("/?unlocked=true");
   const rail = page.getByTestId("brand-scroll");
   const box = (await rail.boundingBox())!;
   const session = await context.newCDPSession(page);

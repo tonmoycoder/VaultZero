@@ -118,6 +118,14 @@ export function AddItemModal({
     setTouched(true);
     if (!canSave) return;
     const strengthLabel = !strength ? "fair" : strength.score >= 3 ? "strong" : strength.score >= 2 ? "fair" : "weak";
+    const history = [...(initialItem?.passwordHistory || [])];
+    if (initialItem && initialItem.password && initialItem.password !== password && initialItem.password !== "—") {
+      history.unshift({
+        password: initialItem.password,
+        changedAt: "Just now",
+      });
+    }
+
     const item: VaultItem = {
       ...(initialItem ?? {}),
       id: initialItem?.id ?? `custom-${Date.now()}`,
@@ -135,6 +143,7 @@ export function AddItemModal({
       tags: [folder],
       folder,
       recoveryCodes: initialItem?.recoveryCodes ?? draft?.recoveryCodes,
+      passwordHistory: history,
     };
     onCreate(item);
     onNotify(`${name.trim()} saved to your local vault`);
