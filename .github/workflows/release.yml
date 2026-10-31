@@ -54,20 +54,24 @@ jobs:
           New-Item -ItemType Directory -Path release-assets-windows -Force
           
           # Find and copy NSIS installer (.setup.exe or .exe in nsis bundle)
-          Get-ChildItem -Path "src-tauri/target/release/bundle/nsis/*.exe" -Recurse -ErrorAction SilentlyContinue | ForEach-Object {
+          Get-ChildItem -Path "**/bundle/nsis/*.exe" -Recurse -ErrorAction SilentlyContinue | ForEach-Object {
             Copy-Item $_.FullName -Destination "release-assets-windows/$($_.Name)" -Force
             Write-Host "Found NSIS Installer: $($_.Name)"
           }
           
           # Find and copy MSI installer (.msi in msi bundle)
-          Get-ChildItem -Path "src-tauri/target/release/bundle/msi/*.msi" -Recurse -ErrorAction SilentlyContinue | ForEach-Object {
+          Get-ChildItem -Path "**/bundle/msi/*.msi" -Recurse -ErrorAction SilentlyContinue | ForEach-Object {
             Copy-Item $_.FullName -Destination "release-assets-windows/$($_.Name)" -Force
             Write-Host "Found MSI Installer: $($_.Name)"
           }
           
-          # Copy standalone portable executable + manifest
-          if (Test-Path "src-tauri/target/release/vaultzero-app.exe") {
+          # Copy standalone portable executable + manifest (check both workspace root and sub-crate target)
+          if (Test-Path "target/release/vaultzero-app.exe") {
+            Copy-Item "target/release/vaultzero-app.exe" -Destination "release-assets-windows/VaultZero-Windows-x64-portable.exe" -Force
+            Write-Host "Found portable executable in target/release"
+          } elseif (Test-Path "src-tauri/target/release/vaultzero-app.exe") {
             Copy-Item "src-tauri/target/release/vaultzero-app.exe" -Destination "release-assets-windows/VaultZero-Windows-x64-portable.exe" -Force
+            Write-Host "Found portable executable in src-tauri/target/release"
           }
           if (Test-Path "src-tauri/vaultzero-app.exe.manifest") {
             Copy-Item "src-tauri/vaultzero-app.exe.manifest" -Destination "release-assets-windows/VaultZero-Windows-x64-portable.exe.manifest" -Force
