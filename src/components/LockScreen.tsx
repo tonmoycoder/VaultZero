@@ -425,11 +425,11 @@ export default function LockScreen({
 
           {/* Master Password Recovery Action */}
           {!isSetup && (
-            <div className="mt-2.5 flex justify-center">
+            <div className="mt-3.5 flex justify-center">
               <button
                 type="button"
                 onClick={() => setShowRecovery(true)}
-                className="text-[9px] font-semibold text-[var(--accent)] hover:underline"
+                className="rounded-lg px-2.5 py-1 text-[10px] font-semibold text-[var(--accent)] transition-colors hover:bg-[var(--accent-soft)] hover:underline"
               >
                 {lang === "bn" ? "পাসওয়ার্ড ভুলে গেছেন? ভল্ট রিকভার করুন" : "Forgot master password? Recover vault"}
               </button>

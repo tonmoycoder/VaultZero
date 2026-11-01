@@ -131,12 +131,12 @@ export default function VaultRecoveryModal({
       width="max-w-[520px]"
     >
       {/* Recovery Tabs */}
-      <div className="mb-4 flex rounded-[14px] border border-[var(--border-soft)] bg-[var(--glass-soft)] p-1">
+      <div className="mb-4 grid grid-cols-2 gap-1 rounded-[14px] border border-[var(--border-soft)] bg-[var(--glass-input)] p-1">
         <button
           type="button"
           onClick={() => { setTab("key"); setError(""); }}
           className={cn(
-            "flex-1 rounded-[10px] py-1.5 text-center text-[10px] font-semibold transition-all",
+            "h-9 rounded-[10px] text-center text-[11px] font-semibold transition-all whitespace-nowrap",
             tab === "key"
               ? "bg-[var(--glass-strong)] text-main shadow-sm"
               : "text-muted hover:text-main"
@@ -148,7 +148,7 @@ export default function VaultRecoveryModal({
           type="button"
           onClick={() => { setTab("reset"); setError(""); }}
           className={cn(
-            "flex-1 rounded-[10px] py-1.5 text-center text-[10px] font-semibold transition-all",
+            "h-9 rounded-[10px] text-center text-[11px] font-semibold transition-all whitespace-nowrap",
             tab === "reset"
               ? "bg-[var(--glass-strong)] text-danger shadow-sm"
               : "text-muted hover:text-danger"
@@ -282,20 +282,20 @@ export default function VaultRecoveryModal({
             </p>
           </div>
 
-          <div className="flex gap-2">
+          <div className="flex gap-2.5 pt-1">
             <button
               type="button"
               onClick={onClose}
-              className="secondary-button h-9 flex-1 rounded-full text-[10px] font-semibold"
+              className="secondary-button h-10 flex-1 whitespace-nowrap rounded-full text-[11px] font-semibold"
             >
               {lang === "bn" ? "বাতিল" : "Cancel"}
             </button>
             <button
               type="button"
               onClick={handleResetVault}
-              className="h-9 flex-1 rounded-full bg-[var(--danger)] text-[10px] font-semibold text-white shadow-md hover:opacity-90"
+              className="h-10 flex-1 whitespace-nowrap rounded-full bg-[var(--danger)] text-[11px] font-semibold text-white shadow-md transition-opacity hover:opacity-90"
             >
-              {lang === "bn" ? "আর্কাইভ করুন এবং রিসেট দিন" : "Archive & Reset Vault"}
+              {lang === "bn" ? "আর্কাইভ ও নিরাপদ রিসেট" : "Archive & Reset Vault"}
             </button>
           </div>
         </div>

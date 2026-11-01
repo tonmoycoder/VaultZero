@@ -1,9 +1,10 @@
 @echo off
+chcp 65001 >nul
 title VaultZero Launcher
 cd /d "%~dp0"
 
 echo ========================================================
-echo    Starting VaultZero — 100% Offline Password Manager
+echo    Starting VaultZero - 100%% Offline Password Manager
 echo ========================================================
 
 :: 1. Ensure local engine is running and ready on port 1420 before opening browser

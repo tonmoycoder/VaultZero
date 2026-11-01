@@ -128,11 +128,11 @@ export function CsvImportModal({
               ? "সম্পূর্ণ অফলাইন প্রসেসিং — ডেটা বাইরে যায় না"
               : "100% offline — zero data leaves this device"}
           </span>
-          <div className="flex w-full justify-end gap-2 sm:w-auto">
+          <div className="flex w-full justify-end gap-2.5 sm:w-auto">
             <button
               type="button"
               onClick={onClose}
-              className="secondary-button h-9 rounded-full px-4 text-[10px] font-semibold"
+              className="secondary-button h-10 shrink-0 whitespace-nowrap rounded-full px-4 text-[11px] font-semibold"
             >
               {lang === "bn" ? "বাতিল" : "Cancel"}
             </button>
@@ -140,7 +140,7 @@ export function CsvImportModal({
               <button
                 type="button"
                 onClick={commitImport}
-                className="primary-button flex h-9 items-center gap-1.5 rounded-full px-4 text-[10px] font-semibold"
+                className="primary-button flex h-10 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-full px-5 text-[11px] font-semibold shadow-md shadow-[var(--accent-glow)]"
               >
                 <CheckCircle size={14} weight="bold" />
                 {lang === "bn"

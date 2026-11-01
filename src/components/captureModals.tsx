@@ -160,11 +160,11 @@ export function AddItemModal({
       width="max-w-[610px]"
       footer={
         <div className="flex items-center justify-between gap-3">
-          <span className="hidden items-center gap-1.5 text-[8px] text-faint sm:flex"><LockSimple size={10} weight="duotone" /> XChaCha20-Poly1305 · Argon2id</span>
-          <div className="flex w-full justify-end gap-2 sm:w-auto">
-            <button type="button" onClick={onClose} className="secondary-button h-9 rounded-full px-4 text-[10px] font-semibold">Cancel</button>
-            <button type="submit" form="add-item-form" className="primary-button flex h-9 items-center gap-1.5 rounded-full px-4 text-[10px] font-semibold">
-              <Check size={12} weight="bold" /> {initialItem ? "Save changes" : "Add to vault"}
+          <span className="hidden items-center gap-1.5 text-[8.5px] text-faint sm:flex"><LockSimple size={11} weight="duotone" /> XChaCha20-Poly1305 · Argon2id</span>
+          <div className="flex w-full justify-end gap-2.5 sm:w-auto">
+            <button type="button" onClick={onClose} className="secondary-button h-10 shrink-0 whitespace-nowrap rounded-full px-4 text-[11px] font-semibold">Cancel</button>
+            <button type="submit" form="add-item-form" className="primary-button flex h-10 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-full px-5 text-[11px] font-semibold shadow-md shadow-[var(--accent-glow)]">
+              <Check size={14} weight="bold" /> {initialItem ? "Save changes" : "Add to vault"}
             </button>
           </div>
         </div>
@@ -532,21 +532,54 @@ export function OcrModal({
       title="Scan & import"
       subtitle="Turn a screenshot into a new vault item. OCR runs entirely on this device."
       icon={<Scan size={20} weight="duotone" />}
-      width="max-w-[620px]"
+      width="max-w-[660px]"
       footer={
-        <div className="flex items-center justify-between gap-3">
-          <span className="hidden items-center gap-1.5 text-[8px] text-faint sm:flex"><LockSimple size={10} weight="duotone" /> Images are discarded after extraction</span>
-          <div className="flex w-full justify-end gap-2 sm:w-auto">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <span className="flex items-center gap-1.5 text-[8.5px] text-faint">
+            <LockSimple size={11} weight="duotone" className="shrink-0 text-success" />
+            Images are discarded after extraction (100% offline)
+          </span>
+          <div className="flex flex-wrap items-center justify-end gap-2.5">
             {stage !== "done" ? (
               <>
-                <button onClick={onClose} className="secondary-button h-9 rounded-full px-4 text-[10px] font-semibold">Cancel</button>
-                <button onClick={() => fileRef.current?.click()} className="primary-button flex h-9 items-center gap-1.5 rounded-full px-4 text-[10px] font-semibold"><Image size={13} weight="bold" /> Choose image</button>
+                <button
+                  type="button"
+                  onClick={onClose}
+                  className="secondary-button h-10 shrink-0 whitespace-nowrap rounded-full px-4 text-[11px] font-semibold"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  onClick={() => fileRef.current?.click()}
+                  className="primary-button flex h-10 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-full px-5 text-[11px] font-semibold shadow-md shadow-[var(--accent-glow)]"
+                >
+                  <Image size={15} weight="bold" /> Choose image
+                </button>
               </>
             ) : (
               <>
-                <button onClick={reset} className="secondary-button h-9 rounded-full px-4 text-[10px] font-semibold">Scan another</button>
-                <button onClick={save} className="secondary-button flex h-9 items-center gap-1.5 rounded-full px-4 text-[10px] font-semibold"><NotePencil size={13} weight="duotone" /> Save as note</button>
-                <button onClick={createItem} className="primary-button flex h-9 items-center gap-1.5 rounded-full px-4 text-[10px] font-semibold"><Plus size={13} weight="bold" /> Create item</button>
+                <button
+                  type="button"
+                  onClick={reset}
+                  className="secondary-button h-10 shrink-0 whitespace-nowrap rounded-full px-4 text-[11px] font-semibold"
+                >
+                  Scan another
+                </button>
+                <button
+                  type="button"
+                  onClick={save}
+                  className="secondary-button flex h-10 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-full px-4 text-[11px] font-semibold"
+                >
+                  <NotePencil size={14} weight="duotone" /> Save as note
+                </button>
+                <button
+                  type="button"
+                  onClick={createItem}
+                  className="primary-button flex h-10 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-full px-5 text-[11px] font-semibold shadow-md shadow-[var(--accent-glow)]"
+                >
+                  <Plus size={14} weight="bold" /> Create item
+                </button>
               </>
             )}
           </div>

@@ -87,14 +87,14 @@ export function GeneratorModal({ onClose, onNotify }: { onClose: () => void; onN
       footer={
         <div className="flex items-center justify-between gap-3">
           <span className="flex items-center gap-1.5 text-[8.5px] text-faint">
-            <LockSimple size={10} weight="duotone" />
+            <LockSimple size={11} weight="duotone" className="shrink-0 text-success" />
             Never sent to a server
           </span>
-          <div className="flex gap-2">
-            <button onClick={onClose} className="secondary-button h-9 rounded-full px-4 text-[10.5px] font-semibold">Done</button>
+          <div className="flex items-center gap-2.5">
+            <button onClick={onClose} className="secondary-button h-10 shrink-0 whitespace-nowrap rounded-full px-4 text-[11px] font-semibold">Done</button>
             <button
               onClick={() => void copyValue(result, onNotify, "Generated password copied")}
-              className="primary-button flex h-9 items-center gap-1.5 rounded-full px-4 text-[10.5px] font-semibold"
+              className="primary-button flex h-10 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-full px-5 text-[11px] font-semibold shadow-md shadow-[var(--accent-glow)]"
             >
               <Copy size={12} weight="bold" /> Use password
             </button>
@@ -353,9 +353,9 @@ export function AuthenticatorModal({
       width="max-w-[520px]"
       footer={
         <div className="flex items-center justify-between gap-3">
-          <span className="flex items-center gap-1.5 text-[8.5px] text-faint"><WifiHigh size={11} weight="duotone" /> {t("en", "synced")}</span>
-          <button onClick={onOpenSync} className="secondary-button flex h-9 items-center gap-1.5 rounded-full px-4 text-[10px] font-semibold">
-            <ArrowsLeftRight size={13} weight="duotone" /> Sync to phone
+          <span className="flex items-center gap-1.5 text-[8.5px] text-faint"><WifiHigh size={12} weight="duotone" /> {t("en", "synced")}</span>
+          <button onClick={onOpenSync} className="secondary-button flex h-10 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-full px-5 text-[11px] font-semibold">
+            <ArrowsLeftRight size={14} weight="duotone" /> Sync to phone
           </button>
         </div>
       }
@@ -591,14 +591,14 @@ export function SyncModal({ onClose, onNotify }: { onClose: () => void; onNotify
       width="max-w-[640px]"
       footer={
         <div className="flex items-center justify-between gap-3">
-          <span className="hidden items-center gap-1.5 text-[8px] text-faint sm:flex">
-            <LockSimple size={9} weight="duotone" /> SPAKE2 · XChaCha20-Poly1305
+          <span className="hidden items-center gap-1.5 text-[8.5px] text-faint sm:flex">
+            <LockSimple size={11} weight="duotone" className="shrink-0 text-success" /> SPAKE2 · XChaCha20-Poly1305
           </span>
-          <div className="flex w-full items-center justify-end gap-2 sm:w-auto">
+          <div className="flex w-full items-center justify-end gap-2.5 sm:w-auto">
             <button
               type="button"
               onClick={onClose}
-              className="secondary-button h-9 rounded-full px-4 text-[10px] font-semibold"
+              className="secondary-button h-10 shrink-0 whitespace-nowrap rounded-full px-5 text-[11px] font-semibold"
             >
               Close
             </button>
@@ -659,31 +659,31 @@ export function SyncModal({ onClose, onNotify }: { onClose: () => void; onNotify
       </div>
 
       {/* Mode Tabs */}
-      <div className="mt-3 flex rounded-full border border-[var(--border-soft)] bg-[var(--glass-soft)] p-0.5">
+      <div className="mt-3 grid grid-cols-2 gap-1.5 rounded-[16px] border border-[var(--border-soft)] bg-[var(--glass-input)] p-1.5">
         <button
           type="button"
           onClick={() => setTab("host")}
           className={cn(
-            "flex flex-1 items-center justify-center gap-1.5 rounded-full py-1.5 text-[10px] font-semibold transition-all",
+            "flex h-9 shrink-0 items-center justify-center gap-2 rounded-[11px] text-[11px] font-semibold transition-all whitespace-nowrap",
             tab === "host"
-              ? "bg-[var(--accent)] text-white shadow-xs"
-              : "text-muted hover:text-main"
+              ? "bg-[var(--accent)] text-white shadow-md shadow-[var(--accent-glow)]"
+              : "text-muted hover:bg-[var(--hover)] hover:text-main"
           )}
         >
-          <QrCode size={13} weight="bold" />
+          <QrCode size={15} weight="bold" />
           Host / Show QR
         </button>
         <button
           type="button"
           onClick={() => setTab("scan")}
           className={cn(
-            "flex flex-1 items-center justify-center gap-1.5 rounded-full py-1.5 text-[10px] font-semibold transition-all",
+            "flex h-9 shrink-0 items-center justify-center gap-2 rounded-[11px] text-[11px] font-semibold transition-all whitespace-nowrap",
             tab === "scan"
-              ? "bg-[var(--accent)] text-white shadow-xs"
-              : "text-muted hover:text-main"
+              ? "bg-[var(--accent)] text-white shadow-md shadow-[var(--accent-glow)]"
+              : "text-muted hover:bg-[var(--hover)] hover:text-main"
           )}
         >
-          <Camera size={13} weight="bold" />
+          <Camera size={15} weight="bold" />
           Scan QR / Connect
         </button>
       </div>
@@ -860,13 +860,13 @@ export function EmergencyKitModal({ onClose, onNotify }: { onClose: () => void; 
       bodyClassName="pb-4"
       footer={
         <div className="flex items-center justify-between gap-3">
-          <span className="hidden min-w-0 items-center gap-1.5 text-[7.5px] leading-tight text-faint md:flex">
-            <ShieldCheck size={11} weight="duotone" className="shrink-0" />
+          <span className="hidden min-w-0 items-center gap-1.5 text-[8.5px] leading-tight text-faint md:flex">
+            <ShieldCheck size={12} weight="duotone" className="shrink-0 text-success" />
             PDF saved locally. Nothing sent online.
           </span>
-          <div className="flex w-full items-center justify-end gap-2 sm:w-auto">
-            <button onClick={savePdf} className="secondary-button flex h-9 items-center gap-1.5 rounded-full px-4 text-[10px] font-semibold"><Printer size={13} weight="duotone" /> Print</button>
-            <button onClick={savePdf} className="primary-button flex h-9 items-center gap-1.5 rounded-full px-4 text-[10px] font-semibold"><FilePdf size={13} weight="bold" /> Save as PDF</button>
+          <div className="flex w-full items-center justify-end gap-2.5 sm:w-auto">
+            <button onClick={savePdf} className="secondary-button flex h-10 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-full px-4 text-[11px] font-semibold"><Printer size={14} weight="duotone" /> Print</button>
+            <button onClick={savePdf} className="primary-button flex h-10 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-full px-5 text-[11px] font-semibold shadow-md shadow-[var(--accent-glow)]"><FilePdf size={14} weight="bold" /> Save as PDF</button>
           </div>
         </div>
       }

@@ -403,6 +403,10 @@ button:disabled {
 
 .primary-button {
   color: var(--accent-contrast);
+  white-space: nowrap !important;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   background:
     linear-gradient(180deg, rgba(255, 255, 255, 0.2), transparent 52%),
     linear-gradient(135deg, var(--accent), var(--accent-deep));
@@ -419,6 +423,10 @@ button:disabled {
 
 .secondary-button {
   color: var(--text-main);
+  white-space: nowrap !important;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   background: var(--glass-strong);
   border: 1px solid var(--border);
   box-shadow: var(--inset-hi), 0 3px 12px rgba(30, 30, 60, 0.05);
@@ -1145,8 +1153,12 @@ button:disabled { opacity: 0.5; }
 }
 .sidebar-section { padding-inline: 4px; }
 
-/* Keep hover lift from clipping inside the rounded sidebar. */
-.vault-sidebar > *, .vault-sidebar .thin-scrollbar { overflow-x: visible; }
+/* Prevent unwanted horizontal scrollbars inside sidebar navigation */
+.vault-sidebar,
+.vault-sidebar > *,
+.vault-sidebar .thin-scrollbar {
+  overflow-x: hidden !important;
+}
 
 @media (max-width: 1023px) {
   .lofi-player { height: 32px; }
