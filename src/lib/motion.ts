@@ -5,6 +5,20 @@ export const softSpring = { type: "spring" as const, stiffness: 310, damping: 28
 export const exitTransition = { duration: 0.2, ease: [0.32, 0, 0.67, 0] as const };
 
 // ColorOS 17 Living Flow Physics Curves (120fps Aquamorphic Springs)
+export const colorOsBouncySpring = {
+  type: "spring" as const,
+  stiffness: 420,
+  damping: 22, // Lower damping creates the signature lively ColorOS 17 bounce!
+  mass: 0.75,
+};
+
+export const colorOsFluidMorph = {
+  type: "spring" as const,
+  stiffness: 340,
+  damping: 26,
+  mass: 0.8,
+};
+
 export const livingFlowExpand = {
   type: "spring" as const,
   stiffness: 380,

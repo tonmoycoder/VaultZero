@@ -176,17 +176,42 @@ export function BrandMark({
 export function Avatar({
   name = "Vault Owner",
   size = 34,
+  photoUrl,
   className,
 }: {
   name?: string;
   size?: number;
+  photoUrl?: string | null;
   className?: string;
 }) {
+  const [photo, setPhoto] = useState<string | null>(photoUrl || null);
+
+  useEffect(() => {
+    if (photoUrl !== undefined) {
+      setPhoto(photoUrl);
+      return;
+    }
+    const update = () => {
+      if (typeof window !== "undefined") {
+        setPhoto(localStorage.getItem("vaultzero_user_avatar"));
+      }
+    };
+    update();
+    window.addEventListener("vaultzero_profile_updated", update);
+    window.addEventListener("storage", update);
+    return () => {
+      window.removeEventListener("vaultzero_profile_updated", update);
+      window.removeEventListener("storage", update);
+    };
+  }, [photoUrl]);
+
   const initials = name
     .split(" ")
     .map((p) => p[0])
+    .filter(Boolean)
     .slice(0, 2)
-    .join("");
+    .join("") || "V";
+
   return (
     <span
       className={cn(
@@ -196,14 +221,20 @@ export function Avatar({
       style={{
         width: size,
         height: size,
-        fontSize: size * 0.32,
+        fontSize: size * 0.33,
         background:
           "radial-gradient(circle at 72% 24%, #e7c5ff 0%, #ab79e8 33%, #6850c4 67%, #293a81 100%)",
       }}
       aria-label={name}
     >
-      <span className="relative z-10 tracking-tight">{initials}</span>
-      <span className="absolute inset-x-1 top-0 h-1/2 rounded-full bg-white/20 blur-sm" />
+      {photo ? (
+        <img src={photo} alt={name} className="h-full w-full object-cover" />
+      ) : (
+        <>
+          <span className="relative z-10 tracking-tight">{initials}</span>
+          <span className="absolute inset-x-1 top-0 h-1/2 rounded-full bg-white/20 blur-sm" />
+        </>
+      )}
     </span>
   );
 }

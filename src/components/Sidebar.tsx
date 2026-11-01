@@ -26,6 +26,7 @@ import { t, type Language, type VaultItem } from "../lib/vault";
 import { cn } from "../utils/cn";
 import { Avatar, Kbd, Logo, SectionLabel, Tooltip } from "./ui";
 import GlassSelection from "./GlassSelection";
+import { APP_VERSION } from "../lib/version";
 
 export type ToolName =
   | "generator"
@@ -72,6 +73,7 @@ export default function Sidebar({
   onAdd,
   onLock,
   onOpenMobileMenu,
+  onOpenProfile,
 }: {
   lang: Language;
   active: string;
@@ -83,6 +85,7 @@ export default function Sidebar({
   onAdd: () => void;
   onLock: () => void;
   onOpenMobileMenu?: () => void;
+  onOpenProfile?: () => void;
 }) {
   const groupId = useId();
   const [hovered, setHovered] = useState<string | null>(null);
@@ -123,6 +126,9 @@ export default function Sidebar({
             <div className="flex items-baseline gap-1.5">
               <span className="font-display text-[17px] font-semibold leading-none tracking-[-0.035em] text-main">
                 VaultZero
+              </span>
+              <span className="rounded-full bg-[var(--accent-soft)] px-1.5 py-0.5 font-mono text-[7.5px] font-semibold text-accent">
+                v{APP_VERSION}
               </span>
             </div>
             <p className="mt-1 flex items-center gap-1 text-[7.5px] font-bold uppercase leading-none tracking-[0.14em] text-faint">
@@ -343,20 +349,15 @@ export default function Sidebar({
         </div>
 
         <button
-          onClick={(e) => {
-            if (e.shiftKey || e.altKey) {
-              const current = (typeof window !== "undefined" && localStorage.getItem("vaultzero_username")) || (lang === "bn" ? "ভল্ট ওনার" : "Vault Owner");
-              const next = window.prompt("Change vault profile name:", current);
-              if (next && next.trim()) {
-                localStorage.setItem("vaultzero_username", next.trim());
-                window.location.reload();
-              }
-              return;
+          onClick={() => {
+            if (onOpenProfile) {
+              onOpenProfile();
+            } else {
+              onOpenMobileMenu?.();
             }
-            onOpenMobileMenu?.();
           }}
-          aria-label="Vault preferences"
-          className="flex w-full items-center gap-2.5 rounded-[12px] px-1.5 py-1.5 text-left transition-colors hover:bg-[var(--hover)]"
+          aria-label="Vault preferences & Profile"
+          className="group flex w-full items-center gap-2.5 rounded-[12px] px-1.5 py-1.5 text-left transition-colors hover:bg-[var(--hover)]"
         >
           {(() => {
             const username = (typeof window !== "undefined" && localStorage.getItem("vaultzero_username")) || (lang === "bn" ? "ভল্ট ওনার" : "Vault Owner");

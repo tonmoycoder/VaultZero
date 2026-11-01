@@ -9,6 +9,7 @@ import {
   FirstAidKit,
   Key,
   LockKey,
+  LockSimple,
   ShieldCheck,
   Sparkle,
   WarningCircle,
@@ -51,6 +52,22 @@ export default function LockScreen({
   const [loading, setLoading] = useState(false);
   const [biometric, setBiometric] = useState(false);
   const [showRecovery, setShowRecovery] = useState(false);
+  const [profileName, setProfileName] = useState(() => {
+    if (typeof window !== "undefined") {
+      return localStorage.getItem("vaultzero_username") || "";
+    }
+    return "";
+  });
+
+  useEffect(() => {
+    const handleProfileUpdate = () => {
+      if (typeof window !== "undefined") {
+        setProfileName(localStorage.getItem("vaultzero_username") || "");
+      }
+    };
+    window.addEventListener("vaultzero_profile_updated", handleProfileUpdate);
+    return () => window.removeEventListener("vaultzero_profile_updated", handleProfileUpdate);
+  }, []);
 
   const inputRef = useRef<HTMLInputElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -240,8 +257,7 @@ export default function LockScreen({
             {isSetup
               ? t(lang, "setupTitle")
               : (() => {
-                  const stored = typeof window !== "undefined" ? localStorage.getItem("vaultzero_username") : null;
-                  const name = stored?.trim() || (lang === "bn" ? "ভল্ট ওনার" : "Vault Owner");
+                  const name = profileName.trim() || (lang === "bn" ? "ভল্ট ওনার" : "Vault Owner");
                   return lang === "bn" ? `স্বাগতম, ${name}।` : `Welcome back, ${name}.`;
                 })()}
           </h1>
@@ -406,7 +422,7 @@ export default function LockScreen({
             <button
               type="submit"
               disabled={loading}
-              className="primary-button mt-2 flex min-h-[48px] w-full items-center justify-between gap-3 rounded-[16px] px-6 py-3.5 text-[12px] font-semibold shadow-md transition-all disabled:opacity-80"
+              className="primary-button mt-2 flex min-h-[48px] w-full items-center justify-between gap-3 rounded-[16px] px-6 py-3.5 text-[12px] font-semibold shadow-md transition-all active:scale-[0.985] disabled:opacity-80"
             >
               {loading && !biometric ? (
                 <div className="flex w-full items-center justify-center gap-2">
@@ -416,7 +432,7 @@ export default function LockScreen({
               ) : (
                 <>
                   <div className="flex items-center gap-2.5">
-                    <LockKey size={16} weight="bold" className="shrink-0" />
+                    <LockSimple size={16} weight="bold" className="shrink-0" />
                     <span>{isSetup ? t(lang, "createVaultBtn") : t(lang, "unlockVaultBtn")}</span>
                   </div>
                   <ArrowRight size={15} weight="bold" className="shrink-0 opacity-80" />
@@ -492,7 +508,7 @@ export default function LockScreen({
             </button>
             <span className="flex items-center gap-1.5 font-mono text-[7.5px] text-faint">
               <span className="h-1.5 w-1.5 rounded-full" style={{ background: "var(--success)", boxShadow: "0 0 5px var(--success)" }} />
-              AIR-GAPPED
+              AIR-GAPPED · v2.5.0
             </span>
           </div>
         </div>

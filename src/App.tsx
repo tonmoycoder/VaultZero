@@ -37,6 +37,8 @@ const GeneratorModal = lazy(() => import("./components/toolModals").then((m) => 
 const SyncModal = lazy(() => import("./components/toolModals").then((m) => ({ default: m.SyncModal })));
 const SecurityCenterModal = lazy(() => import("./components/SecurityCenter"));
 const CsvImportModal = lazy(() => import("./components/CsvImportModal").then((m) => ({ default: m.CsvImportModal })));
+const UserProfileModal = lazy(() => import("./components/UserProfileModal"));
+import { APP_VERSION, compareSemver } from "./lib/version";
 import {
   checkGitHubUpdate,
   clearActiveSession,
@@ -96,7 +98,7 @@ function shouldStartLocked(): boolean {
   return getActiveSession() === null;
 }
 
-type ModalName = ToolName | "mobileMenu";
+type ModalName = ToolName | "mobileMenu" | "profile";
 
 function MobileNav({
   active,
@@ -194,8 +196,8 @@ export default function App() {
   }, []);
 
   useEffect(() => {
-    checkGitHubUpdate("v2.2.0").then((res) => {
-      if (res?.hasUpdate && res.latestVersion) {
+    checkGitHubUpdate(APP_VERSION).then((res) => {
+      if (res?.hasUpdate && res.latestVersion && compareSemver(res.latestVersion, APP_VERSION) > 0) {
         notify(`Update available: ${res.latestVersion}`);
       }
     });
@@ -602,6 +604,7 @@ export default function App() {
             onAdd={() => openTool("add")}
             onLock={lockVault}
             onOpenMobileMenu={() => setModal("mobileMenu")}
+            onOpenProfile={() => setModal("profile")}
           />
 
           <main
@@ -637,6 +640,7 @@ export default function App() {
               onFavorite={handleFavorite}
               textStep={textStep}
               onTextStep={changeTextStep}
+              onOpenProfile={() => setModal("profile")}
             />
           </main>
 
@@ -865,6 +869,14 @@ export default function App() {
                 </div>
               </div>
             </Modal>
+          )}
+          {modal === "profile" && (
+            <UserProfileModal
+              key="profile"
+              onClose={() => setModal(null)}
+              onNotify={notify}
+              lang={lang}
+            />
           )}
         </AnimatePresence>
         </Suspense>

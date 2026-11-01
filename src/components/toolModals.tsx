@@ -32,7 +32,7 @@ import {
 } from "../lib/generate";
 import { cn } from "../utils/cn";
 import { BrandMark, Modal, Toggle, Tooltip, TotpRing, useCountdown } from "./ui";
-import { generateTotp, decodeBase32 } from "../lib/totp";
+import { generateTotp, validateGoogleAuthSecret } from "../lib/totp";
 import { copySecure } from "../lib/clipboard";
 
 type Notify = (message: string) => void;
@@ -319,24 +319,22 @@ export function AuthenticatorModal({
   const addAccount = () => {
     setSecretError("");
     const trimmedName = name.trim();
-    if (!trimmedName) return;
-    const cleanSecret = secret.trim().replace(/\s/g, "").toUpperCase();
-    if (!cleanSecret) {
-      setSecretError("Setup key / Secret key is required");
+    if (!trimmedName) {
+      setSecretError("Account name is required");
       return;
     }
-    try {
-      decodeBase32(cleanSecret);
-    } catch {
-      setSecretError("Invalid Base32 secret key (A-Z, 2-7)");
+    const validation = validateGoogleAuthSecret(secret, "en");
+    if (!validation.valid) {
+      setSecretError(validation.error || "Invalid Base32 secret key");
       return;
     }
+    const cleanSecret = validation.cleanKey;
     setExtra((current) => [...current, { id: `new-${Date.now()}`, title: trimmedName, code: cleanSecret, added: true }]);
     setName("");
     setSecret("");
     setSecretError("");
     setAdding(false);
-    onNotify("Authenticator account added locally");
+    onNotify("✓ Authenticator account added locally with valid Base32 secret");
   };
 
   const removeAccount = (id: string) => {

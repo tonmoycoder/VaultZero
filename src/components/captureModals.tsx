@@ -8,6 +8,7 @@ import {
   Eye,
   EyeSlash,
   FolderSimple,
+  Globe,
   IdentificationCard,
   Image,
   Key,
@@ -31,7 +32,7 @@ import { brands, type BrandKey, type Category, type VaultItem } from "../lib/vau
 import { cn } from "../utils/cn";
 import { BrandMark, CopyButton, GlassCheck, Modal, StrengthDots, Tooltip } from "./ui";
 import OcrCopyPad, { type OcrField } from "./OcrCopyPad";
-import { MAX_OCR_FILE_SIZE, runLocalOcr } from "../lib/ocr";
+import { MAX_OCR_FILE_SIZE, runLocalOcr, type OcrLanguage } from "../lib/ocr";
 import jsQR from "jsqr";
 import { parseOtpAuthUri } from "../lib/totp";
 import type { Language } from "../lib/vault";
@@ -455,6 +456,7 @@ export function OcrModal({
     secret: string;
     period?: number;
   } | null>(null);
+  const [ocrLang, setOcrLang] = useState<OcrLanguage>("eng+ben");
   const fileRef = useRef<HTMLInputElement>(null);
 
   const handleOcrAssign = (field: OcrField, value: string) => {
@@ -493,8 +495,8 @@ export function OcrModal({
     setProgress(15);
 
     try {
-      // 1. Run local OCR text extraction
-      const { rawText, creds } = await runLocalOcr(file, (p) => setProgress(p));
+      // 1. Run local OCR text extraction (English, Bengali, or Dual)
+      const { rawText, creds } = await runLocalOcr(file, (p) => setProgress(p), ocrLang);
       let resText = rawText || "No text detected in image.";
 
       // 2. Concurrently check for 2FA Authenticator QR code (otpauth://...)
@@ -677,6 +679,37 @@ export function OcrModal({
       }
     >
       <input ref={fileRef} type="file" accept="image/png,image/jpeg,image/webp,image/heic" className="hidden" onChange={(e) => handleFile(e.target.files?.[0])} />
+
+      {/* Language Badge & Selector */}
+      <div className="mb-3 flex flex-wrap items-center justify-between gap-2 rounded-[14px] border border-[var(--border-soft)] bg-[var(--glass-soft)] px-3 py-2 text-[8.5px]">
+        <span className="flex items-center gap-1.5 font-semibold text-main">
+          <Globe size={13} weight="duotone" className="text-accent shrink-0" />
+          <span>🌐 Supported OCR Languages: 🇬🇧 English + 🇧🇩 বাংলা (Offline Tesseract Engine)</span>
+        </span>
+        <div className="flex items-center gap-1">
+          {(
+            [
+              { id: "eng+ben" as const, label: "Dual (EN+BN)" },
+              { id: "eng" as const, label: "English" },
+              { id: "ben" as const, label: "বাংলা" },
+            ] as const
+          ).map((item) => (
+            <button
+              key={item.id}
+              type="button"
+              onClick={() => setOcrLang(item.id)}
+              className={cn(
+                "rounded-md px-2 py-0.5 font-medium transition-colors",
+                ocrLang === item.id
+                  ? "bg-[var(--accent)] text-white shadow-xs"
+                  : "bg-[var(--glass-input)] text-muted hover:text-main"
+              )}
+            >
+              {item.label}
+            </button>
+          ))}
+        </div>
+      </div>
 
       <div className="mb-3 flex items-center justify-center gap-1.5">
         {[

@@ -22,7 +22,7 @@ import {
 } from "@phosphor-icons/react";
 import { useEffect, useId, useState, type PointerEvent, type ReactNode } from "react";
 import { AnimatePresence, LayoutGroup, motion } from "framer-motion";
-import { brands, strengthMeta, t, type Language, type VaultItem } from "../lib/vault";
+import { brands, buildFormattedQuickCopy, strengthMeta, t, type Language, type VaultItem } from "../lib/vault";
 import { cn } from "../utils/cn";
 import { BrandMark, CopyButton, SectionLabel, StrengthDots, Tooltip, TotpRing, useCountdown } from "./ui";
 import GlassSelection from "./GlassSelection";
@@ -167,13 +167,31 @@ function InspectorBody({
             <ArrowSquareOut size={12} weight="bold" />
             {t(lang, "launchWebsite")}
           </a>
-          <button
-            onClick={() => void copyText(item.password, onNotify, "Password copied")}
-            className="secondary-button flex h-[33px] items-center justify-center gap-1.5 rounded-[10px] text-[10px] font-semibold"
+          <Tooltip
+            label={
+              lang === "bn"
+                ? "অ্যাকাউন্টের সকল তথ্য (নাম, ওয়েবসাইট, ইউজারনেম, পাসওয়ার্ড, 2FA কোড ও নোট) সাজানো লাইন-বাই-লাইন আকারে এক ক্লিকে কপি করুন"
+                : "Copy all account details (Title, Website, Username, Password, 2FA Code & Notes) formatted line-by-line"
+            }
           >
-            <Copy size={12} weight="duotone" />
-            Quick copy
-          </button>
+            <button
+              onClick={() => {
+                const formatted = buildFormattedQuickCopy(item, item.totp);
+                void copyText(
+                  formatted,
+                  onNotify,
+                  lang === "bn"
+                    ? "✓ অ্যাকাউন্টের সব তথ্য লাইন-বাই-লাইন কপি হয়েছে!"
+                    : "✓ All account details copied line-by-line!"
+                );
+              }}
+              className="secondary-button flex h-[33px] items-center justify-center gap-1.5 rounded-[10px] text-[10px] font-semibold"
+              aria-label="Quick copy all details"
+            >
+              <Copy size={12} weight="duotone" />
+              Quick copy
+            </button>
+          </Tooltip>
         </div>
       </div>
 

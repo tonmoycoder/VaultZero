@@ -3,7 +3,6 @@ import { fileURLToPath } from "url";
 import tailwindcss from "@tailwindcss/vite";
 import react from "@vitejs/plugin-react";
 import { defineConfig } from "vite";
-import { viteSingleFile } from "vite-plugin-singlefile";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -14,7 +13,6 @@ export default defineConfig({
   plugins: [
     react(),
     tailwindcss(),
-    ...(process.env.BUILD_SINGLE_FILE === "true" ? [viteSingleFile()] : []),
   ],
   resolve: {
     alias: {
@@ -25,11 +23,13 @@ export default defineConfig({
     target: "esnext",
     minify: "esbuild",
     cssCodeSplit: true,
+    chunkSizeWarningLimit: 600,
     rollupOptions: {
       output: {
         manualChunks: {
-          vendor: ["react", "react-dom"],
-          icons: ["@phosphor-icons/react"],
+          "vendor-react": ["react", "react-dom"],
+          "vendor-icons": ["@phosphor-icons/react"],
+          "vendor-motion": ["framer-motion"],
         },
       },
     },

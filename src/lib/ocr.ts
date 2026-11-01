@@ -125,19 +125,23 @@ export function extractCredentialsFromText(rawText: string): ExtractedCredential
   };
 }
 
+export type OcrLanguage = "eng" | "ben" | "eng+ben";
+
 /**
  * Executes local OCR on an image file using tesseract.js with real progress reporting.
+ * Supports English (eng), Bengali (ben), and dual (eng+ben).
  */
 export async function runLocalOcr(
   file: File,
-  onProgress?: (progress: number) => void
+  onProgress?: (progress: number) => void,
+  ocrLang: OcrLanguage = "eng"
 ): Promise<{ rawText: string; creds: ExtractedCredentials }> {
   await validateOcrImage(file);
 
   let rawText = "";
   try {
     const { createWorker } = await import("tesseract.js");
-    const worker = await createWorker("eng", undefined, {
+    const worker = await createWorker(ocrLang, undefined, {
       logger: (m) => {
         if (m.status === "recognizing text" && onProgress && typeof m.progress === "number") {
           onProgress(Math.min(99, Math.round(m.progress * 100)));

@@ -23,6 +23,73 @@ export interface TotpResult {
 const BASE32_ALPHABET = "ABCDEFGHIJKLMNOPQRSTUVWXYZ234567";
 
 /**
+ * Validates Google Authenticator Base32 Setup Secret.
+ * Enforces RFC 4226 / RFC 6238 standard:
+ * - Only A-Z and 2-7
+ * - Strips whitespace and dashes
+ * - Minimum 16 characters (80-bit key)
+ */
+export interface SecretValidationResult {
+  valid: boolean;
+  cleanKey: string;
+  error?: string;
+}
+
+export function validateGoogleAuthSecret(
+  rawSecret: string,
+  lang: "en" | "bn" = "en"
+): SecretValidationResult {
+  if (!rawSecret || !rawSecret.trim()) {
+    return {
+      valid: false,
+      cleanKey: "",
+      error:
+        lang === "bn"
+          ? "সেটআপ কি (Setup key) খালি রাখা যাবে না।"
+          : "Setup key / Secret key is required.",
+    };
+  }
+
+  const cleanKey = rawSecret.replace(/[\s-]/g, "").toUpperCase();
+
+  if (!/^[A-Z2-7]+$/.test(cleanKey)) {
+    return {
+      valid: false,
+      cleanKey,
+      error:
+        lang === "bn"
+          ? "❌ অকার্যকর সেটআপ কি! শুধুমাত্র Base32 অক্ষর (A-Z এবং 2-7) গ্রহণযোগ্য।"
+          : "❌ Invalid characters! Only valid Base32 characters (A-Z and 2-7) are allowed.",
+    };
+  }
+
+  if (cleanKey.length < 16) {
+    return {
+      valid: false,
+      cleanKey,
+      error:
+        lang === "bn"
+          ? `❌ অকার্যকর সেটআপ কি! Google Authenticator-এর নিয়ম অনুযায়ী কমপক্ষে ১৬ অক্ষরের বৈধ Base32 Secret Key দিতে হবে (বর্তমানে ${cleanKey.length} অক্ষর)।`
+          : `❌ Invalid setup key! Google Authenticator requires at least 16 Base32 characters (currently ${cleanKey.length}).`,
+    };
+  }
+
+  try {
+    decodeBase32(cleanKey);
+    return { valid: true, cleanKey };
+  } catch (err: any) {
+    return {
+      valid: false,
+      cleanKey,
+      error:
+        lang === "bn"
+          ? "❌ Base32 ডিকোড ব্যর্থ হয়েছে। অনুগ্রহ করে সঠিক সিক্রেট কি দিন।"
+          : `❌ Base32 decoding failed: ${err?.message || "Invalid format"}`,
+    };
+  }
+}
+
+/**
  * Decodes standard RFC 4648 Base32 strings (ignoring whitespace, hyphens and case).
  */
 export function decodeBase32(input: string): Uint8Array {

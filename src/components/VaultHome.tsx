@@ -41,7 +41,7 @@ import TextSizeControl from "./TextSize";
 import BrandFilters from "./BrandFilters";
 import GlassSelection from "./GlassSelection";
 import { useMotionSettings } from "./Tactile";
-import { softSpring } from "../lib/motion";
+import { colorOsBouncySpring, softSpring } from "../lib/motion";
 
 const themeOptions: { id: Theme; label: string; icon: typeof Sun }[] = [
   { id: "light", label: "Liquid glass · Light", icon: Sun },
@@ -274,10 +274,13 @@ const ItemCard = memo(function ItemCard({
   const strength = strengthMeta[item.strength];
 
   return (
-    <div
+    <motion.div
       role="button"
       tabIndex={0}
       onClick={onSelect}
+      whileHover={{ y: -5, scale: 1.012 }}
+      whileTap={{ scale: 0.965 }}
+      transition={colorOsBouncySpring}
       onKeyDown={(e) => {
         if (e.target === e.currentTarget && (e.key === "Enter" || e.key === " ")) {
           e.preventDefault();
@@ -291,7 +294,7 @@ const ItemCard = memo(function ItemCard({
         el.style.setProperty("--my", `${e.clientY - rect.top}px`);
       }}
       className={cn(
-        "vault-card group relative flex cursor-pointer flex-col rounded-[16px] p-3.5 text-left transition-all",
+        "vault-card group relative flex cursor-pointer flex-col rounded-[16px] p-3.5 text-left transition-colors hover:z-20",
         featured && "sm:min-h-[146px]",
         selected && "selected",
         checked && "ring-2 ring-[var(--accent)]"
@@ -525,7 +528,7 @@ const ItemCard = memo(function ItemCard({
           </div>
         )}
       </div>
-    </div>
+    </motion.div>
   );
 });
 
@@ -715,6 +718,7 @@ export default function VaultHome({
   onFavorite,
   textStep,
   onTextStep,
+  onOpenProfile,
 }: {
   lang: Language;
   theme: Theme;
@@ -742,7 +746,25 @@ export default function VaultHome({
   onFavorite: (item: VaultItem) => void;
   textStep: number;
   onTextStep: (index: number) => void;
+  onOpenProfile?: () => void;
 }) {
+  const [userName, setUserName] = useState(() => {
+    if (typeof window !== "undefined") {
+      return localStorage.getItem("vaultzero_username") || "";
+    }
+    return "";
+  });
+
+  useEffect(() => {
+    const handleProfileUpdate = () => {
+      if (typeof window !== "undefined") {
+        setUserName(localStorage.getItem("vaultzero_username") || "");
+      }
+    };
+    window.addEventListener("vaultzero_profile_updated", handleProfileUpdate);
+    return () => window.removeEventListener("vaultzero_profile_updated", handleProfileUpdate);
+  }, []);
+
   const [sortMode, setSortMode] = useState<SortMode>("recent");
   const [checkedIds, setCheckedIds] = useState<Set<string>>(new Set());
   const [collapsedFolders, setCollapsedFolders] = useState<Set<string>>(new Set());
@@ -859,18 +881,30 @@ export default function VaultHome({
               {t(lang, "workspace")} · ZERO-KNOWLEDGE
             </SectionLabel>
           </div>
-          <h1
-            className={cn(
-              "font-display text-[25px] font-semibold tracking-[-0.035em] text-main sm:text-[29px]",
-              lang === "bn" && "font-bangla text-[23px] sm:text-[27px]"
+          <div className="flex items-center gap-2">
+            <h1
+              className={cn(
+                "font-display text-[25px] font-semibold tracking-[-0.035em] text-main sm:text-[29px]",
+                lang === "bn" && "font-bangla text-[23px] sm:text-[27px]"
+              )}
+            >
+              {(() => {
+                const name = userName.trim() || (lang === "bn" ? "ভল্ট ওনার" : "Vault Owner");
+                return lang === "bn" ? `শুভ সকাল, ${name}।` : `Good morning, ${name}.`;
+              })()}
+            </h1>
+            {onOpenProfile && (
+              <button
+                type="button"
+                onClick={onOpenProfile}
+                className="mt-1 flex h-6 w-6 items-center justify-center rounded-full text-muted transition-colors hover:bg-[var(--hover)] hover:text-accent"
+                title={lang === "bn" ? "প্রোফাইল এডিট করুন" : "Edit Profile"}
+                aria-label="Edit Profile"
+              >
+                <User size={14} weight="duotone" />
+              </button>
             )}
-          >
-            {(() => {
-              const storedUser = typeof window !== "undefined" ? localStorage.getItem("vaultzero_username") : null;
-              const name = storedUser?.trim() || (lang === "bn" ? "ভল্ট ওনার" : "Vault Owner");
-              return lang === "bn" ? `শুভ সকাল, ${name}।` : `Good morning, ${name}.`;
-            })()}
-          </h1>
+          </div>
           <p className={cn("mt-1 text-[10.5px] text-muted sm:text-[11px]", lang === "bn" && "font-bangla")}>
             {theme === "lofi" && lang === "en"
               ? "A quieter space for your digital life."
@@ -998,7 +1032,7 @@ export default function VaultHome({
       </div>
 
       {/* Items Container */}
-      <div className="thin-scrollbar -mx-1 min-h-0 flex-1 overflow-y-auto overflow-x-hidden px-1 pb-16 max-lg:overflow-visible">
+      <div className="thin-scrollbar -mx-1 min-h-0 flex-1 overflow-y-auto overflow-x-hidden px-1 pt-3.5 pb-16 max-lg:overflow-visible">
         {sortedItems.length === 0 ? (
           <EmptyVault lang={lang} folder={folder} query={query} onAdd={onAdd} />
         ) : folderGroups ? (
@@ -1026,7 +1060,7 @@ export default function VaultHome({
                   </button>
 
                   {!isCollapsed && (
-                    <div className="vault-bento grid grid-cols-1 gap-3 sm:grid-cols-2 2xl:grid-cols-3">
+                    <div className="vault-bento grid grid-cols-1 gap-3 sm:grid-cols-2 2xl:grid-cols-3 pt-2 pb-3 overflow-visible">
                       {folderItems.map((item) => (
                         <ItemCard
                           key={item.id}
@@ -1050,7 +1084,7 @@ export default function VaultHome({
           </div>
         ) : (
           // Standard Grid
-          <div className="vault-bento grid grid-cols-1 gap-3 sm:grid-cols-2 2xl:grid-cols-3">
+          <div className="vault-bento grid grid-cols-1 gap-3 sm:grid-cols-2 2xl:grid-cols-3 pt-2 pb-3 overflow-visible">
             <AnimatePresence initial={false} mode="popLayout">
               {sortedItems.map((item, index) => {
                 const featured =

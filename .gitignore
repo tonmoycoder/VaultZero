@@ -39,6 +39,8 @@ yarn-error.log*
 .cursor/
 .gemini/
 *PROMPT*.md
+*HANDOFF*.md
+VOLUME_*.md
 MEMORY_BANK.md
 TASK_QUEUE.md
 .mcp.json

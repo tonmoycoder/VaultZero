@@ -9,6 +9,7 @@ import {
   siSpotify,
   siX,
 } from "simple-icons";
+import { APP_VERSION, compareSemver } from "./version";
 
 export type Theme = "light" | "dark" | "lofi";
 export type Language = "en" | "bn";
@@ -129,6 +130,21 @@ export type VaultItem = {
   tags?: string[];
   folder?: string;
   passwordHistory?: PasswordHistoryEntry[];
+};
+
+export const buildFormattedQuickCopy = (item: VaultItem, currentTotpCode?: string): string => {
+  const lines: string[] = [
+    `Account: ${item.title}`,
+    item.url ? `Website: ${item.url}` : "",
+    item.username ? `Username / Email: ${item.username}` : "",
+    item.password ? `Password: ${item.password}` : "",
+    currentTotpCode || item.totp ? `2FA Code (TOTP): ${currentTotpCode || item.totp}` : "",
+    (item as any).totpSecret ? `2FA Setup Key: ${(item as any).totpSecret}` : "",
+    item.recoveryCodes?.length ? `Recovery Codes: ${item.recoveryCodes.join(", ")}` : "",
+    item.note || (item as any).notes ? `Notes: ${item.note || (item as any).notes}` : "",
+    item.folder ? `Folder: ${item.folder}` : "",
+  ].filter(Boolean);
+  return lines.join("\n");
 };
 
 // Clean default state: exactly 1 deletable Demo Account.
@@ -421,7 +437,7 @@ export function copyWithAutoClear(text: string, onNotify?: (msg: string) => void
   }, seconds * 1000);
 }
 
-export async function checkGitHubUpdate(currentVersion = "v2.2.0"): Promise<{ hasUpdate: boolean; latestVersion?: string; downloadUrl?: string } | null> {
+export async function checkGitHubUpdate(currentVersion = APP_VERSION): Promise<{ hasUpdate: boolean; latestVersion?: string; downloadUrl?: string } | null> {
   try {
     const res = await fetch("https://api.github.com/repos/tonmoycoder/VaultZero/releases/latest", {
       headers: { Accept: "application/vnd.github.v3+json" },
@@ -429,7 +445,7 @@ export async function checkGitHubUpdate(currentVersion = "v2.2.0"): Promise<{ ha
     if (!res.ok) return null;
     const data = await res.json();
     const tag = data.tag_name;
-    if (tag && tag !== currentVersion) {
+    if (tag && compareSemver(tag, currentVersion) > 0) {
       const exeAsset = (data.assets || []).find((a: any) => typeof a.name === "string" && a.name.endsWith(".exe"));
       return {
         hasUpdate: true,

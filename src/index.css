@@ -554,9 +554,10 @@ input[type="range"]::-moz-range-thumb {
   opacity: 0.5;
 }
 .vault-card:hover {
-  transform: translateY(-3px);
-  border-color: color-mix(in srgb, var(--accent) 28%, var(--border));
-  box-shadow: 0 24px 48px rgba(35, 25, 80, 0.13), var(--inset-hi);
+  border-color: color-mix(in srgb, var(--accent) 36%, var(--border));
+  box-shadow: 0 24px 48px rgba(35, 25, 80, 0.16), var(--inset-hi);
+  z-index: 20;
+  position: relative;
 }
 .vault-card.selected {
   border-color: color-mix(in srgb, var(--accent) 52%, transparent);

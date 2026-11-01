@@ -4,7 +4,9 @@
  * creates emergency pre-update safety snapshots, and guides seamless binary installation.
  */
 
-export const CURRENT_APP_VERSION = "2.4.0";
+import { APP_VERSION } from "./version";
+
+export const CURRENT_APP_VERSION = APP_VERSION;
 export const GITHUB_REPO = "tonmoycoder/VaultZero";
 
 export interface GitHubAsset {
