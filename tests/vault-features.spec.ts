@@ -5,7 +5,7 @@ const zen = (page: Page) =>
 
 test.beforeEach(async ({ page }) => {
   await page.goto("/?unlocked=true");
-  await expect(page.getByRole("heading", { name: "Good morning, Ayaan." })).toBeVisible();
+  await expect(page.getByRole("heading", { name: /Good morning/i })).toBeVisible();
 });
 
 test("the sidebar add button keeps even padding and never touches the edge", async ({ page }) => {
@@ -126,8 +126,8 @@ test("OCR creates a real, editable item with autofill and clipboard support", as
   await scan.getByRole("button", { name: "Create item", exact: true }).click();
 
   const form = page.getByRole("dialog", { name: "New vault item" });
-  await expect(form.locator('input[name="username"]')).toHaveValue("ayaan@vaultzero.me");
-  await expect(form.locator('input[name="new-password"]')).toHaveValue("N0va-Sunrise#2026");
+  await expect(form.locator('input[name="username"]')).toHaveValue("user@example.local");
+  await expect(form.locator('input[name="new-password"]')).toHaveValue("SecurePass#2026");
   // Standard autofill tokens so browsers and password managers behave normally.
   await expect(form.locator('input[name="username"]')).toHaveAttribute("autocomplete", "username");
   await expect(form.locator('input[name="new-password"]')).toHaveAttribute("autocomplete", "new-password");

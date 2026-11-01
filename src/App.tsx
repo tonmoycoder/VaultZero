@@ -12,7 +12,7 @@ import {
   Wrench,
   X,
 } from "@phosphor-icons/react";
-import { useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
+import { lazy, Suspense, useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
 import { AnimatePresence, LayoutGroup, motion } from "framer-motion";
 import CommandPalette from "./components/CommandPalette";
 import InspectorHost from "./components/InspectorHost";
@@ -20,22 +20,23 @@ import GlassSelection from "./components/GlassSelection";
 import AmbientScene from "./components/AmbientScene";
 import LockScreen from "./components/LockScreen";
 import TactileProvider, { hapticSuccess } from "./components/Tactile";
-import { AddItemModal, OcrModal } from "./components/captureModals";
 import Sidebar, { MobileQuickMenu, type ToolName } from "./components/Sidebar";
-import {
-  AuthenticatorModal,
-  EmergencyKitModal,
-  GeneratorModal,
-  SyncModal,
-} from "./components/toolModals";
-import SecurityCenterModal from "./components/SecurityCenter";
-import { CsvImportModal } from "./components/CsvImportModal";
 import { exportVaultToCsv } from "./lib/csv";
 import { Avatar, Modal, Toggle, Tooltip } from "./components/ui";
 import TextSizeControl, { DEFAULT_TEXT_STEP, TEXT_STEPS, stepLabel } from "./components/TextSize";
 import LofiPlayer from "./components/LofiPlayer";
 import VaultHome from "./components/VaultHome";
 import UpdateBanner from "./components/UpdateBanner";
+
+// Lazy-loaded heavy tools & modals for sub-second startup (<1s)
+const AddItemModal = lazy(() => import("./components/captureModals").then((m) => ({ default: m.AddItemModal })));
+const OcrModal = lazy(() => import("./components/captureModals").then((m) => ({ default: m.OcrModal })));
+const AuthenticatorModal = lazy(() => import("./components/toolModals").then((m) => ({ default: m.AuthenticatorModal })));
+const EmergencyKitModal = lazy(() => import("./components/toolModals").then((m) => ({ default: m.EmergencyKitModal })));
+const GeneratorModal = lazy(() => import("./components/toolModals").then((m) => ({ default: m.GeneratorModal })));
+const SyncModal = lazy(() => import("./components/toolModals").then((m) => ({ default: m.SyncModal })));
+const SecurityCenterModal = lazy(() => import("./components/SecurityCenter"));
+const CsvImportModal = lazy(() => import("./components/CsvImportModal").then((m) => ({ default: m.CsvImportModal })));
 import {
   checkGitHubUpdate,
   clearActiveSession,
@@ -684,9 +685,10 @@ export default function App() {
           )}
         </AnimatePresence>
 
-        <AnimatePresence mode="wait">
-          {modal === "add" && (
-            <AddItemModal
+        <Suspense fallback={null}>
+          <AnimatePresence mode="wait">
+            {modal === "add" && (
+              <AddItemModal
               key="add"
               initialItem={editingItem}
               draft={draft}
@@ -750,11 +752,18 @@ export default function App() {
               width="max-w-[440px]"
             >
               <div className="glass-soft mb-3 flex items-center gap-3 rounded-[15px] border border-[var(--border-soft)] p-3">
-                <Avatar size={38} />
-                <div className="min-w-0 flex-1">
-                  <p className="text-[11px] font-semibold text-main">Ayaan Rahman</p>
-                  <p className="mt-0.5 text-[8px] text-faint">{items.length} items · local vault</p>
-                </div>
+                {(() => {
+                  const username = (typeof window !== "undefined" && localStorage.getItem("vaultzero_username")) || (lang === "bn" ? "ভল্ট ওনার" : "Vault Owner");
+                  return (
+                    <>
+                      <Avatar name={username} size={38} />
+                      <div className="min-w-0 flex-1">
+                        <p className="text-[11px] font-semibold text-main">{username}</p>
+                        <p className="mt-0.5 text-[8px] text-faint">{items.length} items · local vault</p>
+                      </div>
+                    </>
+                  );
+                })()}
                 <div
                   className="flex items-center gap-1 rounded-full border px-2 py-1 text-[7px] font-semibold text-[var(--success)]"
                   style={{
@@ -836,21 +845,21 @@ export default function App() {
                     />
                   </div>
                 </div>
-                <div className="mt-2 flex gap-1.5 border-t border-[var(--border-soft)] pt-2.5">
-                  <Tooltip label="Panic lock · Ctrl L">
+                <div className="mt-3 flex gap-2.5 border-t border-[var(--border-soft)] pt-3">
+                  <Tooltip label="Panic lock · Ctrl L" className="flex-1">
                     <button
                       onClick={lockVault}
-                      className="secondary-button flex h-8 flex-1 items-center justify-center gap-1.5 rounded-[10px] text-[8.5px] font-semibold"
+                      className="secondary-button flex h-[40px] w-full items-center justify-center gap-2 whitespace-nowrap rounded-[13px] px-4.5 py-2.5 text-[10.5px] font-semibold text-danger"
                     >
-                      <LockKey size={12} weight="duotone" /> Lock vault
+                      <LockKey size={14} weight="duotone" /> Lock vault
                     </button>
                   </Tooltip>
-                  <Tooltip label="Offline OCR · Ctrl Shift S">
+                  <Tooltip label="Offline OCR · Ctrl Shift S" className="flex-1">
                     <button
                       onClick={() => setModal("ocr")}
-                      className="secondary-button flex h-8 flex-1 items-center justify-center gap-1.5 rounded-[10px] text-[8.5px] font-semibold"
+                      className="secondary-button flex h-[40px] w-full items-center justify-center gap-2 whitespace-nowrap rounded-[13px] px-4.5 py-2.5 text-[10.5px] font-semibold text-accent"
                     >
-                      <Sparkle size={12} weight="duotone" /> Snip
+                      <Sparkle size={14} weight="duotone" /> Snip
                     </button>
                   </Tooltip>
                 </div>
@@ -858,6 +867,7 @@ export default function App() {
             </Modal>
           )}
         </AnimatePresence>
+        </Suspense>
 
         {locked && (
           <LockScreen

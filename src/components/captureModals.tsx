@@ -360,8 +360,8 @@ export function AddItemModal({
 type OcrStage = "idle" | "scanning" | "done";
 
 const sampleText = `Google Workspace
-Email: ayaan@vaultzero.me
-Password: N0va-Sunrise#2026
+Email: user@example.local
+Password: SecurePass#2026
 Note: Primary account used for mail and calendar.
 Backup code: GX7Q-4H2M-91LA`;
 
@@ -622,27 +622,27 @@ export function OcrModal({
       title="Scan & import"
       subtitle="Turn a screenshot into a new vault item. OCR runs entirely on this device."
       icon={<Scan size={20} weight="duotone" />}
-      width="max-w-[660px]"
+      width="max-w-[700px]"
       footer={
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-          <span className="flex items-center gap-1.5 text-[8.5px] text-faint">
+          <span className="hidden items-center gap-1.5 text-[8.5px] text-faint sm:flex">
             <LockSimple size={11} weight="duotone" className="shrink-0 text-success" />
             Images are discarded after extraction (100% offline)
           </span>
-          <div className="flex flex-wrap items-center justify-end gap-2.5">
+          <div className="flex w-full flex-wrap items-center justify-end gap-2 sm:w-auto sm:flex-nowrap">
             {stage !== "done" ? (
               <>
                 <button
                   type="button"
                   onClick={onClose}
-                  className="secondary-button h-10 shrink-0 whitespace-nowrap rounded-full px-4 text-[11px] font-semibold"
+                  className="secondary-button flex h-[42px] shrink-0 items-center justify-center whitespace-nowrap rounded-[14px] px-4.5 text-[11px] font-semibold"
                 >
                   Cancel
                 </button>
                 <button
                   type="button"
                   onClick={() => fileRef.current?.click()}
-                  className="primary-button flex h-10 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-full px-5 text-[11px] font-semibold shadow-md shadow-[var(--accent-glow)]"
+                  className="primary-button flex h-[42px] shrink-0 items-center gap-2 whitespace-nowrap rounded-[14px] px-5 text-[11px] font-semibold shadow-md shadow-[var(--accent-glow)]"
                 >
                   <Image size={15} weight="bold" /> Choose image
                 </button>
@@ -652,23 +652,23 @@ export function OcrModal({
                 <button
                   type="button"
                   onClick={reset}
-                  className="secondary-button h-10 shrink-0 whitespace-nowrap rounded-full px-4 text-[11px] font-semibold"
+                  className="secondary-button flex h-[42px] shrink-0 items-center justify-center whitespace-nowrap rounded-[14px] px-4.5 text-[11px] font-semibold"
                 >
                   Scan another
                 </button>
                 <button
                   type="button"
                   onClick={save}
-                  className="secondary-button flex h-10 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-full px-4 text-[11px] font-semibold"
+                  className="secondary-button flex h-[42px] shrink-0 items-center gap-2 whitespace-nowrap rounded-[14px] px-4.5 text-[11px] font-semibold"
                 >
-                  <NotePencil size={14} weight="duotone" /> Save as note
+                  <NotePencil size={15} weight="duotone" /> Save as note
                 </button>
                 <button
                   type="button"
                   onClick={createItem}
-                  className="primary-button flex h-10 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-full px-5 text-[11px] font-semibold shadow-md shadow-[var(--accent-glow)]"
+                  className="primary-button flex h-[42px] shrink-0 items-center gap-2 whitespace-nowrap rounded-[14px] px-5 text-[11px] font-semibold shadow-md shadow-[var(--accent-glow)]"
                 >
-                  <Plus size={14} weight="bold" /> Create item
+                  <Plus size={15} weight="bold" /> Create item
                 </button>
               </>
             )}
@@ -785,7 +785,7 @@ export function OcrModal({
         <div className="animate-fade">
           <div className="mb-2.5 flex items-center gap-2 rounded-[13px] border p-2" style={{ borderColor: "color-mix(in srgb, var(--success) 22%, transparent)", background: "var(--success-soft)" }}>
             <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-[var(--glass-strong)] text-[var(--success)]"><CheckCircle size={16} weight="fill" /></span>
-            <div className="min-w-0 flex-1"><p className="text-[9px] font-semibold text-main">Capture extracted & verified</p><p className="text-[7.5px] text-muted">98.4% confidence · processed in 0.8s · discarded</p></div>
+            <div className="min-w-0 flex-1"><p className="text-[9px] font-semibold text-main">Capture extracted & verified</p><p className="text-[7.5px] text-muted">Processed locally · image discarded from memory</p></div>
             <button onClick={() => fileRef.current?.click()} className="text-[8px] font-semibold text-accent">Replace</button>
           </div>
           {detectedTotp && (

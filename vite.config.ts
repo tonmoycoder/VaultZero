@@ -14,11 +14,24 @@ export default defineConfig({
   plugins: [
     react(),
     tailwindcss(),
-    ...(process.env.VITE_MULTI_ASSET === "true" ? [] : [viteSingleFile()]),
+    ...(process.env.BUILD_SINGLE_FILE === "true" ? [viteSingleFile()] : []),
   ],
   resolve: {
     alias: {
       "@": path.resolve(__dirname, "src"),
+    },
+  },
+  build: {
+    target: "esnext",
+    minify: "esbuild",
+    cssCodeSplit: true,
+    rollupOptions: {
+      output: {
+        manualChunks: {
+          vendor: ["react", "react-dom"],
+          icons: ["@phosphor-icons/react"],
+        },
+      },
     },
   },
   clearScreen: false,

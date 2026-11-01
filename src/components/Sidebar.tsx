@@ -345,7 +345,7 @@ export default function Sidebar({
         <button
           onClick={(e) => {
             if (e.shiftKey || e.altKey) {
-              const current = (typeof window !== "undefined" && localStorage.getItem("vaultzero_username")) || "Ayaan Rahman";
+              const current = (typeof window !== "undefined" && localStorage.getItem("vaultzero_username")) || (lang === "bn" ? "ভল্ট ওনার" : "Vault Owner");
               const next = window.prompt("Change vault profile name:", current);
               if (next && next.trim()) {
                 localStorage.setItem("vaultzero_username", next.trim());
@@ -358,15 +358,22 @@ export default function Sidebar({
           aria-label="Vault preferences"
           className="flex w-full items-center gap-2.5 rounded-[12px] px-1.5 py-1.5 text-left transition-colors hover:bg-[var(--hover)]"
         >
-          <Avatar size={29} />
-          <div className="min-w-0 flex-1">
-            <p className="truncate text-[10.5px] font-semibold leading-tight text-main">
-              {(typeof window !== "undefined" && localStorage.getItem("vaultzero_username")) || "Ayaan Rahman"}
-            </p>
-            <p className="mt-0.5 truncate text-[8px] leading-tight text-faint">
-              {items.length} {t(lang, "items")} · {t(lang, "synced")}
-            </p>
-          </div>
+          {(() => {
+            const username = (typeof window !== "undefined" && localStorage.getItem("vaultzero_username")) || (lang === "bn" ? "ভল্ট ওনার" : "Vault Owner");
+            return (
+              <>
+                <Avatar name={username} size={29} />
+                <div className="min-w-0 flex-1">
+                  <p className="truncate text-[10.5px] font-semibold leading-tight text-main">
+                    {username}
+                  </p>
+                  <p className="mt-0.5 truncate text-[8px] leading-tight text-faint">
+                    {items.length} {t(lang, "items")} · {t(lang, "synced")}
+                  </p>
+                </div>
+              </>
+            );
+          })()}
           <Kbd>⌘ ,</Kbd>
         </button>
       </div>

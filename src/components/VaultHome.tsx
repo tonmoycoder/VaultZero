@@ -867,7 +867,7 @@ export default function VaultHome({
           >
             {(() => {
               const storedUser = typeof window !== "undefined" ? localStorage.getItem("vaultzero_username") : null;
-              const name = storedUser?.trim() || (lang === "bn" ? "আয়ান" : "Ayaan");
+              const name = storedUser?.trim() || (lang === "bn" ? "ভল্ট ওনার" : "Vault Owner");
               return lang === "bn" ? `শুভ সকাল, ${name}।` : `Good morning, ${name}.`;
             })()}
           </h1>
@@ -921,15 +921,6 @@ export default function VaultHome({
             aria-label={t(lang, "scanImport")}
           >
             <Scan size={15} weight="duotone" />
-          </button>
-        </Tooltip>
-        <Tooltip label="Add new">
-          <button
-            onClick={onAdd}
-            className="primary-button flex h-[40px] w-[40px] shrink-0 items-center justify-center rounded-[13px] lg:hidden"
-            aria-label="Add new item"
-          >
-            <Plus size={17} weight="bold" />
           </button>
         </Tooltip>
       </div>

@@ -1,7 +1,7 @@
 import { useEffect, useId, useMemo, useRef, useState, type CSSProperties, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { AnimatePresence, motion, useIsPresent } from "framer-motion";
-import { Check, Copy, X } from "@phosphor-icons/react";
+import { Check, Copy, Globe, X } from "@phosphor-icons/react";
 import { brands, type BrandKey, type Strength } from "../lib/vault";
 import { cn } from "../utils/cn";
 import { hapticSuccess, useMotionSettings } from "./Tactile";
@@ -80,8 +80,24 @@ export function BrandMark({
   const data = brands[brand] || brands.vault;
   const safeDomain = useMemo(() => extractSafeDomain(url), [url]);
 
-  // 1. Registered vector in simple-icons (non-vault)
-  if (brand !== "vault" && data.path) {
+  // 1. VaultZero Native Emblem for vault/demo items
+  if (brand === "vault" || (safeDomain && safeDomain.includes("vaultzero"))) {
+    return (
+      <span
+        className={cn(
+          "brand-tile inline-flex shrink-0 items-center justify-center overflow-hidden rounded-[30%] border border-white/20 shadow-sm",
+          className,
+        )}
+        style={{ width: size, height: size, background: "var(--accent-soft)" }}
+        aria-label="VaultZero Native"
+      >
+        <Logo size={Math.round(size * 0.78)} showGlow={false} />
+      </span>
+    );
+  }
+
+  // 2. Registered vector in simple-icons (non-vault)
+  if (data.path) {
     return (
       <span
         className={cn(
@@ -105,8 +121,8 @@ export function BrandMark({
     );
   }
 
-  // 2. Safe official high-res favicon if valid domain exists and hasn't errored
-  if (safeDomain && !imgFailed) {
+  // 3. Safe official high-res favicon if valid non-offline domain exists and hasn't errored
+  if (safeDomain && !imgFailed && !safeDomain.includes("localhost") && !safeDomain.includes(".local")) {
     return (
       <span
         className={cn(
@@ -127,40 +143,38 @@ export function BrandMark({
     );
   }
 
-  // 3. Clean Monogram Initial Avatar (Zero Wrong Logos fallback)
-  const initial = (title || data.name || "V").trim().charAt(0).toUpperCase();
+  // 4. Ultra-Crisp Vector Globe / Monogram Initial (Zero blurry raster globes)
+  const initial = (title || data.name || "").trim().charAt(0).toUpperCase();
 
   return (
     <span
       className={cn(
-        "brand-tile inline-flex shrink-0 items-center justify-center rounded-[30%]",
+        "brand-tile inline-flex shrink-0 items-center justify-center rounded-[30%] border border-white/10",
         className,
       )}
-      style={{ width: size, height: size }}
+      style={{
+        width: size,
+        height: size,
+        background: data.tint || "var(--accent-soft)",
+      }}
       aria-label={data.name}
     >
-      {initial && initial !== "V" ? (
+      {initial ? (
         <span
-          className="flex h-full w-full items-center justify-center rounded-[30%] font-semibold text-main text-[12px] border border-white/10"
-          style={{ background: data.tint || "rgba(124, 107, 255, 0.14)", color: data.hex || "var(--accent)" }}
+          className="flex h-full w-full items-center justify-center rounded-[30%] font-semibold text-main text-[12px]"
+          style={{ color: data.hex || "var(--accent)" }}
         >
           {initial}
         </span>
       ) : (
-        <svg viewBox="0 0 24 24" width={size * 0.54} height={size * 0.54} fill="none" aria-hidden="true">
-          <path d="M5 10.5V8a7 7 0 0 1 14 0v2.5" stroke={data.hex} strokeWidth="2.1" strokeLinecap="round" />
-          <rect x="4" y="10" width="16" height="10" rx="3.2" fill={data.hex} opacity=".16" />
-          <rect x="4" y="10" width="16" height="10" rx="3.2" stroke={data.hex} strokeWidth="1.7" />
-          <circle cx="12" cy="15" r="1.45" fill={data.hex} />
-          <path d="M12 16v2" stroke={data.hex} strokeWidth="1.6" strokeLinecap="round" />
-        </svg>
+        <Globe size={Math.round(size * 0.54)} weight="duotone" className="text-accent" />
       )}
     </span>
   );
 }
 
 export function Avatar({
-  name = "Ayaan Rahman",
+  name = "Vault Owner",
   size = 34,
   className,
 }: {

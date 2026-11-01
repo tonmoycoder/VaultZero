@@ -452,6 +452,11 @@ export function SyncModal({ onClose, onNotify }: { onClose: () => void; onNotify
   const [cameraError, setCameraError] = useState("");
   const [transferring, setTransferring] = useState(false);
 
+  const isMobileDevice = useMemo(() => {
+    if (typeof navigator === "undefined") return false;
+    return /android|iphone|ipad|ipod|mobile/i.test(navigator.userAgent) || (navigator.maxTouchPoints > 1 && typeof window !== "undefined" && window.innerWidth < 800);
+  }, []);
+
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
@@ -471,7 +476,7 @@ export function SyncModal({ onClose, onNotify }: { onClose: () => void; onNotify
 
   // Camera scanner lifecycle
   useEffect(() => {
-    if (tab !== "scan") {
+    if (tab !== "scan" || !isMobileDevice) {
       stopCamera();
       return;
     }
@@ -480,7 +485,7 @@ export function SyncModal({ onClose, onNotify }: { onClose: () => void; onNotify
     return () => {
       stopCamera();
     };
-  }, [tab]);
+  }, [tab, isMobileDevice]);
 
   const startCamera = async () => {
     setCameraError("");
@@ -684,7 +689,7 @@ export function SyncModal({ onClose, onNotify }: { onClose: () => void; onNotify
           )}
         >
           <Camera size={15} weight="bold" />
-          Scan QR / Connect
+          {isMobileDevice ? "Scan QR / Camera" : "Direct Connect / IP"}
         </button>
       </div>
 
@@ -730,36 +735,48 @@ export function SyncModal({ onClose, onNotify }: { onClose: () => void; onNotify
       {/* Tab B: Scan QR / Camera & Manual Input */}
       {tab === "scan" && (
         <div className="mt-3.5 flex flex-col items-center justify-center rounded-[20px] border border-[var(--border-soft)] bg-[var(--glass-soft)] p-4 text-center">
-          <div className="relative h-[190px] w-full max-w-[280px] overflow-hidden rounded-[16px] border border-[var(--border)] bg-black/80 shadow-inner">
-            <video
-              ref={videoRef}
-              className="h-full w-full object-cover"
-              playsInline
-              muted
-            />
-            <canvas ref={canvasRef} className="hidden" />
+          {isMobileDevice ? (
+            <div className="relative h-[190px] w-full max-w-[280px] overflow-hidden rounded-[16px] border border-[var(--border)] bg-black/80 shadow-inner">
+              <video
+                ref={videoRef}
+                className="h-full w-full object-cover"
+                playsInline
+                muted
+              />
+              <canvas ref={canvasRef} className="hidden" />
 
-            {/* Target Reticle */}
-            <div className="pointer-events-none absolute inset-6 rounded-lg border-2 border-dashed border-[var(--accent)] opacity-70 animate-pulse" />
+              {/* Target Reticle */}
+              <div className="pointer-events-none absolute inset-6 rounded-lg border-2 border-dashed border-[var(--accent)] opacity-70 animate-pulse" />
 
-            {!cameraActive && (
-              <div className="absolute inset-0 flex flex-col items-center justify-center p-3 text-center text-white">
-                <Camera size={24} className="opacity-60" />
-                <p className="mt-1 text-[9px] font-semibold">Camera standby</p>
-                {cameraError && <p className="mt-0.5 text-[7.5px] text-amber-300">{cameraError}</p>}
-                <button
-                  type="button"
-                  onClick={startCamera}
-                  className="secondary-button mt-2 h-6 rounded-full px-2.5 text-[8px] font-semibold text-white"
-                >
-                  Start camera
-                </button>
-              </div>
-            )}
-          </div>
+              {!cameraActive && (
+                <div className="absolute inset-0 flex flex-col items-center justify-center p-3 text-center text-white">
+                  <Camera size={24} className="opacity-60" />
+                  <p className="mt-1 text-[9px] font-semibold">Camera standby</p>
+                  {cameraError && <p className="mt-0.5 text-[7.5px] text-amber-300">{cameraError}</p>}
+                  <button
+                    type="button"
+                    onClick={startCamera}
+                    className="secondary-button mt-2 h-6 rounded-full px-2.5 text-[8px] font-semibold text-white"
+                  >
+                    Start camera
+                  </button>
+                </div>
+              )}
+            </div>
+          ) : (
+            <div className="mb-2 w-full max-w-[360px] rounded-[16px] border border-[var(--border-soft)] bg-[var(--glass-input)] p-3 text-left">
+              <p className="flex items-center gap-1.5 text-[9.5px] font-semibold text-main">
+                <WifiHigh size={14} weight="duotone" className="text-accent" />
+                Desktop Direct LAN Pairing
+              </p>
+              <p className="mt-1 text-[8px] leading-relaxed text-muted">
+                Desktop PCs host the pairing session via QR code. To connect from this PC to another host, enter the peer IP or 6-digit PIN below.
+              </p>
+            </div>
+          )}
 
           <p className="mt-2.5 text-[9px] text-muted">
-            Point camera at the host QR code or enter peer connection details manually:
+            {isMobileDevice ? "Point camera at the host QR code or enter peer details:" : "Enter peer host IP or pairing PIN:"}
           </p>
 
           <div className="mt-2 flex w-full max-w-[340px] items-center gap-2">

@@ -204,10 +204,23 @@ jobs:
         run: |
           TAG="${{ github.ref_name }}"
           if [ -z "$TAG" ] || [ "$TAG" = "main" ]; then
-            TAG="v2.4.0"
+            TAG="v2.4.1"
           fi
           echo "Processing release for tag: $TAG"
           gh release view "$TAG" 2>/dev/null || gh release create "$TAG" --title "VaultZero $TAG — Living Flow & Multi-Platform Release" --generate-notes
-          echo "Uploading release assets with overwrite support..."
-          gh release upload "$TAG" release-dist/* --clobber
+          echo "Uploading release assets with conflict-free per-asset overwrite..."
+          for file in release-dist/*; do
+            [ -f "$file" ] || continue
+            filename=$(basename "$file")
+            echo "Checking and clearing existing asset $filename if present..."
+            gh release delete-asset "$TAG" "$filename" -y 2>/dev/null || true
+            echo "Uploading $filename..."
+            gh release upload "$TAG" "$file" --clobber || {
+              echo "Retrying $filename after delay..."
+              sleep 2
+              gh release delete-asset "$TAG" "$filename" -y 2>/dev/null || true
+              gh release upload "$TAG" "$file" --clobber
+            }
+          done
+          echo "All release assets uploaded successfully for $TAG."
 

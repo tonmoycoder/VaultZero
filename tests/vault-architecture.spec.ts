@@ -57,7 +57,7 @@ test.describe("VaultZero Architectural Hardening & Cryptographic Gate", () => {
     await dialog.getByRole("button", { name: "Create local vault" }).click();
 
     // Should arrive at main vault dashboard
-    await expect(page.getByRole("heading", { name: "Good morning, Ayaan." })).toBeVisible();
+    await expect(page.getByRole("heading", { name: /Good morning/i })).toBeVisible();
 
     // Exactly 1 demo account exists
     const cards = page.locator(".vault-card");
@@ -68,7 +68,7 @@ test.describe("VaultZero Architectural Hardening & Cryptographic Gate", () => {
   test("Deleting the Demo Account leaves vault 100% empty and displays EmptyVault state", async ({ page }) => {
     // Start unlocked
     await page.goto("/?unlocked=true");
-    await expect(page.getByRole("heading", { name: "Good morning, Ayaan." })).toBeVisible();
+    await expect(page.getByRole("heading", { name: /Good morning/i })).toBeVisible();
 
     // Find the demo card
     const demoCard = page.locator('[data-item-id="demo-account"]');
@@ -139,7 +139,7 @@ test.describe("VaultZero Architectural Hardening & Cryptographic Gate", () => {
 
   test("Panic auto-lock on Ctrl+L wipes session and returns to LockScreen", async ({ page }) => {
     await page.goto("/?unlocked=true");
-    await expect(page.getByRole("heading", { name: "Good morning, Ayaan." })).toBeVisible();
+    await expect(page.getByRole("heading", { name: /Good morning/i })).toBeVisible();
 
     // Press Ctrl+L
     await page.keyboard.press("Control+l");

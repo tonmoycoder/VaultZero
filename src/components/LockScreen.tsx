@@ -241,7 +241,7 @@ export default function LockScreen({
               ? t(lang, "setupTitle")
               : (() => {
                   const stored = typeof window !== "undefined" ? localStorage.getItem("vaultzero_username") : null;
-                  const name = stored?.trim() || (lang === "bn" ? "আয়ান" : "Ayaan");
+                  const name = stored?.trim() || (lang === "bn" ? "ভল্ট ওনার" : "Vault Owner");
                   return lang === "bn" ? `স্বাগতম, ${name}।` : `Welcome back, ${name}.`;
                 })()}
           </h1>
@@ -406,18 +406,20 @@ export default function LockScreen({
             <button
               type="submit"
               disabled={loading}
-              className="primary-button mt-1 flex h-[44px] w-full items-center justify-center gap-2 rounded-[14px] text-[11.5px] font-semibold disabled:opacity-80"
+              className="primary-button mt-2 flex min-h-[48px] w-full items-center justify-between gap-3 rounded-[16px] px-6 py-3.5 text-[12px] font-semibold shadow-md transition-all disabled:opacity-80"
             >
               {loading && !biometric ? (
-                <>
-                  <span className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-white/35 border-t-white" />
-                  {isSetup ? "Sealing vault with Argon2id…" : "Deriving vault key…"}
-                </>
+                <div className="flex w-full items-center justify-center gap-2">
+                  <span className="h-4 w-4 animate-spin rounded-full border-2 border-white/35 border-t-white" />
+                  <span>{isSetup ? "Sealing vault with Argon2id…" : "Deriving vault key…"}</span>
+                </div>
               ) : (
                 <>
-                  <LockKey size={14} weight="bold" />
-                  {isSetup ? t(lang, "createVaultBtn") : t(lang, "unlockVaultBtn")}
-                  <ArrowRight size={13} weight="bold" className="ml-auto mr-0.5 opacity-70" />
+                  <div className="flex items-center gap-2.5">
+                    <LockKey size={16} weight="bold" className="shrink-0" />
+                    <span>{isSetup ? t(lang, "createVaultBtn") : t(lang, "unlockVaultBtn")}</span>
+                  </div>
+                  <ArrowRight size={15} weight="bold" className="shrink-0 opacity-80" />
                 </>
               )}
             </button>
@@ -449,7 +451,7 @@ export default function LockScreen({
                 type="button"
                 onClick={handleBiometric}
                 disabled={loading}
-                className="secondary-button flex h-[41px] w-full items-center justify-center gap-2 rounded-[13px] text-[10.5px] font-semibold"
+                className="secondary-button flex min-h-[46px] w-full items-center justify-center gap-3 rounded-[15px] px-6 py-3 text-[11px] font-semibold"
               >
                 <span
                   className="flex h-6 w-6 items-center justify-center rounded-full"

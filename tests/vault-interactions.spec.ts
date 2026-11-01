@@ -187,7 +187,7 @@ test.beforeEach(async ({ page }) => {
     );
   }, TEST_ITEMS);
   await page.goto("/?unlocked=true");
-  await expect(page.getByRole("heading", { name: "Good morning, Ayaan." })).toBeVisible();
+  await expect(page.getByRole("heading", { name: /Good morning/i })).toBeVisible();
 });
 
 for (const width of [1440, 1366, 1280]) {
