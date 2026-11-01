@@ -737,6 +737,7 @@ export default function App() {
               onCreate={handleCreate}
               onDraft={handleScanDraft}
               onNotify={notify}
+              lang={lang}
             />
           )}
           {modal === "mobileMenu" && (

@@ -32,6 +32,9 @@ import { cn } from "../utils/cn";
 import { BrandMark, CopyButton, GlassCheck, Modal, StrengthDots, Tooltip } from "./ui";
 import OcrCopyPad, { type OcrField } from "./OcrCopyPad";
 import { MAX_OCR_FILE_SIZE, runLocalOcr } from "../lib/ocr";
+import jsQR from "jsqr";
+import { parseOtpAuthUri } from "../lib/totp";
+import type { Language } from "../lib/vault";
 
 type Notify = (message: string) => void;
 type CreateItem = (item: VaultItem) => void;
@@ -393,16 +396,48 @@ function parseScan(text: string): Partial<VaultItem> {
   };
 }
 
+async function extractQrFromImage(file: File): Promise<string | null> {
+  return new Promise((resolve) => {
+    const img = new window.Image();
+    const url = URL.createObjectURL(file);
+    img.onload = () => {
+      URL.revokeObjectURL(url);
+      try {
+        const canvas = document.createElement("canvas");
+        canvas.width = img.width;
+        canvas.height = img.height;
+        const ctx = canvas.getContext("2d", { willReadFrequently: true });
+        if (!ctx) { resolve(null); return; }
+        ctx.drawImage(img, 0, 0);
+        const imgData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+        const code = jsQR(imgData.data, imgData.width, imgData.height, {
+          inversionAttempts: "dontInvert",
+        });
+        resolve(code ? code.data : null);
+      } catch {
+        resolve(null);
+      }
+    };
+    img.onerror = () => {
+      URL.revokeObjectURL(url);
+      resolve(null);
+    };
+    img.src = url;
+  });
+}
+
 export function OcrModal({
   onClose,
   onCreate,
   onDraft,
   onNotify,
+  lang = "en",
 }: {
   onClose: () => void;
   onCreate: CreateItem;
   onDraft: (draft: Partial<VaultItem>) => void;
   onNotify: Notify;
+  lang?: Language;
 }) {
   const [stage, setStage] = useState<OcrStage>("idle");
   const [progress, setProgress] = useState(0);
@@ -411,7 +446,35 @@ export function OcrModal({
   const [preview, setPreview] = useState<string | null>(null);
   const [extracted, setExtracted] = useState("");
   const [title, setTitle] = useState("Scanned capture");
+  const [assignedUsername, setAssignedUsername] = useState<string | null>(null);
+  const [assignedPassword, setAssignedPassword] = useState<string | null>(null);
+  const [assignedUrl, setAssignedUrl] = useState<string | null>(null);
+  const [detectedTotp, setDetectedTotp] = useState<{
+    issuer?: string;
+    label?: string;
+    secret: string;
+    period?: number;
+  } | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
+
+  const handleOcrAssign = (field: OcrField, value: string) => {
+    if (field === "title") {
+      setTitle(value);
+      onNotify(lang === "bn" ? `শিরোনাম: ${value}` : `Title: ${value}`);
+    } else if (field === "username") {
+      setAssignedUsername(value);
+      onNotify(lang === "bn" ? `ইউজারনেম: ${value}` : `Username: ${value}`);
+    } else if (field === "password") {
+      setAssignedPassword(value);
+      onNotify(lang === "bn" ? `পাসওয়ার্ড সেট করা হয়েছে` : `Password assigned`);
+    } else if (field === "url") {
+      setAssignedUrl(value);
+      onNotify(lang === "bn" ? `ওয়েবসাইট: ${value}` : `Website: ${value}`);
+    } else if (field === "note") {
+      setExtracted((prev) => (prev ? `${prev}\n${value}` : value));
+      onNotify(lang === "bn" ? `নোটের সাথে যুক্ত করা হয়েছে` : `Appended to note`);
+    }
+  };
 
   const handleFile = async (file?: File | null) => {
     if (!file) return;
@@ -430,14 +493,33 @@ export function OcrModal({
     setProgress(15);
 
     try {
+      // 1. Run local OCR text extraction
       const { rawText, creds } = await runLocalOcr(file, (p) => setProgress(p));
-      const resText = rawText || "No text detected in image.";
+      let resText = rawText || "No text detected in image.";
+
+      // 2. Concurrently check for 2FA Authenticator QR code (otpauth://...)
+      const qrData = await extractQrFromImage(file);
+      if (qrData) {
+        if (qrData.startsWith("otpauth://totp/")) {
+          try {
+            const parsedTotp = parseOtpAuthUri(qrData);
+            setDetectedTotp(parsedTotp);
+            onNotify(
+              lang === "bn"
+                ? `২FA অথেন্টিকেটর কিউআর কোড পাওয়া গেছে (${parsedTotp.issuer || parsedTotp.label})`
+                : `2FA Authenticator QR code detected (${parsedTotp.issuer || parsedTotp.label})`
+            );
+          } catch {}
+        }
+        resText = `[QR CODE]: ${qrData}\n\n${resText}`;
+      }
+
       setExtracted(resText);
       const parsed = parseScan(resText);
       setTitle(parsed.title || creds.title || file.name.replace(/\.[^/.]+$/, ""));
       setProgress(100);
       setStage("done");
-      onNotify("Image analyzed locally · zero telemetry");
+      onNotify(lang === "bn" ? "ছবি স্থানীয়ভাবে অ্যানালাইজ সম্পন্ন · জিরো টেলিমেট্রি" : "Image analyzed locally · zero telemetry");
     } catch (err: any) {
       onNotify(err?.message || "Failed to analyze image");
       setStage("idle");
@@ -491,8 +573,16 @@ export function OcrModal({
 
   const createItem = () => {
     const parsed = parseScan(extracted);
-    onDraft({ ...parsed, title: title.trim() || parsed.title });
-    onNotify("Scanned details ready — review before saving");
+    onDraft({
+      ...parsed,
+      title: title.trim() || parsed.title,
+      username: assignedUsername || parsed.username,
+      password: assignedPassword || parsed.password,
+      url: assignedUrl || parsed.url,
+      note: extracted,
+      totp: detectedTotp?.secret || parsed.totp,
+    });
+    onNotify(lang === "bn" ? "ওসিআর তথ্য অ্যাড ফর্মে প্রস্তুত — রিভিউ করে সেভ করুন" : "Scanned details ready — review before saving");
   };
 
   const save = () => {
@@ -698,6 +788,50 @@ export function OcrModal({
             <div className="min-w-0 flex-1"><p className="text-[9px] font-semibold text-main">Capture extracted & verified</p><p className="text-[7.5px] text-muted">98.4% confidence · processed in 0.8s · discarded</p></div>
             <button onClick={() => fileRef.current?.click()} className="text-[8px] font-semibold text-accent">Replace</button>
           </div>
+          {detectedTotp && (
+            <div className="mb-2.5 flex items-center justify-between gap-3 rounded-[14px] border border-[var(--accent)]/30 bg-[var(--accent-soft)] p-2.5">
+              <div className="flex items-center gap-2">
+                <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-[var(--accent)] text-white">
+                  <ShieldCheck size={16} weight="bold" />
+                </span>
+                <div>
+                  <p className="text-[10px] font-semibold text-main">
+                    {lang === "bn" ? "২FA অথেন্টিকেটর কিউআর শনাক্ত হয়েছে" : "2FA Authenticator QR Detected"}
+                  </p>
+                  <p className="font-mono text-[8px] text-muted">
+                    {detectedTotp.issuer ? `${detectedTotp.issuer} · ` : ""}{detectedTotp.label} ({lang === "bn" ? "সিক্রেট কি" : "Secret"}: {detectedTotp.secret.slice(0, 6)}••••)
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  onCreate({
+                    id: `totp-${Date.now()}`,
+                    title: detectedTotp.issuer || detectedTotp.label || "2FA Account",
+                    username: detectedTotp.label || "2FA User",
+                    password: "—",
+                    url: "",
+                    category: "login",
+                    brand: "vault",
+                    favorite: false,
+                    strength: "strong",
+                    score: 4,
+                    modified: "Just now",
+                    totp: detectedTotp.secret,
+                    tags: ["2FA", "Scanned"],
+                    folder: "Work",
+                  });
+                  onNotify(lang === "bn" ? "২FA অ্যাকাউন্ট ভল্টে সংরক্ষিত হয়েছে" : "2FA Authenticator account saved to vault");
+                  onClose();
+                }}
+                className="primary-button h-8 shrink-0 whitespace-nowrap rounded-full px-3 text-[9.5px] font-semibold"
+              >
+                {lang === "bn" ? "২FA যোগ করুন" : "Save 2FA Account"}
+              </button>
+            </div>
+          )}
+
           <div className="grid gap-2.5 sm:grid-cols-[122px_1fr]">
             <div className="hidden flex-col gap-2 sm:flex">
               <div className="relative flex h-[92px] items-center justify-center overflow-hidden rounded-[11px] border border-[var(--border-soft)] bg-[var(--glass-input)]">
@@ -724,8 +858,35 @@ export function OcrModal({
                 className="field resize-none font-mono text-[9px] leading-relaxed text-main"
                 spellCheck={false}
               />
+
+              {(assignedUsername || assignedPassword || assignedUrl) && (
+                <div className="mt-2 flex flex-wrap gap-1.5 text-[8px]">
+                  {assignedUsername && (
+                    <span className="rounded-md border border-[var(--accent)]/30 bg-[var(--accent-soft)] px-2 py-0.5 text-accent font-medium">
+                      User: {assignedUsername}
+                    </span>
+                  )}
+                  {assignedPassword && (
+                    <span className="rounded-md border border-[var(--success)]/30 bg-[var(--success-soft)] px-2 py-0.5 text-success font-medium">
+                      Password: {assignedPassword.slice(0, 4)}••••
+                    </span>
+                  )}
+                  {assignedUrl && (
+                    <span className="rounded-md border border-[var(--border)] bg-[var(--glass-strong)] px-2 py-0.5 text-muted font-medium">
+                      URL: {assignedUrl}
+                    </span>
+                  )}
+                </div>
+              )}
+
               <div className="mt-2">
-                <OcrCopyPad rawText={extracted} onTextChange={setExtracted} onNotify={onNotify} />
+                <OcrCopyPad
+                  rawText={extracted}
+                  onTextChange={setExtracted}
+                  onAssign={handleOcrAssign}
+                  onNotify={onNotify}
+                  lang={lang}
+                />
               </div>
             </div>
           </div>
