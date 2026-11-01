@@ -626,53 +626,53 @@ export function OcrModal({
       icon={<Scan size={20} weight="duotone" />}
       width="max-w-[700px]"
       footer={
-        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-          <span className="hidden items-center gap-1.5 text-[8.5px] text-faint sm:flex">
-            <LockSimple size={11} weight="duotone" className="shrink-0 text-success" />
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between w-full">
+          <span className="hidden items-center gap-1.5 text-[9px] text-faint md:flex">
+            <LockSimple size={12} weight="duotone" className="shrink-0 text-success" />
             Images are discarded after extraction (100% offline)
           </span>
-          <div className="flex w-full flex-wrap items-center justify-end gap-2 sm:w-auto sm:flex-nowrap">
+          <div className="flex items-center justify-end gap-2.5 w-full sm:w-auto">
             {stage !== "done" ? (
               <>
                 <button
                   type="button"
                   onClick={onClose}
-                  className="secondary-button flex h-[42px] shrink-0 items-center justify-center whitespace-nowrap rounded-[14px] px-4.5 text-[11px] font-semibold"
+                  className="secondary-button flex h-10 shrink-0 items-center justify-center whitespace-nowrap rounded-full px-5 text-[11px] font-semibold"
                 >
                   Cancel
                 </button>
                 <button
                   type="button"
                   onClick={() => fileRef.current?.click()}
-                  className="primary-button flex h-[42px] shrink-0 items-center gap-2 whitespace-nowrap rounded-[14px] px-5 text-[11px] font-semibold shadow-md shadow-[var(--accent-glow)]"
+                  className="primary-button flex h-10 shrink-0 items-center gap-2 whitespace-nowrap rounded-full px-5 text-[11px] font-semibold shadow-md shadow-[var(--accent-glow)]"
                 >
                   <Image size={15} weight="bold" /> Choose image
                 </button>
               </>
             ) : (
-              <>
+              <div className="flex items-center gap-2 w-full justify-end flex-wrap sm:flex-nowrap">
                 <button
                   type="button"
                   onClick={reset}
-                  className="secondary-button flex h-[42px] shrink-0 items-center justify-center whitespace-nowrap rounded-[14px] px-4.5 text-[11px] font-semibold"
+                  className="secondary-button flex h-10 shrink-0 items-center justify-center whitespace-nowrap rounded-full px-4 text-[11px] font-semibold"
                 >
                   Scan another
                 </button>
                 <button
                   type="button"
                   onClick={save}
-                  className="secondary-button flex h-[42px] shrink-0 items-center gap-2 whitespace-nowrap rounded-[14px] px-4.5 text-[11px] font-semibold"
+                  className="secondary-button flex h-10 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-full px-4 text-[11px] font-semibold"
                 >
-                  <NotePencil size={15} weight="duotone" /> Save as note
+                  <NotePencil size={14} weight="duotone" /> Save as note
                 </button>
                 <button
                   type="button"
                   onClick={createItem}
-                  className="primary-button flex h-[42px] shrink-0 items-center gap-2 whitespace-nowrap rounded-[14px] px-5 text-[11px] font-semibold shadow-md shadow-[var(--accent-glow)]"
+                  className="primary-button flex h-10 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-full px-5 text-[11px] font-semibold shadow-md shadow-[var(--accent-glow)]"
                 >
-                  <Plus size={15} weight="bold" /> Create item
+                  <Plus size={14} weight="bold" /> Create item
                 </button>
-              </>
+              </div>
             )}
           </div>
         </div>

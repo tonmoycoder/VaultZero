@@ -13,10 +13,13 @@ use vault_core::storage::{StorageEngine, UnlockedVaultSession};
 use vault_core::totp::generate_totp;
 use vault_core::HlcClock;
 
+pub mod p2p_lan;
+
 pub struct AppState {
     pub session: Mutex<Option<UnlockedVaultSession>>,
     pub vault_path: Mutex<Option<PathBuf>>,
     pub hlc: HlcClock,
+    pub p2p: tokio::sync::Mutex<p2p_lan::P2PManager>,
 }
 
 impl Default for AppState {
@@ -25,6 +28,7 @@ impl Default for AppState {
             session: Mutex::new(None),
             vault_path: Mutex::new(None),
             hlc: HlcClock::new(1),
+            p2p: tokio::sync::Mutex::new(p2p_lan::P2PManager::new()),
         }
     }
 }
@@ -424,6 +428,48 @@ pub mod commands {
         let _ = (window, enabled);
         Ok(())
     }
+
+    #[tauri::command]
+    pub async fn start_p2p_host(
+        pin: String,
+        payload: String,
+        device_name: Option<String>,
+        state: State<'_, AppState>,
+    ) -> Result<p2p_lan::P2PHostInfo, String> {
+        let name = device_name.unwrap_or_else(|| "VaultZero-Peer".into());
+        let mut mgr = state.p2p.lock().await;
+        mgr.start_host(pin, payload, name).await
+    }
+
+    #[tauri::command]
+    pub async fn discover_peers() -> Result<Vec<p2p_lan::DiscoveredPeer>, String> {
+        p2p_lan::P2PManager::discover_peers().await
+    }
+
+    #[tauri::command]
+    pub async fn sync_vault_payload(
+        peer_ip: String,
+        peer_port: u16,
+        pin: String,
+    ) -> Result<String, String> {
+        p2p_lan::P2PManager::sync_from_peer(peer_ip, peer_port, pin).await
+    }
+
+    #[tauri::command]
+    pub fn generate_totp_cmd(secret: String) -> Result<TotpResponse, String> {
+        let clean: String = secret.chars().filter(|c| !c.is_whitespace() && *c != '-').collect();
+        let clean = clean.to_ascii_uppercase();
+        let re = regex::Regex::new(r"^[A-Z2-7]+=*$").map_err(|e| e.to_string())?;
+        if !re.is_match(&clean) {
+            return Err("Invalid Base32 secret key: only A-Z and 2-7 characters allowed".into());
+        }
+        if clean.trim_end_matches('=').len() < 16 {
+            return Err("Secret key must be at least 16 characters for RFC 6238 compliance".into());
+        }
+        let now_epoch = chrono::Utc::now().timestamp() as u64;
+        let (code, remaining) = generate_totp(&clean, now_epoch, 30, 6, "SHA1").map_err(|e| e.to_string())?;
+        Ok(TotpResponse { code, remaining_seconds: remaining })
+    }
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -452,6 +498,10 @@ pub fn run() {
             commands::generate_p2p_beacon_cmd,
             commands::chunk_optical_payload_cmd,
             commands::reassemble_optical_chunks_cmd,
+            commands::start_p2p_host,
+            commands::discover_peers,
+            commands::sync_vault_payload,
+            commands::generate_totp_cmd,
             commands::set_screen_protection,
         ])
         .run(tauri::generate_context!())

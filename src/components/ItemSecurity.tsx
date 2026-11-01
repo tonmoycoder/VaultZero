@@ -71,7 +71,7 @@ export default function ItemSecurity({
         <span className="security-emblem">
           <ShieldCheck size={25} weight="duotone" />
         </span>
-        <h3>Cryptographic checkup</h3>
+        <h3>Password checkup</h3>
         <p>Zero-knowledge entropy & security analysis for {item.title}.</p>
       </div>
 

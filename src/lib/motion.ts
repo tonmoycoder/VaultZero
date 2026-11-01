@@ -53,9 +53,14 @@ export function useMediaQuery(query: string) {
 export function useDialogFocus(ref: RefObject<HTMLElement | null>, onClose: () => void, enabled = true) {
   const closeRef = useRef(onClose);
   closeRef.current = onClose;
+  const previousRef = useRef<HTMLElement | null>(
+    typeof document !== "undefined" && document.activeElement instanceof HTMLElement
+      ? document.activeElement
+      : null
+  );
+
   useEffect(() => {
     if (!enabled) return;
-    const previous = document.activeElement as HTMLElement | null;
     const root = ref.current;
     const focusable = () => Array.from(root?.querySelectorAll<HTMLElement>(
       'button:not(:disabled), a[href], input:not(:disabled), textarea:not(:disabled), select:not(:disabled), [tabindex="0"]',
@@ -89,7 +94,22 @@ export function useDialogFocus(ref: RefObject<HTMLElement | null>, onClose: () =
     return () => {
       cancelAnimationFrame(frame);
       document.removeEventListener("keydown", onKeyDown);
-      if (previous?.isConnected) previous.focus({ preventScroll: true });
     };
   }, [enabled, ref]);
+
+  useEffect(() => {
+    return () => {
+      setTimeout(() => {
+        const lastTrigger = (window as any).__lastModalTrigger;
+        if (lastTrigger && typeof lastTrigger.focus === "function") {
+          lastTrigger.focus({ preventScroll: true });
+          return;
+        }
+        const prev = previousRef.current;
+        if (prev && prev.isConnected) {
+          prev.focus({ preventScroll: true });
+        }
+      }, 30);
+    };
+  }, []);
 }

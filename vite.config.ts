@@ -30,6 +30,7 @@ export default defineConfig({
           "vendor-react": ["react", "react-dom"],
           "vendor-icons": ["@phosphor-icons/react"],
           "vendor-motion": ["framer-motion"],
+          "vendor-ocr": ["tesseract.js"],
         },
       },
     },
@@ -40,7 +41,7 @@ export default defineConfig({
     strictPort: true,
     host: "0.0.0.0",
     watch: {
-      ignored: ["**/src-tauri/**"],
+      ignored: ["**/src-tauri/**", "**/public/tessdata/**"],
     },
   },
 });

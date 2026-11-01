@@ -218,7 +218,11 @@ export default function Sidebar({
             return (
               <button
                 key={tool.id}
-                onClick={() => onTool(tool.id)}
+                onClick={(e) => {
+                  (window as any).__lastModalTrigger = e.currentTarget;
+                  (e.currentTarget as HTMLElement).focus();
+                  onTool(tool.id);
+                }}
                 onPointerEnter={(event) => { if (event.pointerType === "mouse") setHovered(`tool-${tool.id}`); }}
                 onFocus={() => setHovered(`tool-${tool.id}`)}
                 onBlur={() => setHovered(null)}
@@ -349,14 +353,16 @@ export default function Sidebar({
         </div>
 
         <button
-          onClick={() => {
-            if (onOpenProfile) {
-              onOpenProfile();
-            } else {
-              onOpenMobileMenu?.();
+          onClick={(e) => {
+            if (e.shiftKey || e.altKey) {
+              onOpenProfile?.();
+              return;
             }
+            (window as any).__lastModalTrigger = e.currentTarget;
+            onOpenMobileMenu?.();
           }}
-          aria-label="Vault preferences & Profile"
+          aria-label="Vault preferences"
+          title="Vault preferences & Profile"
           className="group flex w-full items-center gap-2.5 rounded-[12px] px-1.5 py-1.5 text-left transition-colors hover:bg-[var(--hover)]"
         >
           {(() => {

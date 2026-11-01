@@ -1,7 +1,7 @@
-import { useEffect, useId, useMemo, useRef, useState, type CSSProperties, type ReactNode } from "react";
+import { memo, useEffect, useId, useMemo, useRef, useState, type CSSProperties, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { AnimatePresence, motion, useIsPresent } from "framer-motion";
-import { Check, Copy, Globe, X } from "@phosphor-icons/react";
+import { Check, Copy, Globe, Timer, X } from "@phosphor-icons/react";
 import { brands, type BrandKey, type Strength } from "../lib/vault";
 import { cn } from "../utils/cn";
 import { hapticSuccess, useMotionSettings } from "./Tactile";
@@ -581,3 +581,31 @@ export function GlassCheck({
     </button>
   );
 }
+
+export const IsolatedTotpClock = memo(function IsolatedTotpClock({
+  size = 29,
+  stroke = 2.3,
+  showLabel = false,
+  label = "expires",
+  suffix = "s",
+}: {
+  size?: number;
+  stroke?: number;
+  showLabel?: boolean;
+  label?: string;
+  suffix?: string;
+}) {
+  const { remaining, progress } = useCountdown();
+  return (
+    <div className="inline-flex items-center gap-1.5">
+      <TotpRing size={size} remaining={remaining} progress={progress} stroke={stroke} />
+      {showLabel && (
+        <span className="flex items-center gap-1 text-[7.5px] text-faint font-mono">
+          <Timer size={9} />
+          {label} {remaining}{suffix}
+        </span>
+      )}
+    </div>
+  );
+});
+

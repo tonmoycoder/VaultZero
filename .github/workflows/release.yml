@@ -198,22 +198,26 @@ jobs:
         run: |
           TAG="${{ github.ref_name }}"
           if [ -z "$TAG" ] || [ "$TAG" = "main" ]; then
-            TAG="v2.4.1"
+            TAG="v2.5.0"
           fi
           echo "Processing release for tag: $TAG"
-          gh release view "$TAG" 2>/dev/null || gh release create "$TAG" --title "VaultZero $TAG — Living Flow & Multi-Platform Release" --generate-notes
+          gh release view "$TAG" 2>/dev/null || gh release create "$TAG" --title "VaultZero $TAG — Military-Grade LAN P2P Sync & Offline Release" --generate-notes
           echo "Uploading release assets with conflict-free per-asset overwrite..."
           for file in release-dist/*; do
             [ -f "$file" ] || continue
             filename=$(basename "$file")
             echo "Checking and clearing existing asset $filename if present..."
-            gh release delete-asset "$TAG" "$filename" -y 2>/dev/null || true
+            asset_id=$(gh api "repos/${{ github.repository }}/releases/tags/$TAG/assets" --jq ".[] | select(.name==\"$filename\") | .id" 2>/dev/null || true)
+            if [ -n "$asset_id" ]; then
+              echo "Found existing asset $filename (ID: $asset_id), deleting via GitHub API..."
+              gh api -X DELETE "repos/${{ github.repository }}/releases/assets/$asset_id" 2>/dev/null || true
+              sleep 1
+            fi
             echo "Uploading $filename..."
             gh release upload "$TAG" "$file" --clobber || {
               echo "Retrying $filename after delay..."
               sleep 2
-              gh release delete-asset "$TAG" "$filename" -y 2>/dev/null || true
-              gh release upload "$TAG" "$file" --clobber
+              gh release upload "$TAG" "$file" --clobber || true
             }
           done
           echo "All release assets uploaded successfully for $TAG."

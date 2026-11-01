@@ -765,6 +765,13 @@ export default function App() {
                         <p className="text-[11px] font-semibold text-main">{username}</p>
                         <p className="mt-0.5 text-[8px] text-faint">{items.length} items · local vault</p>
                       </div>
+                      <button
+                        type="button"
+                        onClick={() => setModal("profile")}
+                        className="rounded-lg bg-[var(--glass-input)] px-2 py-1 text-[8.5px] font-medium text-accent hover:bg-[var(--hover)]"
+                      >
+                        Edit
+                      </button>
                     </>
                   );
                 })()}

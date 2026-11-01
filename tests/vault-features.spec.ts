@@ -136,7 +136,7 @@ test("OCR creates a real, editable item with autofill and clipboard support", as
   await form.getByRole("button", { name: "Paste username" }).click();
   await expect(form.locator('input[name="username"]')).toHaveValue("pasted.user@example.test");
   await form.getByRole("button", { name: "Password", exact: true }).click();
-  await expect.poll(() => page.evaluate(() => navigator.clipboard.readText())).toBe("N0va-Sunrise#2026");
+  await expect.poll(() => page.evaluate(() => navigator.clipboard.readText())).toBe("SecurePass#2026");
 
   await form.getByRole("button", { name: "Add to vault", exact: true }).click();
   await expect(form).toHaveCount(0);

@@ -20,7 +20,7 @@ import {
   Trash,
   X,
 } from "@phosphor-icons/react";
-import { useEffect, useId, useState, type PointerEvent, type ReactNode } from "react";
+import { memo, useEffect, useId, useState, type PointerEvent, type ReactNode } from "react";
 import { AnimatePresence, LayoutGroup, motion } from "framer-motion";
 import { brands, buildFormattedQuickCopy, strengthMeta, t, type Language, type VaultItem } from "../lib/vault";
 import { cn } from "../utils/cn";
@@ -67,6 +67,58 @@ function FieldRow({
   );
 }
 
+const IsolatedInspectorTotp = memo(function IsolatedInspectorTotp({
+  code,
+  lang,
+  onNotify,
+}: {
+  code: string;
+  lang: Language;
+  onNotify: (msg: string) => void;
+}) {
+  const { remaining, progress } = useCountdown();
+  return (
+    <div
+      className="inspector-field"
+      style={{
+        boxShadow: "0 2px 10px rgba(0, 0, 0, 0.03)",
+        borderColor: "color-mix(in srgb, var(--accent) 18%, transparent)",
+      }}
+    >
+      <div className="flex items-center justify-between px-3 pb-1.5 pt-2.5">
+        <div className="flex items-center gap-1.5">
+          <Fingerprint size={12} weight="duotone" style={{ color: "var(--accent)" }} />
+          <span className="text-[8px] font-bold uppercase tracking-[0.1em] text-muted">{t(lang, "totp")}</span>
+          <span className="rounded-full px-1 py-[1px] text-[6.5px] font-bold text-[var(--success)]" style={{ background: "var(--success-soft)" }}>
+            TOTP
+          </span>
+        </div>
+        <span className="flex items-center gap-1 text-[7.5px] text-faint">
+          <Timer size={9} />
+          {t(lang, "expires")} {remaining}{t(lang, "seconds")}
+        </span>
+      </div>
+      <div className="flex items-center gap-2.5 px-3 pb-2.5 pt-0.5">
+        <TotpRing size={29} remaining={remaining} progress={progress} stroke={2.3} />
+        <button
+          onClick={() => void copyText(code.replace(/\s/g, ""), onNotify, "2FA code copied")}
+          className="flex min-w-0 flex-1 items-center gap-2 text-left"
+          aria-label="Copy two factor code"
+        >
+          <span className="font-mono text-[18px] font-semibold tracking-[0.14em] text-main">{code}</span>
+          <Copy size={11} className="text-faint" />
+        </button>
+        <span className="flex h-5 w-5 items-center justify-center rounded-full text-[var(--success)]" style={{ background: "var(--success-soft)" }}>
+          <Check size={10} weight="bold" />
+        </span>
+      </div>
+      <div className="h-[2px] bg-[var(--border-soft)]">
+        <div className="h-full transition-[width] duration-1000 ease-linear" style={{ width: `${progress * 100}%`, background: "var(--accent)" }} />
+      </div>
+    </div>
+  );
+});
+
 function InspectorBody({
   item,
   lang,
@@ -87,7 +139,6 @@ function InspectorBody({
   const [revealedHistoryIndex, setRevealedHistoryIndex] = useState<number | null>(null);
   const brand = brands[item.brand];
   const strength = strengthMeta[item.strength];
-  const { remaining, progress } = useCountdown();
   const masked = "•".repeat(Math.min(Math.max(item.password.length, 10), 16));
   const siteUrl = item.url ? (item.url.startsWith("http") ? item.url : `https://${item.url}`) : null;
 
@@ -227,44 +278,7 @@ function InspectorBody({
 
       {/* Authenticator */}
       {item.totp ? (
-        <div
-          className="mt-2.5 overflow-hidden rounded-[16px] border"
-          style={{
-            borderColor: "color-mix(in srgb, var(--accent) 20%, var(--border))",
-            background: "linear-gradient(135deg, var(--accent-soft), var(--glass-soft))",
-          }}
-        >
-          <div className="flex items-center justify-between px-3 pb-1.5 pt-2.5">
-            <div className="flex items-center gap-1.5">
-              <Fingerprint size={12} weight="duotone" style={{ color: "var(--accent)" }} />
-              <span className="text-[8px] font-bold uppercase tracking-[0.1em] text-muted">{t(lang, "totp")}</span>
-              <span className="rounded-full px-1 py-[1px] text-[6.5px] font-bold text-[var(--success)]" style={{ background: "var(--success-soft)" }}>
-                TOTP
-              </span>
-            </div>
-            <span className="flex items-center gap-1 text-[7.5px] text-faint">
-              <Timer size={9} />
-              {t(lang, "expires")} {remaining}{t(lang, "seconds")}
-            </span>
-          </div>
-          <div className="flex items-center gap-2.5 px-3 pb-2.5 pt-0.5">
-            <TotpRing size={29} remaining={remaining} progress={progress} stroke={2.3} />
-            <button
-              onClick={() => void copyText(item.totp!.replace(/\s/g, ""), onNotify, "2FA code copied")}
-              className="flex min-w-0 flex-1 items-center gap-2 text-left"
-              aria-label="Copy two factor code"
-            >
-              <span className="font-mono text-[18px] font-semibold tracking-[0.14em] text-main">{item.totp}</span>
-              <Copy size={11} className="text-faint" />
-            </button>
-            <span className="flex h-5 w-5 items-center justify-center rounded-full text-[var(--success)]" style={{ background: "var(--success-soft)" }}>
-              <Check size={10} weight="bold" />
-            </span>
-          </div>
-          <div className="h-[2px] bg-[var(--border-soft)]">
-            <div className="h-full transition-[width] duration-1000 ease-linear" style={{ width: `${progress * 100}%`, background: "var(--accent)" }} />
-          </div>
-        </div>
+        <IsolatedInspectorTotp code={item.totp} lang={lang} onNotify={onNotify} />
       ) : (
         <button
           onClick={() => onTool?.("authenticator")}

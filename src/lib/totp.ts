@@ -52,7 +52,7 @@ export function validateGoogleAuthSecret(
 
   const cleanKey = rawSecret.replace(/[\s-]/g, "").toUpperCase();
 
-  if (!/^[A-Z2-7]+$/.test(cleanKey)) {
+  if (!/^[A-Z2-7]+=*$/.test(cleanKey)) {
     return {
       valid: false,
       cleanKey,
@@ -63,14 +63,15 @@ export function validateGoogleAuthSecret(
     };
   }
 
-  if (cleanKey.length < 16) {
+  const unpadded = cleanKey.replace(/=+$/, "");
+  if (unpadded.length < 16) {
     return {
       valid: false,
       cleanKey,
       error:
         lang === "bn"
-          ? `❌ অকার্যকর সেটআপ কি! Google Authenticator-এর নিয়ম অনুযায়ী কমপক্ষে ১৬ অক্ষরের বৈধ Base32 Secret Key দিতে হবে (বর্তমানে ${cleanKey.length} অক্ষর)।`
-          : `❌ Invalid setup key! Google Authenticator requires at least 16 Base32 characters (currently ${cleanKey.length}).`,
+          ? `❌ অকার্যকর সেটআপ কি! Google Authenticator-এর নিয়ম অনুযায়ী কমপক্ষে ১৬ অক্ষরের বৈধ Base32 Secret Key দিতে হবে (বর্তমানে ${unpadded.length} অক্ষর)।`
+          : `❌ Invalid setup key! Google Authenticator requires at least 16 Base32 characters (currently ${unpadded.length}).`,
     };
   }
 

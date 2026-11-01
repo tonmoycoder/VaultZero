@@ -422,7 +422,7 @@ export default function LockScreen({
             <button
               type="submit"
               disabled={loading}
-              className="primary-button mt-2 flex min-h-[48px] w-full items-center justify-between gap-3 rounded-[16px] px-6 py-3.5 text-[12px] font-semibold shadow-md transition-all active:scale-[0.985] disabled:opacity-80"
+              className="primary-button relative mt-2 flex min-h-[48px] w-full items-center justify-center gap-2.5 rounded-[16px] px-6 py-3.5 text-[12px] font-semibold shadow-md transition-all active:scale-[0.985] disabled:opacity-80"
             >
               {loading && !biometric ? (
                 <div className="flex w-full items-center justify-center gap-2">
@@ -431,11 +431,9 @@ export default function LockScreen({
                 </div>
               ) : (
                 <>
-                  <div className="flex items-center gap-2.5">
-                    <LockSimple size={16} weight="bold" className="shrink-0" />
-                    <span>{isSetup ? t(lang, "createVaultBtn") : t(lang, "unlockVaultBtn")}</span>
-                  </div>
-                  <ArrowRight size={15} weight="bold" className="shrink-0 opacity-80" />
+                  <LockSimple size={16} weight="bold" className="shrink-0" />
+                  <span>{isSetup ? t(lang, "createVaultBtn") : t(lang, "unlockVaultBtn")}</span>
+                  <ArrowRight size={15} weight="bold" className="absolute right-5 opacity-80" />
                 </>
               )}
             </button>

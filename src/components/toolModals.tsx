@@ -687,7 +687,7 @@ export function SyncModal({ onClose, onNotify }: { onClose: () => void; onNotify
           )}
         >
           <Camera size={15} weight="bold" />
-          {isMobileDevice ? "Scan QR / Camera" : "Direct Connect / IP"}
+          {isMobileDevice ? "Scan QR / Camera" : "Scan QR / Connect"}
         </button>
       </div>
 
