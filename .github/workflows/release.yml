@@ -198,11 +198,16 @@ jobs:
       - name: List Release Files
         run: ls -la release-dist
 
-      - name: Create GitHub Release & Upload Assets
-        uses: softprops/action-gh-release@v2
-        with:
-          files: release-dist/*
-          generate_release_notes: true
-          draft: false
-          prerelease: false
+      - name: Create or Update GitHub Release & Upload Assets
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          TAG="${{ github.ref_name }}"
+          if [ -z "$TAG" ] || [ "$TAG" = "main" ]; then
+            TAG="v2.4.0"
+          fi
+          echo "Processing release for tag: $TAG"
+          gh release view "$TAG" 2>/dev/null || gh release create "$TAG" --title "VaultZero $TAG — Living Flow & Multi-Platform Release" --generate-notes
+          echo "Uploading release assets with overwrite support..."
+          gh release upload "$TAG" release-dist/* --clobber
 
