@@ -56,6 +56,9 @@
   --brand-sheen: rgba(255, 255, 255, 0.34);
   --spring: cubic-bezier(0.34, 1.56, 0.64, 1);
   --spring-soft: cubic-bezier(0.22, 1, 0.36, 1);
+  --ease-out-fluid: cubic-bezier(0.22, 1, 0.36, 1);
+  --ease-in-out-flow: cubic-bezier(0.77, 0, 0.175, 1);
+  --ease-drawer-aquamorphic: cubic-bezier(0.32, 0.72, 0, 1);
   --tactile-ripple: rgba(86, 70, 222, 0.2);
   --tactile-ripple-2: rgba(255, 255, 255, 0.5);
 }
@@ -664,8 +667,8 @@ input[type="range"]::-moz-range-thumb {
   to { opacity: 1; transform: translateY(0) scale(1); }
 }
 @keyframes modal-in {
-  from { opacity: 0; transform: translateY(16px) scale(0.965); }
-  to { opacity: 1; transform: translateY(0) scale(1); }
+  from { opacity: 0; transform: translateY(12px) scale(0.95); filter: blur(2px); }
+  to { opacity: 1; transform: translateY(0) scale(1); filter: blur(0px); }
 }
 @keyframes sheet-in {
   from { transform: translateY(100%); }
@@ -696,19 +699,27 @@ input[type="range"]::-moz-range-thumb {
   animation: fade-in 220ms ease both;
 }
 .animate-rise {
-  animation: rise-in 300ms cubic-bezier(0.2, 0.8, 0.2, 1) both;
+  animation: rise-in 300ms var(--ease-out-fluid) both;
 }
 .animate-modal {
-  animation: modal-in 300ms cubic-bezier(0.2, 0.8, 0.2, 1) both;
+  animation: modal-in 240ms var(--ease-out-fluid) both;
+  will-change: transform, opacity;
 }
 .animate-sheet {
-  animation: sheet-in 320ms cubic-bezier(0.2, 0.8, 0.2, 1) both;
+  animation: sheet-in 320ms var(--ease-drawer-aquamorphic) both;
+  will-change: transform;
 }
 .animate-slide-right {
-  animation: slide-right 280ms cubic-bezier(0.2, 0.8, 0.2, 1) both;
+  animation: slide-right 280ms var(--ease-out-fluid) both;
 }
 .animate-toast {
-  animation: toast-in 220ms ease both;
+  animation: toast-in 220ms var(--ease-out-fluid) both;
+}
+
+/* Button Press Feedback (Emil Kowalski / ColorOS 17) */
+button:active:not(:disabled) {
+  transform: scale(0.97);
+  transition: transform 140ms var(--ease-out-fluid);
 }
 
 /* Utility classes used across the shell */
@@ -981,12 +992,12 @@ button:not(:disabled):not([data-no-tactile]):active,
 .two-factor-check small { display: block; color: var(--text-muted); font-size:calc(10px * var(--font-scale)); margin-top: 4px; line-height: 1.6; }
 .security-explainer { margin-top: 15px; font-size:calc(10px * var(--font-scale)); line-height: 1.7; color: var(--text-muted); }
 .security-overview { display: flex; align-items: center; gap: 22px; padding: 8px 3px 20px; }
-.security-score-ring { position: relative; width: 118px; height: 118px; flex: none; }
+.security-score-ring { position: relative; width: 130px; height: 130px; flex: none; }
 .security-score-ring svg { width: 100%; height: 100%; }
-.security-score-ring > div { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; }
-.security-score-ring strong { font-weight:600;font-size:calc(35px * var(--font-scale));font-family:var(--font-display); letter-spacing: -1px; }
-.security-score-ring strong small { font-weight:500;font-size:calc(14px * var(--font-scale));font-family:var(--font-sans); color: var(--text-muted); }
-.security-score-ring > div > span { font-size:calc(9px * var(--font-scale)); color: var(--text-muted); }
+.security-score-ring > div { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; pointer-events: none; }
+.security-score-ring strong { font-weight:600; font-size:calc(31px * var(--font-scale)); font-family:var(--font-display); letter-spacing: -1px; line-height: 1; }
+.security-score-ring strong small { font-weight:500; font-size:calc(13px * var(--font-scale)); font-family:var(--font-sans); color: var(--text-muted); }
+.security-score-ring > div > span { font-size:calc(8.5px * var(--font-scale)); color: var(--text-muted); margin-top: 3px; white-space: nowrap; }
 .security-overview-copy { min-width: 0; }
 .security-overview-copy > p:first-child { display: flex; align-items: center; gap: 5px; font-size:calc(10px * var(--font-scale)); font-weight: 600; }
 .security-overview-copy h3 { font-weight:600;font-size:calc(23px * var(--font-scale));line-height:1.2;font-family:var(--font-display); letter-spacing: -.35px; margin: 7px 0; }

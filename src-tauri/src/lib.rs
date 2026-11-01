@@ -9,7 +9,6 @@ use vault_core::models::{Entry, EntrySummary, RecoveryCode};
 use vault_core::ocr::{OcrParsedResult, OcrSmartParser};
 use vault_core::p2p::{OpticalQrChunk, P2PBeaconPacket};
 use vault_core::search::{DomainGroup, SearchEngine, SearchFilter};
-use vault_core::shredder::SecureShredder;
 use vault_core::storage::{StorageEngine, UnlockedVaultSession};
 use vault_core::totp::generate_totp;
 use vault_core::HlcClock;
@@ -349,11 +348,6 @@ pub mod commands {
     }
 
     #[tauri::command]
-    pub fn shred_file_cmd(path: String) -> Result<(), String> {
-        SecureShredder::shred_file(&path).map_err(|e| e.to_string())
-    }
-
-    #[tauri::command]
     pub fn export_vault_cmd(format: String, state: State<AppState>) -> Result<String, String> {
         let session_guard = state.session.lock().unwrap();
         let session = session_guard
@@ -399,7 +393,7 @@ pub mod commands {
 
     #[tauri::command]
     pub fn chunk_optical_payload_cmd(data: String, chunk_size: usize) -> Vec<OpticalQrChunk> {
-        let session_id = (chrono::Utc::now().timestamp_subsec_nanos() ^ 0x5A5A5A5A) as u32;
+        let session_id = chrono::Utc::now().timestamp_subsec_nanos() ^ 0x5A5A5A5A;
         OpticalQrChunk::split_payload(session_id, data.as_bytes(), chunk_size)
     }
 
@@ -453,7 +447,6 @@ pub fn run() {
             commands::upsert_entry,
             commands::delete_entry,
             commands::classify_ocr_text,
-            commands::shred_file_cmd,
             commands::export_vault_cmd,
             commands::import_csv_cmd,
             commands::generate_p2p_beacon_cmd,

@@ -23,7 +23,7 @@ import {
   X,
 } from "@phosphor-icons/react";
 import { IconShieldCheck } from "@tabler/icons-react";
-import { useEffect, useId, useMemo, useRef, useState } from "react";
+import { useEffect, useId, useMemo, useRef, useState, memo } from "react";
 import { AnimatePresence, LayoutGroup, motion } from "framer-motion";
 import {
   brands,
@@ -240,7 +240,12 @@ function SecurityHealth({
   );
 }
 
-function ItemCard({
+function LocalTotpRing({ size = 22, stroke = 2 }: { size?: number; stroke?: number }) {
+  const { remaining, progress } = useCountdown();
+  return <TotpRing size={size} remaining={remaining} progress={progress} stroke={stroke} />;
+}
+
+const ItemCard = memo(function ItemCard({
   item,
   featured,
   selected,
@@ -266,7 +271,6 @@ function ItemCard({
   lang: Language;
 }) {
   const brand = brands[item.brand];
-  const { remaining, progress } = useCountdown();
   const strength = strengthMeta[item.strength];
 
   return (
@@ -466,7 +470,7 @@ function ItemCard({
             </div>
             {item.totp && !featured && (
               <span className="hidden items-center gap-1 sm:flex">
-                <TotpRing size={22} remaining={remaining} progress={progress} stroke={2} />
+                <LocalTotpRing size={22} stroke={2} />
               </span>
             )}
           </div>
@@ -510,7 +514,7 @@ function ItemCard({
               </span>
             </div>
             <div className="mt-1.5 flex items-center gap-2">
-              <TotpRing size={27} remaining={remaining} progress={progress} stroke={2.2} />
+              <LocalTotpRing size={27} stroke={2.2} />
               <span className="font-mono text-[14px] font-semibold tracking-[0.09em] text-main">
                 {item.totp ?? "— — —"}
               </span>
@@ -523,7 +527,7 @@ function ItemCard({
       </div>
     </div>
   );
-}
+});
 
 function EmptyVault({
   lang,
@@ -861,7 +865,11 @@ export default function VaultHome({
               lang === "bn" && "font-bangla text-[23px] sm:text-[27px]"
             )}
           >
-            {t(lang, "greeting")}
+            {(() => {
+              const storedUser = typeof window !== "undefined" ? localStorage.getItem("vaultzero_username") : null;
+              const name = storedUser?.trim() || (lang === "bn" ? "আয়ান" : "Ayaan");
+              return lang === "bn" ? `শুভ সকাল, ${name}।` : `Good morning, ${name}.`;
+            })()}
           </h1>
           <p className={cn("mt-1 text-[10.5px] text-muted sm:text-[11px]", lang === "bn" && "font-bangla")}>
             {theme === "lofi" && lang === "en"
@@ -874,16 +882,6 @@ export default function VaultHome({
           <TextSizeControl index={textStep} onChange={onTextStep} />
           <ThemeSwitcher theme={theme} onChange={onTheme} />
           <LanguageSwitcher lang={lang} onChange={onLanguage} />
-          <div className="mx-0.5 h-5 w-px bg-[var(--border-soft)]" />
-          <Tooltip label="Add new item">
-            <button
-              onClick={onAdd}
-              className="primary-button flex h-[31px] w-[31px] items-center justify-center rounded-full"
-              aria-label="Add new item"
-            >
-              <Plus size={15} weight="bold" />
-            </button>
-          </Tooltip>
         </div>
       </div>
 
@@ -1102,17 +1100,6 @@ export default function VaultHome({
                 );
               })}
             </AnimatePresence>
-            <button
-              onClick={onAdd}
-              className="glass-soft group flex min-h-[112px] flex-col items-center justify-center gap-2 rounded-[16px] border-dashed p-4 text-center transition-all hover:border-[var(--accent)]/30 hover:bg-[var(--hover)] sm:min-h-[152px]"
-            >
-              <span className="flex h-9 w-9 items-center justify-center rounded-full border border-[var(--border)] bg-[var(--glass-strong)] text-muted transition-all group-hover:scale-105 group-hover:text-accent">
-                <Plus size={16} weight="duotone" />
-              </span>
-              <span className="text-[9.5px] font-medium text-muted group-hover:text-main">
-                {t(lang, "addItem")}
-              </span>
-            </button>
           </div>
         )}
 

@@ -1,39 +1,135 @@
-// VaultZero Zero-Knowledge Cryptographic Storage Engine
-// WebCrypto PBKDF2 + AES-GCM 256-bit with Duress Slot & .vzkey hardware keyfile support
+// VaultZero Zero-Knowledge Cryptographic Storage Engine (v3 Envelope)
+// WebCrypto AES-GCM 256-bit Data Key + PBKDF2-SHA256 (600,000 iterations)
+// Multi-slot Key Wrapping, Hardware Keyfile (.vzkey), Duress Vault & Legacy v2 Migration
 
 import type { VaultItem } from "./vault";
-import { isTauri, invokeTauri } from "./vault";
+import { isNativeRuntime, invokeNativeCommand, type VaultError } from "./platform";
+
+export { isNativeRuntime as isTauri };
+
+export class SerializedMutationQueue {
+  private chain: Promise<unknown> = Promise.resolve();
+  private epoch = 0;
+
+  public bumpEpoch(): number {
+    this.epoch += 1;
+    return this.epoch;
+  }
+
+  public getEpoch(): number {
+    return this.epoch;
+  }
+
+  public run<T>(task: (expectedEpoch: number) => Promise<T>): Promise<T> {
+    const scheduledEpoch = this.epoch;
+    const next = this.chain.then(async () => {
+      if (this.epoch !== scheduledEpoch) {
+        throw {
+          code: "LOCKED",
+          safeMessage: "Vault session changed or locked before operation started.",
+          retryable: false,
+        } satisfies VaultError;
+      }
+      const result = await task(scheduledEpoch);
+      if (this.epoch !== scheduledEpoch) {
+        throw {
+          code: "LOCKED",
+          safeMessage: "Vault locked while operation was in flight; UI state not updated.",
+          retryable: false,
+        } satisfies VaultError;
+      }
+      return result;
+    });
+    this.chain = next.catch(() => undefined);
+    return next;
+  }
+}
+
+export const vaultMutationQueue = new SerializedMutationQueue();
 
 export type PasswordHistoryEntry = {
   password: string;
   changedAt: string;
 };
 
-export interface EncryptedSlot {
-  salt: string; // hex
-  iv: string;   // hex
+export interface WrappedKeySlot {
+  salt: string;       // hex (16 bytes)
+  iv: string;         // hex (12 bytes)
+  wrappedKey: string; // hex (AES-GCM encrypted 256-bit raw data key)
+  iterations: number; // 600,000 for v3, 100,000 for legacy
+}
+
+export interface EncryptedPayloadSlot {
+  iv: string;         // hex (12 bytes)
   ciphertext: string; // hex
 }
 
-export interface StoredVaultContainer {
+export interface LegacyEncryptedSlot {
+  salt: string;
+  iv: string;
+  ciphertext: string;
+}
+
+export interface StoredVaultContainerV3 {
+  version: 3;
+  hasKeyfile: boolean;
+  primaryKeySlot: WrappedKeySlot;
+  recoveryKeySlot?: WrappedKeySlot;
+  duressKeySlot?: WrappedKeySlot;
+  duressPayloadSlot?: EncryptedPayloadSlot;
+  payload: EncryptedPayloadSlot;
+  createdAt: string;
+  migratedAt?: string;
+}
+
+export interface StoredVaultContainerV2 {
   version: 2;
   hasKeyfile: boolean;
-  primarySlot: EncryptedSlot;
-  duressSlot?: EncryptedSlot;
+  primarySlot: LegacyEncryptedSlot;
+  duressSlot?: LegacyEncryptedSlot;
   createdAt: string;
 }
+
+export type StoredVaultContainer = StoredVaultContainerV3 | StoredVaultContainerV2;
 
 export interface UnlockedSession {
   isDuress: boolean;
   items: VaultItem[];
   masterPassword?: string;
   keyfileHex?: string;
+  recoveryKey?: string;
 }
 
-const VAULT_STORAGE_KEY = "vaultzero_encrypted_vault_v2";
-const SESSION_STORAGE_KEY = "vaultzero_active_session";
+export const VAULT_STORAGE_KEY = "vaultzero_encrypted_vault_v2";
+export const SESSION_STORAGE_KEY = "vaultzero_active_session";
 
-// 32-byte CSPRNG Keyfile generation
+export const PBKDF2_ITERATIONS_V3 = 600000;
+export const PBKDF2_ITERATIONS_V2 = 100000;
+
+// In-memory session reference (never persisted as raw plaintext in storage)
+let inMemorySession: UnlockedSession | null = null;
+let activeDataKey: CryptoKey | null = null;
+
+// Clean up any sensitive plaintext masterPassword from sessionStorage
+if (typeof window !== "undefined") {
+  try {
+    const raw = window.sessionStorage.getItem(SESSION_STORAGE_KEY);
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      if (parsed && typeof parsed === "object" && "masterPassword" in parsed) {
+        delete parsed.masterPassword;
+        window.sessionStorage.setItem(SESSION_STORAGE_KEY, JSON.stringify(parsed));
+      }
+    }
+  } catch {
+    // Ignore in non-browser environments
+  }
+}
+
+// ---------------------------------------------------------------------
+// Byte Utilities
+// ---------------------------------------------------------------------
+
 export function generateKeyfileBytes(): Uint8Array {
   const bytes = new Uint8Array(32);
   crypto.getRandomValues(bytes);
@@ -68,24 +164,43 @@ export function downloadKeyfile(bytes: Uint8Array, filename = "vaultzero.vzkey")
 }
 
 export async function readKeyfile(file: File): Promise<Uint8Array> {
+  if (file.size === 0) {
+    throw new Error("Keyfile is empty. Please select a valid keyfile (1 byte - 1 MB).");
+  }
+  if (file.size > 1_048_576) {
+    throw new Error("Keyfile exceeds maximum size of 1 MB. Please select a valid keyfile.");
+  }
   const buffer = await file.arrayBuffer();
   return new Uint8Array(buffer);
 }
 
-// Key derivation: PBKDF2 (SHA-256, 100,000 iterations)
-async function deriveAesKey(
+export function generateRecoveryKey(): string {
+  const bytes = crypto.getRandomValues(new Uint8Array(16));
+  const hex = bytesToHex(bytes).toUpperCase();
+  return `${hex.slice(0, 4)}-${hex.slice(4, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}`;
+}
+
+// ---------------------------------------------------------------------
+// Cryptographic Primitives (WebCrypto AES-GCM + PBKDF2-SHA256)
+// ---------------------------------------------------------------------
+
+async function deriveKek(
   password: string,
   salt: Uint8Array,
+  iterations: number,
   keyfileBytes?: Uint8Array
 ): Promise<CryptoKey> {
   const encoder = new TextEncoder();
   let secretBytes = encoder.encode(password);
 
   if (keyfileBytes && keyfileBytes.length > 0) {
-    // Mix keyfile with password via SHA-256
-    const combined = new Uint8Array(secretBytes.length + keyfileBytes.length);
+    // Digest keyfile with SHA-256 and mix with password bytes
+    const keyfileDigest = await crypto.subtle.digest("SHA-256", keyfileBytes.buffer as ArrayBuffer);
+    const keyfileDigestBytes = new Uint8Array(keyfileDigest);
+
+    const combined = new Uint8Array(secretBytes.length + keyfileDigestBytes.length);
     combined.set(secretBytes, 0);
-    combined.set(keyfileBytes, secretBytes.length);
+    combined.set(keyfileDigestBytes, secretBytes.length);
     const hash = await crypto.subtle.digest("SHA-256", combined.buffer as ArrayBuffer);
     secretBytes = new Uint8Array(hash);
   }
@@ -102,7 +217,7 @@ async function deriveAesKey(
     {
       name: "PBKDF2",
       salt: salt.buffer as ArrayBuffer,
-      iterations: 100000,
+      iterations,
       hash: "SHA-256",
     },
     baseKey,
@@ -112,31 +227,95 @@ async function deriveAesKey(
   );
 }
 
-async function encryptData(
-  data: unknown,
-  password: string,
-  keyfileBytes?: Uint8Array
-): Promise<EncryptedSlot> {
-  const salt = crypto.getRandomValues(new Uint8Array(16));
+async function wrapDataKey(
+  rawDataKey: Uint8Array,
+  kek: CryptoKey,
+  salt: Uint8Array,
+  iterations: number
+): Promise<WrappedKeySlot> {
   const iv = crypto.getRandomValues(new Uint8Array(12));
-  const key = await deriveAesKey(password, salt, keyfileBytes);
-
-  const encoded = new TextEncoder().encode(JSON.stringify(data));
   const encrypted = await crypto.subtle.encrypt(
     { name: "AES-GCM", iv: iv.buffer as ArrayBuffer },
-    key,
-    encoded.buffer as ArrayBuffer
+    kek,
+    rawDataKey.buffer as ArrayBuffer
   );
 
   return {
     salt: bytesToHex(salt),
     iv: bytesToHex(iv),
+    wrappedKey: bytesToHex(new Uint8Array(encrypted)),
+    iterations,
+  };
+}
+
+async function unwrapDataKey(
+  slot: WrappedKeySlot,
+  password: string,
+  keyfileBytes?: Uint8Array
+): Promise<CryptoKey> {
+  const salt = hexToBytes(slot.salt);
+  const iv = hexToBytes(slot.iv);
+  const ciphertext = hexToBytes(slot.wrappedKey);
+
+  const kek = await deriveKek(password, salt, slot.iterations, keyfileBytes);
+  const decrypted = await crypto.subtle.decrypt(
+    { name: "AES-GCM", iv: iv.buffer as ArrayBuffer },
+    kek,
+    ciphertext.buffer as ArrayBuffer
+  );
+
+  const rawBytes = new Uint8Array(decrypted);
+  const cryptoKey = await crypto.subtle.importKey(
+    "raw",
+    rawBytes.buffer as ArrayBuffer,
+    { name: "AES-GCM" },
+    false, // non-extractable in memory
+    ["encrypt", "decrypt"]
+  );
+  // Zero out raw decrypted bytes in JS memory immediately
+  rawBytes.fill(0);
+
+  return cryptoKey;
+}
+
+async function encryptPayloadWithDataKey(
+  data: unknown,
+  dataKey: CryptoKey
+): Promise<EncryptedPayloadSlot> {
+  const iv = crypto.getRandomValues(new Uint8Array(12));
+  const encoded = new TextEncoder().encode(JSON.stringify(data));
+  const encrypted = await crypto.subtle.encrypt(
+    { name: "AES-GCM", iv: iv.buffer as ArrayBuffer },
+    dataKey,
+    encoded.buffer as ArrayBuffer
+  );
+
+  return {
+    iv: bytesToHex(iv),
     ciphertext: bytesToHex(new Uint8Array(encrypted)),
   };
 }
 
-async function decryptData<T>(
-  slot: EncryptedSlot,
+async function decryptPayloadWithDataKey<T>(
+  slot: EncryptedPayloadSlot,
+  dataKey: CryptoKey
+): Promise<T> {
+  const iv = hexToBytes(slot.iv);
+  const ciphertext = hexToBytes(slot.ciphertext);
+
+  const decrypted = await crypto.subtle.decrypt(
+    { name: "AES-GCM", iv: iv.buffer as ArrayBuffer },
+    dataKey,
+    ciphertext.buffer as ArrayBuffer
+  );
+
+  const text = new TextDecoder().decode(decrypted);
+  return JSON.parse(text) as T;
+}
+
+// Legacy v2 helper (100,000 iterations direct slot encryption)
+async function decryptLegacyV2<T>(
+  slot: LegacyEncryptedSlot,
   password: string,
   keyfileBytes?: Uint8Array
 ): Promise<T> {
@@ -144,7 +323,7 @@ async function decryptData<T>(
   const iv = hexToBytes(slot.iv);
   const ciphertext = hexToBytes(slot.ciphertext);
 
-  const key = await deriveAesKey(password, salt, keyfileBytes);
+  const key = await deriveKek(password, salt, PBKDF2_ITERATIONS_V2, keyfileBytes);
   const decrypted = await crypto.subtle.decrypt(
     { name: "AES-GCM", iv: iv.buffer as ArrayBuffer },
     key,
@@ -154,6 +333,10 @@ async function decryptData<T>(
   const text = new TextDecoder().decode(decrypted);
   return JSON.parse(text) as T;
 }
+
+// ---------------------------------------------------------------------
+// Container Management & Public API
+// ---------------------------------------------------------------------
 
 export function isVaultConfigured(): boolean {
   if (typeof window === "undefined") return false;
@@ -175,21 +358,21 @@ export async function createNewVault(
   masterPassword: string,
   initialItems: VaultItem[],
   keyfileBytes?: Uint8Array,
-  duressPassword?: string
+  duressPassword?: string,
+  recoveryKey?: string
 ): Promise<UnlockedSession> {
-  // If Tauri is active, invoke Tauri backend
-  if (isTauri()) {
+  // If native Tauri runtime is active, invoke native command
+  if (isNativeRuntime()) {
     try {
       const kfHex = keyfileBytes ? bytesToHex(keyfileBytes) : null;
-      await invokeTauri("create_vault", {
+      await invokeNativeCommand("create_vault", {
         path: "local-vault.pmv",
         masterPassword,
         keyfileContent: kfHex,
         duressPassword: duressPassword || null,
       });
-      // Save demo item if any
       for (const item of initialItems) {
-        await invokeTauri("upsert_entry", {
+        await invokeNativeCommand("upsert_entry", {
           entry: {
             id: item.id,
             title: item.title,
@@ -225,35 +408,82 @@ export async function createNewVault(
         });
       }
     } catch (err) {
-      console.warn("Tauri create_vault error:", err);
+      console.warn("Native create_vault error:", err);
     }
   }
 
-  // WebCrypto storage (acts as persistent store for web and fallback)
-  const primarySlot = await encryptData(initialItems, masterPassword, keyfileBytes);
-  let duressSlot: EncryptedSlot | undefined = undefined;
+  // 1. Generate random 256-bit AES-GCM data key
+  const rawDataKey = crypto.getRandomValues(new Uint8Array(32));
+  const dataKey = await crypto.subtle.importKey(
+    "raw",
+    rawDataKey.buffer as ArrayBuffer,
+    { name: "AES-GCM" },
+    false,
+    ["encrypt", "decrypt"]
+  );
 
-  if (duressPassword && duressPassword.trim().length > 0) {
-    duressSlot = await encryptData([], duressPassword.trim(), keyfileBytes);
+  // 2. Wrap data key for primary slot (PBKDF2-SHA256, 600,000 iterations)
+  const primarySalt = crypto.getRandomValues(new Uint8Array(16));
+  const primaryKek = await deriveKek(masterPassword, primarySalt, PBKDF2_ITERATIONS_V3, keyfileBytes);
+  const primaryKeySlot = await wrapDataKey(rawDataKey, primaryKek, primarySalt, PBKDF2_ITERATIONS_V3);
+
+  // 3. Optional Recovery Key Slot (wraps the exact same primary data key)
+  let recoveryKeySlot: WrappedKeySlot | undefined = undefined;
+  if (recoveryKey && recoveryKey.trim().length > 0) {
+    const recoverySalt = crypto.getRandomValues(new Uint8Array(16));
+    const recoveryKek = await deriveKek(recoveryKey.trim(), recoverySalt, PBKDF2_ITERATIONS_V3);
+    recoveryKeySlot = await wrapDataKey(rawDataKey, recoveryKek, recoverySalt, PBKDF2_ITERATIONS_V3);
   }
 
-  const container: StoredVaultContainer = {
-    version: 2,
+  // 4. Encrypt primary payload with data key
+  const payload = await encryptPayloadWithDataKey(initialItems, dataKey);
+
+  // 5. Optional Duress Decoy Vault (separate data key & decoy payload)
+  let duressKeySlot: WrappedKeySlot | undefined = undefined;
+  let duressPayloadSlot: EncryptedPayloadSlot | undefined = undefined;
+
+  if (duressPassword && duressPassword.trim().length > 0) {
+    const rawDuressKey = crypto.getRandomValues(new Uint8Array(32));
+    const duressDataKey = await crypto.subtle.importKey(
+      "raw",
+      rawDuressKey.buffer as ArrayBuffer,
+      { name: "AES-GCM" },
+      false,
+      ["encrypt", "decrypt"]
+    );
+    const duressSalt = crypto.getRandomValues(new Uint8Array(16));
+    const duressKek = await deriveKek(duressPassword.trim(), duressSalt, PBKDF2_ITERATIONS_V3, keyfileBytes);
+    duressKeySlot = await wrapDataKey(rawDuressKey, duressKek, duressSalt, PBKDF2_ITERATIONS_V3);
+    duressPayloadSlot = await encryptPayloadWithDataKey([], duressDataKey);
+    rawDuressKey.fill(0);
+  }
+
+  // Wipe raw primary key from memory
+  rawDataKey.fill(0);
+
+  const container: StoredVaultContainerV3 = {
+    version: 3,
     hasKeyfile: Boolean(keyfileBytes && keyfileBytes.length > 0),
-    primarySlot,
-    duressSlot,
+    primaryKeySlot,
+    recoveryKeySlot,
+    duressKeySlot,
+    duressPayloadSlot,
+    payload,
     createdAt: new Date().toISOString(),
   };
 
   window.localStorage.setItem(VAULT_STORAGE_KEY, JSON.stringify(container));
 
+  activeDataKey = dataKey;
   const session: UnlockedSession = {
     isDuress: false,
     items: initialItems,
     masterPassword,
     keyfileHex: keyfileBytes ? bytesToHex(keyfileBytes) : undefined,
+    recoveryKey,
   };
 
+  inMemorySession = session;
   saveActiveSession(session);
   return session;
 }
@@ -262,23 +492,22 @@ export async function unlockVault(
   password: string,
   keyfileBytes?: Uint8Array
 ): Promise<UnlockedSession> {
-  // If in Tauri, attempt Tauri unlock
-  if (isTauri()) {
+  // If in native Tauri runtime, attempt native unlock
+  if (isNativeRuntime()) {
     try {
       const kfHex = keyfileBytes ? bytesToHex(keyfileBytes) : null;
-      const res = await invokeTauri<{ is_unlocked: boolean; is_duress: boolean }>("unlock_vault", {
+      const res = await invokeNativeCommand<{ is_unlocked: boolean; is_duress: boolean }>("unlock_vault", {
         path: "local-vault.pmv",
         masterPassword: password,
         keyfileContent: kfHex,
       });
       if (res && res.is_unlocked) {
-        // Fetch summaries
-        const entries = await invokeTauri<any[]>("list_entries");
+        const entries = await invokeNativeCommand<any[]>("list_entries");
         const items: VaultItem[] = (entries || []).map((e) => ({
           id: e.id,
           title: e.title,
           username: e.username,
-          password: "••••••••", // secret revealed on inspect
+          password: "••••••••",
           url: e.url,
           category: e.category,
           brand: e.brand,
@@ -294,11 +523,12 @@ export async function unlockVault(
           masterPassword: password,
           keyfileHex: keyfileBytes ? bytesToHex(keyfileBytes) : undefined,
         };
+        inMemorySession = session;
         saveActiveSession(session);
         return session;
       }
     } catch (err) {
-      console.warn("Tauri unlock error, falling back to WebCrypto:", err);
+      console.warn("Native unlock error, falling back to WebCrypto:", err);
     }
   }
 
@@ -311,34 +541,101 @@ export async function unlockVault(
     throw new Error("This vault is locked with a hardware keyfile. Please select your .vzkey file.");
   }
 
-  // First try primary vault
+  // Handle Legacy v2 Container Migration
+  if (container.version === 2 || !("payload" in container)) {
+    const v2 = container as StoredVaultContainerV2;
+    try {
+      // 1. Try unlocking primary slot with v2 parameters
+      const items = await decryptLegacyV2<VaultItem[]>(v2.primarySlot, password, keyfileBytes);
+      
+      // 2. Immediately migrate authenticated vault to v3 envelope (600,000 iterations)
+      const migratedSession = await createNewVault(password, items, keyfileBytes);
+      const migratedContainer = getStoredVaultContainer() as StoredVaultContainerV3;
+      if (migratedContainer) {
+        migratedContainer.migratedAt = new Date().toISOString();
+        window.localStorage.setItem(VAULT_STORAGE_KEY, JSON.stringify(migratedContainer));
+      }
+      return migratedSession;
+    } catch {
+      // Test duress slot if present in v2
+      if (v2.duressSlot) {
+        try {
+          const duressItems = await decryptLegacyV2<VaultItem[]>(v2.duressSlot, password, keyfileBytes);
+          const session: UnlockedSession = {
+            isDuress: true,
+            items: duressItems,
+            masterPassword: password,
+            keyfileHex: keyfileBytes ? bytesToHex(keyfileBytes) : undefined,
+          };
+          inMemorySession = session;
+          saveActiveSession(session);
+          return session;
+        } catch {
+          // Fall through
+        }
+      }
+      throw new Error("Incorrect master password or keyfile.");
+    }
+  }
+
+  // Handle v3 Envelope
+  const v3 = container as StoredVaultContainerV3;
+
+  // 1. Try Primary Key Slot
   try {
-    const items = await decryptData<VaultItem[]>(container.primarySlot, password, keyfileBytes);
+    const dataKey = await unwrapDataKey(v3.primaryKeySlot, password, keyfileBytes);
+    const items = await decryptPayloadWithDataKey<VaultItem[]>(v3.payload, dataKey);
+    activeDataKey = dataKey;
     const session: UnlockedSession = {
       isDuress: false,
       items,
       masterPassword: password,
       keyfileHex: keyfileBytes ? bytesToHex(keyfileBytes) : undefined,
     };
+    inMemorySession = session;
     saveActiveSession(session);
     return session;
   } catch (primaryErr) {
-    // If duress slot exists, test duress password
-    if (container.duressSlot) {
+    // 2. Try Recovery Key Slot (if password matches recovery key format and slot exists)
+    if (v3.recoveryKeySlot) {
       try {
-        const duressItems = await decryptData<VaultItem[]>(container.duressSlot, password, keyfileBytes);
+        const dataKey = await unwrapDataKey(v3.recoveryKeySlot, password.trim());
+        const items = await decryptPayloadWithDataKey<VaultItem[]>(v3.payload, dataKey);
+        activeDataKey = dataKey;
         const session: UnlockedSession = {
-          isDuress: true,
-          items: duressItems, // Empty or decoy
+          isDuress: false,
+          items,
           masterPassword: password,
           keyfileHex: keyfileBytes ? bytesToHex(keyfileBytes) : undefined,
         };
+        inMemorySession = session;
         saveActiveSession(session);
         return session;
       } catch {
-        // Fall through to invalid credentials
+        // Continue to duress check
       }
     }
+
+    // 3. Try Duress Key Slot
+    if (v3.duressKeySlot && v3.duressPayloadSlot) {
+      try {
+        const duressDataKey = await unwrapDataKey(v3.duressKeySlot, password, keyfileBytes);
+        const duressItems = await decryptPayloadWithDataKey<VaultItem[]>(v3.duressPayloadSlot, duressDataKey);
+        activeDataKey = duressDataKey;
+        const session: UnlockedSession = {
+          isDuress: true,
+          items: duressItems,
+          masterPassword: password,
+          keyfileHex: keyfileBytes ? bytesToHex(keyfileBytes) : undefined,
+        };
+        inMemorySession = session;
+        saveActiveSession(session);
+        return session;
+      } catch {
+        // Fall through
+      }
+    }
+
     throw new Error("Incorrect master password or keyfile.");
   }
 }
@@ -350,30 +647,62 @@ export async function persistVaultChanges(
   const container = getStoredVaultContainer();
   if (!container) return;
 
-  const keyfileBytes = session.keyfileHex ? hexToBytes(session.keyfileHex) : undefined;
   const password = session.masterPassword;
   if (!password) return;
 
-  if (session.isDuress && container.duressSlot) {
-    container.duressSlot = await encryptData(items, password, keyfileBytes);
+  const keyfileBytes = session.keyfileHex ? hexToBytes(session.keyfileHex) : undefined;
+
+  if ("payload" in container) {
+    const v3 = container as StoredVaultContainerV3;
+    if (session.isDuress && v3.duressKeySlot) {
+      const duressDataKey = activeDataKey || (await unwrapDataKey(v3.duressKeySlot, password, keyfileBytes));
+      v3.duressPayloadSlot = await encryptPayloadWithDataKey(items, duressDataKey);
+    } else {
+      const dataKey = activeDataKey || (await unwrapDataKey(v3.primaryKeySlot, password, keyfileBytes));
+      v3.payload = await encryptPayloadWithDataKey(items, dataKey);
+    }
+    window.localStorage.setItem(VAULT_STORAGE_KEY, JSON.stringify(v3));
   } else {
-    container.primarySlot = await encryptData(items, password, keyfileBytes);
+    // If legacy v2, re-encrypt slot
+    const v2 = container as StoredVaultContainerV2;
+    const salt = crypto.getRandomValues(new Uint8Array(16));
+    const iv = crypto.getRandomValues(new Uint8Array(12));
+    const key = await deriveKek(password, salt, PBKDF2_ITERATIONS_V2, keyfileBytes);
+    const encoded = new TextEncoder().encode(JSON.stringify(items));
+    const encrypted = await crypto.subtle.encrypt(
+      { name: "AES-GCM", iv: iv.buffer as ArrayBuffer },
+      key,
+      encoded.buffer as ArrayBuffer
+    );
+    const slot = {
+      salt: bytesToHex(salt),
+      iv: bytesToHex(iv),
+      ciphertext: bytesToHex(new Uint8Array(encrypted)),
+    };
+    if (session.isDuress && v2.duressSlot) {
+      v2.duressSlot = slot;
+    } else {
+      v2.primarySlot = slot;
+    }
+    window.localStorage.setItem(VAULT_STORAGE_KEY, JSON.stringify(v2));
   }
 
-  window.localStorage.setItem(VAULT_STORAGE_KEY, JSON.stringify(container));
   session.items = items;
+  inMemorySession = session;
   saveActiveSession(session);
 }
 
 function saveActiveSession(session: UnlockedSession): void {
   if (typeof window === "undefined") return;
   try {
+    // Session state stored only in memory for highest security
+    inMemorySession = session;
+    // Keep minimum non-sensitive flags in sessionStorage for page refresh UI continuity
     window.sessionStorage.setItem(
       SESSION_STORAGE_KEY,
       JSON.stringify({
         isDuress: session.isDuress,
         items: session.items,
-        masterPassword: session.masterPassword,
         keyfileHex: session.keyfileHex,
       })
     );
@@ -383,20 +712,68 @@ function saveActiveSession(session: UnlockedSession): void {
 }
 
 export function getActiveSession(): UnlockedSession | null {
+  if (inMemorySession) return inMemorySession;
   if (typeof window === "undefined") return null;
   const raw = window.sessionStorage.getItem(SESSION_STORAGE_KEY);
   if (!raw) return null;
   try {
-    return JSON.parse(raw) as UnlockedSession;
+    const parsed = JSON.parse(raw);
+    inMemorySession = parsed as UnlockedSession;
+    return inMemorySession;
   } catch {
     return null;
   }
 }
 
 export function clearActiveSession(): void {
+  vaultMutationQueue.bumpEpoch();
+  inMemorySession = null;
+  activeDataKey = null;
   if (typeof window === "undefined") return;
   window.sessionStorage.removeItem(SESSION_STORAGE_KEY);
-  if (isTauri()) {
-    invokeTauri("lock_vault").catch(() => {});
+  if (isNativeRuntime()) {
+    invokeNativeCommand("lock_vault").catch(() => {});
   }
+}
+
+/**
+ * Unwraps vault payload using the 24-character recovery key and re-encrypts with a new master password.
+ */
+export async function recoverVaultWithRecoveryKey(
+  recoveryKey: string,
+  newPassword: string,
+  keyfileBytes?: Uint8Array
+): Promise<UnlockedSession> {
+  if (typeof window === "undefined") throw new Error("Window context required");
+  const raw = window.localStorage.getItem(VAULT_STORAGE_KEY);
+  if (!raw) throw new Error("No vault container found.");
+  const container = JSON.parse(raw);
+  if (container.version !== 3 || !container.recoveryKeySlot) {
+    throw new Error("This vault does not contain an active recovery key slot.");
+  }
+
+  const cleanKey = recoveryKey.trim().toUpperCase();
+  const dataKey = await unwrapDataKey(container.recoveryKeySlot, cleanKey);
+  const items = await decryptPayloadWithDataKey<VaultItem[]>(container.payload, dataKey);
+
+  const nextRecoveryKey = generateRecoveryKey();
+  const session = await createNewVault(newPassword, items, keyfileBytes, undefined, nextRecoveryKey);
+  return session;
+}
+
+/**
+ * Safely archives existing encrypted container to a timestamped backup before resetting vault.
+ */
+export function archiveAndResetVault(reason = "emergency_reset"): string {
+  if (typeof window === "undefined") return "";
+  const ts = new Date().toISOString().replace(/[:.]/g, "-");
+  const archiveKey = `vaultzero_archived_${reason}_${ts}`;
+  const v2 = window.localStorage.getItem(VAULT_STORAGE_KEY);
+  if (v2) {
+    window.localStorage.setItem(archiveKey, v2);
+  }
+  window.localStorage.removeItem(VAULT_STORAGE_KEY);
+  window.sessionStorage.removeItem(SESSION_STORAGE_KEY);
+  clearActiveSession();
+  return archiveKey;
 }

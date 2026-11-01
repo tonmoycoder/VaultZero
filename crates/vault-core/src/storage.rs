@@ -55,8 +55,35 @@ impl VaultFileHeader {
         buf
     }
 
+    /// F07: AAD buffer masks mutable body lengths to zero so that modifications
+    /// to one vault slot do not invalidate authentication tags of other slots.
+    pub fn serialize_aad(&self) -> Vec<u8> {
+        let mut buf = Vec::with_capacity(256);
+        buf.extend_from_slice(MAGIC_BYTES);
+        buf.extend_from_slice(&self.version.to_le_bytes());
+        buf.extend_from_slice(&self.kdf_params.memory_kib.to_le_bytes());
+        buf.extend_from_slice(&self.kdf_params.iterations.to_le_bytes());
+        buf.extend_from_slice(&self.kdf_params.lanes.to_le_bytes());
+        buf.extend_from_slice(&self.salt);
+        buf.extend_from_slice(&self.primary_nonce);
+        buf.extend_from_slice(&(self.primary_wrapped_key.len() as u32).to_le_bytes());
+        buf.extend_from_slice(&self.primary_wrapped_key);
+
+        buf.push(if self.has_duress { 1 } else { 0 });
+        if self.has_duress {
+            buf.extend_from_slice(&self.duress_salt);
+            buf.extend_from_slice(&self.duress_nonce);
+            buf.extend_from_slice(&(self.duress_wrapped_key.len() as u32).to_le_bytes());
+            buf.extend_from_slice(&self.duress_wrapped_key);
+        }
+
+        buf.extend_from_slice(&0u64.to_le_bytes());
+        buf.extend_from_slice(&0u64.to_le_bytes());
+        buf
+    }
+
     pub fn deserialize(data: &[u8]) -> Result<(Self, usize)> {
-        if data.len() < 4 + 2 + 12 + SALT_LEN + NONCE_LEN + 4 {
+        if data.len() < 4 + 2 + 12 + SALT_LEN + NONCE_LEN + 4 || data.len() > 100 * 1024 * 1024 {
             return Err(VaultError::InvalidHeader);
         }
 
@@ -74,6 +101,13 @@ impl VaultFileHeader {
         offset += 4;
         let lanes = u32::from_le_bytes(data[offset..offset + 4].try_into().unwrap());
         offset += 4;
+
+        if !(1024..=262144).contains(&memory_kib)
+            || !(1..=10).contains(&iterations)
+            || !(1..=16).contains(&lanes)
+        {
+            return Err(VaultError::InvalidHeader);
+        }
 
         let kdf_params = KdfParams {
             memory_kib,
@@ -177,7 +211,7 @@ impl StorageEngine {
         duress_password: Option<&str>,
         kdf_params: Option<KdfParams>,
     ) -> Result<()> {
-        let params = kdf_params.unwrap_or_else(KdfParams::default);
+        let params = kdf_params.unwrap_or_default();
 
         // Generate primary salt & Vault Key
         let mut salt = [0u8; SALT_LEN];
@@ -255,15 +289,16 @@ impl StorageEngine {
         };
 
         let header_bytes = final_header.serialize();
+        let aad_bytes = final_header.serialize_aad();
 
-        // Encrypt primary body using final_header bytes as AAD
+        // Encrypt primary body using masked AAD bytes
         let (encrypted_primary, primary_body_nonce) =
-            encrypt_payload(&primary_payload, &primary_vk, &header_bytes)?;
+            encrypt_payload(&primary_payload, &primary_vk, &aad_bytes)?;
 
         // Encrypt duress body if present
         let (encrypted_duress, duress_body_nonce) = if has_duress {
             let d_vk = duress_vk_opt.as_ref().unwrap();
-            let (enc, n) = encrypt_payload(&duress_payload, d_vk, &header_bytes)?;
+            let (enc, n) = encrypt_payload(&duress_payload, d_vk, &aad_bytes)?;
             (enc, n)
         } else {
             (Vec::new(), [0u8; NONCE_LEN])
@@ -295,7 +330,7 @@ impl StorageEngine {
         file.read_to_end(&mut data)?;
 
         let (header, header_size) = VaultFileHeader::deserialize(&data)?;
-        let header_bytes = &data[..header_size];
+        let aad_bytes = header.serialize_aad();
 
         // 1. Try unlocking primary vault
         let primary_kek_res = derive_kek(
@@ -322,7 +357,7 @@ impl StorageEngine {
                 body_nonce.copy_from_slice(&data[body_start..body_start + NONCE_LEN]);
                 let ciphertext = &data[body_start + NONCE_LEN..body_end];
 
-                let decrypted = decrypt_payload(ciphertext, &body_nonce, &primary_vk, header_bytes)?;
+                let decrypted = decrypt_payload(ciphertext, &body_nonce, &primary_vk, &aad_bytes)?;
                 let vault: Vault = rmp_serde::from_slice(&decrypted)
                     .map_err(|e| VaultError::SerializationError(e.to_string()))?;
 
@@ -363,7 +398,7 @@ impl StorageEngine {
                     d_nonce.copy_from_slice(&data[d_start..d_start + NONCE_LEN]);
                     let d_ciphertext = &data[d_start + NONCE_LEN..d_end];
 
-                    let decrypted = decrypt_payload(d_ciphertext, &d_nonce, &duress_vk, header_bytes)?;
+                    let decrypted = decrypt_payload(d_ciphertext, &d_nonce, &duress_vk, &aad_bytes)?;
                     let vault: Vault = rmp_serde::from_slice(&decrypted)
                         .map_err(|e| VaultError::SerializationError(e.to_string()))?;
 
@@ -400,34 +435,37 @@ impl StorageEngine {
             // Re-encrypt primary
             let primary_body_len = (serialized_vault.len() + NONCE_LEN + 16) as u64;
             header.primary_body_len = primary_body_len;
-            let header_bytes = header.serialize();
-            let (enc, n) = encrypt_payload(&serialized_vault, &session.primary_key, &header_bytes)?;
+            let aad_bytes = header.serialize_aad();
+            let (enc, n) = encrypt_payload(&serialized_vault, &session.primary_key, &aad_bytes)?;
             (enc, n)
         } else {
             // If currently in duress mode, preserve real primary vault without touching it
             let p_start = header_size;
-            let p_end = p_start + header.primary_body_len as usize;
+            let p_end = p_start.checked_add(header.primary_body_len as usize).ok_or(VaultError::TamperedData)?;
+            if data.len() < p_end || header.primary_body_len < NONCE_LEN as u64 {
+                return Err(VaultError::TamperedData);
+            }
             let mut n = [0u8; NONCE_LEN];
             n.copy_from_slice(&data[p_start..p_start + NONCE_LEN]);
             let enc = data[p_start + NONCE_LEN..p_end].to_vec();
             (enc, n)
         };
 
-        let (enc_duress, d_nonce) = if session.is_duress && session.duress_key.is_some() {
-            let duress_body_len = (serialized_vault.len() + NONCE_LEN + 16) as u64;
-            header.duress_body_len = duress_body_len;
-            let header_bytes = header.serialize();
-            let (enc, n) = encrypt_payload(
-                &serialized_vault,
-                session.duress_key.as_ref().unwrap(),
-                &header_bytes,
-            )?;
-            (enc, n)
+        let (enc_duress, d_nonce) = if session.is_duress {
+            if let Some(ref d_key) = session.duress_key {
+                let duress_body_len = (serialized_vault.len() + NONCE_LEN + 16) as u64;
+                header.duress_body_len = duress_body_len;
+                let aad_bytes = header.serialize_aad();
+                let (enc, n) = encrypt_payload(&serialized_vault, d_key, &aad_bytes)?;
+                (enc, n)
+            } else {
+                (Vec::new(), [0u8; NONCE_LEN])
+            }
         } else if header.has_duress {
             // Preserve existing duress body
-            let d_start = header_size + header.primary_body_len as usize;
-            let d_end = d_start + header.duress_body_len as usize;
-            if data.len() >= d_end {
+            let d_start = header_size.checked_add(header.primary_body_len as usize).ok_or(VaultError::TamperedData)?;
+            let d_end = d_start.checked_add(header.duress_body_len as usize).ok_or(VaultError::TamperedData)?;
+            if data.len() >= d_end && header.duress_body_len >= NONCE_LEN as u64 {
                 let mut n = [0u8; NONCE_LEN];
                 n.copy_from_slice(&data[d_start..d_start + NONCE_LEN]);
                 let enc = data[d_start + NONCE_LEN..d_end].to_vec();

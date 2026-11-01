@@ -31,6 +31,7 @@ import { brands, type BrandKey, type Category, type VaultItem } from "../lib/vau
 import { cn } from "../utils/cn";
 import { BrandMark, CopyButton, GlassCheck, Modal, StrengthDots, Tooltip } from "./ui";
 import OcrCopyPad, { type OcrField } from "./OcrCopyPad";
+import { MAX_OCR_FILE_SIZE, runLocalOcr } from "../lib/ocr";
 
 type Notify = (message: string) => void;
 type CreateItem = (item: VaultItem) => void;
@@ -408,43 +409,49 @@ export function OcrModal({
   const [dragging, setDragging] = useState(false);
   const [fileName, setFileName] = useState("Visual capture");
   const [preview, setPreview] = useState<string | null>(null);
-  const [extracted, setExtracted] = useState(sampleText);
-  const [title, setTitle] = useState("Google sign-in capture");
+  const [extracted, setExtracted] = useState("");
+  const [title, setTitle] = useState("Scanned capture");
   const fileRef = useRef<HTMLInputElement>(null);
 
-  const beginScan = (name: string) => {
-    setFileName(name);
-    setStage("scanning");
-    setProgress(0);
-  };
-
-  const handleFile = (file?: File | null) => {
+  const handleFile = async (file?: File | null) => {
     if (!file) return;
     if (!file.type.startsWith("image/")) {
       onNotify("Please choose a PNG, JPG or screenshot");
       return;
     }
+    if (file.size > MAX_OCR_FILE_SIZE) {
+      onNotify(`Image exceeds 12 MiB limit (${(file.size / 1024 / 1024).toFixed(1)} MiB)`);
+      return;
+    }
     if (preview) URL.revokeObjectURL(preview);
     setPreview(URL.createObjectURL(file));
-    beginScan(file.name);
+    setFileName(file.name);
+    setStage("scanning");
+    setProgress(15);
+
+    try {
+      const { rawText, creds } = await runLocalOcr(file, (p) => setProgress(p));
+      const resText = rawText || "No text detected in image.";
+      setExtracted(resText);
+      const parsed = parseScan(resText);
+      setTitle(parsed.title || creds.title || file.name.replace(/\.[^/.]+$/, ""));
+      setProgress(100);
+      setStage("done");
+      onNotify("Image analyzed locally · zero telemetry");
+    } catch (err: any) {
+      onNotify(err?.message || "Failed to analyze image");
+      setStage("idle");
+    }
   };
 
-  useEffect(() => {
-    if (stage !== "scanning") return;
-    const interval = window.setInterval(() => {
-      setProgress((value) => Math.min(value + Math.ceil(Math.random() * 8), 100));
-    }, 90);
-    return () => window.clearInterval(interval);
-  }, [stage]);
-
-  useEffect(() => {
-    if (stage !== "scanning" || progress < 100) return;
-    const timeout = window.setTimeout(() => {
-      setStage("done");
-      onNotify("Image analyzed locally · no upload");
-    }, 350);
-    return () => window.clearTimeout(timeout);
-  }, [stage, progress, onNotify]);
+  const trySample = () => {
+    setFileName("sample-workspace.png");
+    setExtracted(sampleText);
+    setTitle("Google sign-in capture");
+    setPreview(null);
+    setStage("done");
+    onNotify("Sample credentials loaded");
+  };
 
   useEffect(() => {
     const onPaste = (event: ClipboardEvent) => {
@@ -515,8 +522,8 @@ export function OcrModal({
     setProgress(0);
     setFileName("Visual capture");
     setPreview(null);
-    setExtracted(sampleText);
-    setTitle("Google sign-in capture");
+    setExtracted("");
+    setTitle("Scanned capture");
   };
 
   return (
@@ -628,7 +635,7 @@ export function OcrModal({
               <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-[var(--accent-soft)] text-accent"><Sparkle size={14} weight="duotone" /></span>
               <div><p className="text-[9px] font-semibold text-main">No image ready?</p><p className="text-[7.5px] text-faint">Try the workflow with a sample capture.</p></div>
             </div>
-            <button onClick={() => beginScan("sample-workspace.png")} className="secondary-button h-7 shrink-0 rounded-full px-3 text-[8.5px] font-semibold">Try sample</button>
+            <button onClick={trySample} className="secondary-button h-7 shrink-0 rounded-full px-3 text-[8.5px] font-semibold">Try sample</button>
           </div>
         </>
       )}
@@ -689,7 +696,7 @@ export function OcrModal({
               </div>
             </div>
           </div>
-          <div className="mt-2 flex items-center gap-1.5 text-[7.5px] text-faint"><ShieldCheck size={10} weight="duotone" className="text-[var(--success)]" /> OCR runs entirely on this Mac. Source pixels are never uploaded or retained.</div>
+          <div className="mt-2 flex items-center gap-1.5 text-[7.5px] text-faint"><ShieldCheck size={10} weight="duotone" className="text-[var(--success)]" /> OCR runs entirely on this device (100% offline). Source pixels are never uploaded or retained.</div>
         </div>
       )}
     </Modal>

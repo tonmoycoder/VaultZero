@@ -230,10 +230,24 @@ export default function LofiPlayer({
   const { playing, muted } = useAudioState();
   const frameRef = useRef(0);
   const canvasRef = useRef<HTMLCanvasElement>(null);
+  const lastTimeRef = useRef(0);
 
   const draw = useCallback(() => {
     const canvas = canvasRef.current;
     if (!canvas || !shared) return;
+
+    // 120fps UI optimization: throttle visualizer to ~30fps and pause when document is hidden
+    if (document.hidden) {
+      frameRef.current = window.requestAnimationFrame(draw);
+      return;
+    }
+    const now = performance.now();
+    if (now - lastTimeRef.current < 33) {
+      frameRef.current = window.requestAnimationFrame(draw);
+      return;
+    }
+    lastTimeRef.current = now;
+
     const context = canvas.getContext("2d");
     if (!context) return;
     const dpr = Math.min(window.devicePixelRatio || 1, 2);

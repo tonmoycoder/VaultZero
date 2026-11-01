@@ -98,6 +98,12 @@ impl P2PSessionHandshake {
     }
 }
 
+impl Default for P2PSessionHandshake {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 pub struct P2PSessionKey {
     key: [u8; 32],
     pub auth_tag: [u8; 32],

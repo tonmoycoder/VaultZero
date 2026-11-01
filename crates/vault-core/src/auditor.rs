@@ -54,10 +54,8 @@ impl SecurityAuditor {
 
             // Check if weak (length < 10 or entropy < 45 bits)
             let entropy = calculate_entropy(&entry.password);
-            if entry.password.len() < 10 || entropy < 45.0 {
-                if !weak_ids.contains(&entry.id) {
-                    weak_ids.push(entry.id);
-                }
+            if (entry.password.len() < 10 || entropy < 45.0) && !weak_ids.contains(&entry.id) {
+                weak_ids.push(entry.id);
             }
 
             // Add to reuse tracking

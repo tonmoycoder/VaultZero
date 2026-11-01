@@ -2,19 +2,14 @@ use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 use zeroize::{Zeroize, ZeroizeOnDrop};
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
 pub enum Category {
+    #[default]
     Logins,
     Bookmarks,
     Safenotes,
     Identities,
     Payments,
-}
-
-impl Default for Category {
-    fn default() -> Self {
-        Category::Logins
-    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]

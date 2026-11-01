@@ -29,10 +29,13 @@ import {
   SyncModal,
 } from "./components/toolModals";
 import SecurityCenterModal from "./components/SecurityCenter";
+import { CsvImportModal } from "./components/CsvImportModal";
+import { exportVaultToCsv } from "./lib/csv";
 import { Avatar, Modal, Toggle, Tooltip } from "./components/ui";
 import TextSizeControl, { DEFAULT_TEXT_STEP, TEXT_STEPS, stepLabel } from "./components/TextSize";
 import LofiPlayer from "./components/LofiPlayer";
 import VaultHome from "./components/VaultHome";
+import UpdateBanner from "./components/UpdateBanner";
 import {
   checkGitHubUpdate,
   clearActiveSession,
@@ -41,6 +44,7 @@ import {
   invokeTauri,
   isTauri,
   persistVaultChanges,
+  vaultMutationQueue,
   t,
   type BrandKey,
   type Language,
@@ -226,6 +230,7 @@ export default function App() {
 
   const lockVault = useCallback(() => {
     hapticSuccess();
+    vaultMutationQueue.bumpEpoch();
     clearActiveSession();
     setSession(null);
     setLocked(true);
@@ -340,30 +345,45 @@ export default function App() {
     closeInspector();
   };
 
+  const mutateVault = useCallback(
+    (transform: (current: VaultItem[]) => VaultItem[]) => {
+      setItems((current) => {
+        const updated = transform(current);
+        if (session) {
+          vaultMutationQueue
+            .run(async (_epoch) => {
+              await persistVaultChanges(updated, session);
+            })
+            .catch((err) => {
+              if (err?.code === "LOCKED") {
+                console.warn("Vault locked while mutation was in flight:", err.safeMessage);
+              } else {
+                console.error("Failed to persist vault changes:", err);
+              }
+            });
+        }
+        return updated;
+      });
+    },
+    [session]
+  );
+
   const handleFavorite = (item: VaultItem) => {
-    setItems((current) => {
-      const updated = current.map((candidate) =>
+    mutateVault((current) =>
+      current.map((candidate) =>
         candidate.id === item.id ? { ...candidate, favorite: !candidate.favorite } : candidate
-      );
-      if (session) {
-        persistVaultChanges(updated, session);
-      }
-      return updated;
-    });
+      )
+    );
     notify(item.favorite ? `${item.title} removed from favorites` : `${item.title} added to favorites`);
   };
 
   const handleCreate = (item: VaultItem) => {
     hapticSuccess();
-    setItems((current) => {
+    mutateVault((current) => {
       const exists = current.some((entry) => entry.id === item.id);
-      const updated = exists
+      return exists
         ? current.map((entry) => (entry.id === item.id ? item : entry))
         : [item, ...current];
-      if (session) {
-        persistVaultChanges(updated, session);
-      }
-      return updated;
     });
     setSelectedId(item.id);
     setActive("all");
@@ -376,76 +396,56 @@ export default function App() {
   const handleDelete = useCallback(
     (item: VaultItem) => {
       hapticSuccess();
-      setItems((prev) => {
-        const updated = prev.filter((i) => i.id !== item.id);
-        if (session) {
-          persistVaultChanges(updated, session);
-        }
-        return updated;
-      });
+      mutateVault((prev) => prev.filter((i) => i.id !== item.id));
       if (selectedId === item.id) {
         setSelectedId(null);
         setDetailOpen(false);
       }
       notify(lang === "bn" ? "আইটেমটি ভল্ট থেকে মুছে ফেলা হয়েছে" : "Secret deleted from your vault");
     },
-    [session, selectedId, lang, notify]
+    [mutateVault, selectedId, lang, notify]
   );
 
   const handleBulkDelete = useCallback(
     (ids: string[]) => {
       hapticSuccess();
       const idSet = new Set(ids);
-      setItems((prev) => {
-        const updated = prev.filter((i) => !idSet.has(i.id));
-        if (session) {
-          persistVaultChanges(updated, session);
-        }
-        return updated;
-      });
+      mutateVault((prev) => prev.filter((i) => !idSet.has(i.id)));
       if (selectedId && idSet.has(selectedId)) {
         setSelectedId(null);
         setDetailOpen(false);
       }
       notify(lang === "bn" ? `${ids.length}টি আইটেম মুছে ফেলা হয়েছে` : `${ids.length} secrets deleted`);
     },
-    [session, selectedId, lang, notify]
+    [mutateVault, selectedId, lang, notify]
   );
 
   const handleBulkFavorite = useCallback(
     (ids: string[]) => {
       hapticSuccess();
       const idSet = new Set(ids);
-      setItems((prev) => {
-        const updated = prev.map((item) =>
+      mutateVault((prev) =>
+        prev.map((item) =>
           idSet.has(item.id) ? { ...item, favorite: !item.favorite } : item
-        );
-        if (session) {
-          persistVaultChanges(updated, session);
-        }
-        return updated;
-      });
+        )
+      );
       notify(lang === "bn" ? "প্রিয় তালিকা আপডেট হয়েছে" : "Favorites updated for selected items");
     },
-    [session, lang, notify]
+    [mutateVault, lang, notify]
   );
 
   const handleBulkMove = useCallback(
     (ids: string[], newFolder: string) => {
       hapticSuccess();
       const idSet = new Set(ids);
-      setItems((prev) => {
-        const updated = prev.map((item) =>
+      mutateVault((prev) =>
+        prev.map((item) =>
           idSet.has(item.id) ? { ...item, folder: newFolder } : item
-        );
-        if (session) {
-          persistVaultChanges(updated, session);
-        }
-        return updated;
-      });
+        )
+      );
       notify(lang === "bn" ? `ফোল্ডার '${newFolder}'-এ স্থানান্তরিত হয়েছে` : `Moved to folder '${newFolder}'`);
     },
-    [session, lang, notify]
+    [mutateVault, lang, notify]
   );
 
   const handleExport = useCallback(
@@ -453,14 +453,15 @@ export default function App() {
       hapticSuccess();
       const idSet = new Set(ids);
       const toExport = items.filter((i) => idSet.has(i.id));
-      const blob = new Blob([JSON.stringify(toExport, null, 2)], { type: "application/json" });
+      const csvData = exportVaultToCsv(toExport);
+      const blob = new Blob([csvData], { type: "text/csv;charset=utf-8;" });
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a");
       a.href = url;
-      a.download = `vaultzero-backup-${Date.now()}.json`;
+      a.download = `vaultzero-export-${Date.now()}.csv`;
       a.click();
       URL.revokeObjectURL(url);
-      notify(lang === "bn" ? "এনক্রিপ্টেড ব্যাকআপ এক্সপোর্ট হয়েছে" : "Selected secrets exported");
+      notify(lang === "bn" ? "নিরাপদ CSV এক্সপোর্ট সম্পন্ন হয়েছে" : "Selected secrets exported to CSV");
     },
     [items, lang, notify]
   );
@@ -468,8 +469,8 @@ export default function App() {
   const handleRestorePassword = useCallback(
     (item: VaultItem, restoredPassword: string) => {
       hapticSuccess();
-      setItems((prev) => {
-        const updated = prev.map((candidate) => {
+      mutateVault((prev) =>
+        prev.map((candidate) => {
           if (candidate.id !== item.id) return candidate;
           const history = [...(candidate.passwordHistory || [])];
           if (candidate.password && candidate.password !== restoredPassword) {
@@ -483,15 +484,19 @@ export default function App() {
             password: restoredPassword,
             passwordHistory: history,
           };
-        });
-        if (session) {
-          persistVaultChanges(updated, session);
-        }
-        return updated;
-      });
+        })
+      );
       notify(t(lang, "restoredSuccess"));
     },
-    [session, lang, notify]
+    [mutateVault, lang, notify]
+  );
+
+  const handleCsvImport = useCallback(
+    (importedItems: VaultItem[]) => {
+      hapticSuccess();
+      mutateVault((prev) => [...importedItems, ...prev]);
+    },
+    [mutateVault]
   );
 
   const openTool = (tool: ToolName) => {
@@ -716,6 +721,15 @@ export default function App() {
           {modal === "emergency" && (
             <EmergencyKitModal key="emergency" onClose={() => setModal(null)} onNotify={notify} />
           )}
+          {modal === "csvImport" && (
+            <CsvImportModal
+              key="csvImport"
+              onClose={() => setModal(null)}
+              onImport={handleCsvImport}
+              onNotify={notify}
+              lang={lang}
+            />
+          )}
           {modal === "ocr" && (
             <OcrModal
               key="ocr"
@@ -902,6 +916,8 @@ export default function App() {
             </motion.div>
           )}
         </AnimatePresence>
+
+        <UpdateBanner lang={language} onNotify={notify} />
       </div>
     </TactileProvider>
   );

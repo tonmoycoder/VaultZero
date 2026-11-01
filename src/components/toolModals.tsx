@@ -7,7 +7,6 @@ import {
   Devices,
   DownloadSimple,
   FilePdf,
-  Fingerprint,
   FirstAidKit,
   Key,
   LockSimple,
@@ -17,6 +16,7 @@ import {
   QrCode,
   ShieldCheck,
   Sparkle,
+  Trash,
   WifiHigh,
 } from "@phosphor-icons/react";
 import jsQR from "jsqr";
@@ -32,20 +32,13 @@ import {
 } from "../lib/generate";
 import { cn } from "../utils/cn";
 import { BrandMark, Modal, Toggle, Tooltip, TotpRing, useCountdown } from "./ui";
+import { generateTotp, decodeBase32 } from "../lib/totp";
+import { copySecure } from "../lib/clipboard";
 
 type Notify = (message: string) => void;
 
 async function copyValue(value: string, onNotify: Notify, message: string) {
-  try {
-    await navigator.clipboard.writeText(value);
-  } catch {
-    const el = document.createElement("textarea");
-    el.value = value;
-    document.body.appendChild(el);
-    el.select();
-    document.execCommand("copy");
-    el.remove();
-  }
+  await copySecure(value, { timeoutMs: 30_000 });
   onNotify(message);
 }
 
@@ -289,15 +282,66 @@ export function AuthenticatorModal({
   const [adding, setAdding] = useState(false);
   const [name, setName] = useState("");
   const [secret, setSecret] = useState("");
+  const [secretError, setSecretError] = useState("");
+  const [liveCodes, setLiveCodes] = useState<Record<string, string>>({});
+
+  useEffect(() => {
+    let cancelled = false;
+    const allAccounts = [
+      ...items.filter((item) => item.totp).map((item) => ({ id: item.id, secret: item.totp! })),
+      ...extra.map((acc) => ({ id: acc.id, secret: acc.code })),
+    ];
+
+    Promise.all(
+      allAccounts.map(async (acc) => {
+        try {
+          const res = await generateTotp(acc.secret);
+          return { id: acc.id, code: res.code };
+        } catch {
+          return { id: acc.id, code: acc.secret };
+        }
+      })
+    ).then((results) => {
+      if (!cancelled) {
+        const map: Record<string, string> = {};
+        for (const r of results) {
+          map[r.id] = r.code;
+        }
+        setLiveCodes(map);
+      }
+    });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [items, extra, remaining]);
 
   const addAccount = () => {
-    if (!name.trim()) return;
-    const code = `${Math.floor(100 + Math.random() * 899)} ${Math.floor(100 + Math.random() * 899)}`;
-    setExtra((current) => [...current, { id: `new-${Date.now()}`, title: name.trim(), code, added: true }]);
+    setSecretError("");
+    const trimmedName = name.trim();
+    if (!trimmedName) return;
+    const cleanSecret = secret.trim().replace(/\s/g, "").toUpperCase();
+    if (!cleanSecret) {
+      setSecretError("Setup key / Secret key is required");
+      return;
+    }
+    try {
+      decodeBase32(cleanSecret);
+    } catch {
+      setSecretError("Invalid Base32 secret key (A-Z, 2-7)");
+      return;
+    }
+    setExtra((current) => [...current, { id: `new-${Date.now()}`, title: trimmedName, code: cleanSecret, added: true }]);
     setName("");
     setSecret("");
+    setSecretError("");
     setAdding(false);
     onNotify("Authenticator account added locally");
+  };
+
+  const removeAccount = (id: string) => {
+    setExtra((current) => current.filter((a) => a.id !== id));
+    onNotify("Account removed");
   };
 
   return (
@@ -305,7 +349,7 @@ export function AuthenticatorModal({
       onClose={onClose}
       title="Authenticator"
       subtitle="Time-based one-time passwords, updated every 30 seconds."
-      icon={<Fingerprint size={20} weight="duotone" />}
+      icon={<ShieldCheck size={20} weight="duotone" />}
       width="max-w-[520px]"
       footer={
         <div className="flex items-center justify-between gap-3">
@@ -342,18 +386,29 @@ export function AuthenticatorModal({
             )}
             <div className="min-w-0 flex-1">
               <p className="truncate text-[10.5px] font-semibold text-main">{account.title}</p>
-              <p className="mt-0.5 text-[7.5px] text-faint">ayaan@vaultzero.me</p>
+              <p className="mt-0.5 text-[7.5px] text-faint">
+                {account.brand ? `${account.brand.toLowerCase()}.com` : "RFC 6238 TOTP"}
+              </p>
             </div>
             <div className="text-right">
-              <p className="font-mono text-[13px] font-semibold tracking-[0.08em] text-main">{account.code}</p>
+              <p className="font-mono text-[13px] font-semibold tracking-[0.08em] text-main">{liveCodes[account.id] || account.code}</p>
               <p className="mt-0.5 text-[7px]" style={{ color: remaining <= 5 ? "var(--danger)" : "var(--success)" }}>{remaining}s remaining</p>
             </div>
             <TotpRing size={26} remaining={remaining} progress={progress} stroke={2.2} />
-            <Tooltip label="Copy code">
-              <button onClick={() => void copyValue(account.code.replace(/\s/g, ""), onNotify, "Authenticator code copied")} className="flex h-6 w-6 items-center justify-center rounded-full text-faint hover:bg-[var(--hover)] hover:text-main" aria-label="Copy authenticator code">
-                <Copy size={12} />
-              </button>
-            </Tooltip>
+            <div className="flex items-center gap-1">
+              <Tooltip label="Copy code">
+                <button onClick={() => void copyValue((liveCodes[account.id] || account.code).replace(/\s/g, ""), onNotify, "Authenticator code copied")} className="flex h-6 w-6 items-center justify-center rounded-full text-faint hover:bg-[var(--hover)] hover:text-main" aria-label="Copy authenticator code">
+                  <Copy size={12} />
+                </button>
+              </Tooltip>
+              {account.added && (
+                <Tooltip label="Remove account">
+                  <button onClick={() => removeAccount(account.id)} className="flex h-6 w-6 items-center justify-center rounded-full text-faint hover:bg-[var(--danger-soft)] hover:text-[var(--danger)]" aria-label="Remove account">
+                    <Trash size={12} />
+                  </button>
+                </Tooltip>
+              )}
+            </div>
           </div>
         ))}
       </div>
@@ -362,12 +417,15 @@ export function AuthenticatorModal({
         <div className="glass-soft mt-3 rounded-[15px] border border-[var(--border-soft)] p-3">
           <p className="mb-2 text-[9px] font-semibold text-soft">Add authenticator account</p>
           <div className="grid gap-2 sm:grid-cols-2">
-            <input value={name} onChange={(e) => setName(e.target.value)} placeholder="Account name" className="field" autoFocus />
-            <input value={secret} onChange={(e) => setSecret(e.target.value)} placeholder="Setup key (optional)" className="field font-mono" />
+            <input value={name} onChange={(e) => setName(e.target.value)} placeholder="Account name (e.g. GitHub)" className="field" autoFocus />
+            <input value={secret} onChange={(e) => { setSecret(e.target.value); setSecretError(""); }} placeholder="Setup key (required Base32)" className="field font-mono" />
           </div>
+          {secretError && (
+            <p className="mt-1 text-[8px] font-medium text-danger">{secretError}</p>
+          )}
           <div className="mt-2 flex justify-end gap-1.5">
-            <button onClick={() => setAdding(false)} className="secondary-button h-7 rounded-full px-3 text-[9px]">Cancel</button>
-            <button onClick={addAccount} disabled={!name.trim()} className="primary-button h-7 rounded-full px-3 text-[9px] disabled:opacity-40">Add account</button>
+            <button onClick={() => { setAdding(false); setSecretError(""); }} className="secondary-button h-7 rounded-full px-3 text-[9px]">Cancel</button>
+            <button onClick={addAccount} disabled={!name.trim() || !secret.trim()} className="primary-button h-7 rounded-full px-3 text-[9px] disabled:opacity-40">Add account</button>
           </div>
         </div>
       ) : (

@@ -4,6 +4,25 @@ export const spring = { type: "spring" as const, stiffness: 400, damping: 30, ma
 export const softSpring = { type: "spring" as const, stiffness: 310, damping: 28, mass: 0.9 };
 export const exitTransition = { duration: 0.2, ease: [0.32, 0, 0.67, 0] as const };
 
+// ColorOS 17 Living Flow Physics Curves (120fps Aquamorphic Springs)
+export const livingFlowExpand = {
+  type: "spring" as const,
+  stiffness: 380,
+  damping: 32,
+  mass: 0.75,
+  restDelta: 0.001,
+};
+
+export const livingFlowCollapse = {
+  type: "spring" as const,
+  stiffness: 460,
+  damping: 36,
+  mass: 0.65,
+  restDelta: 0.001,
+};
+
+export const aquamorphicBezier = [0.22, 1, 0.36, 1] as const;
+
 export function useMediaQuery(query: string) {
   const [matches, setMatches] = useState(() => window.matchMedia(query).matches);
   useEffect(() => {

@@ -90,7 +90,7 @@ impl SearchEngine {
 
         let mut groups = Vec::new();
         for (domain, mut group_entries) in map {
-            group_entries.sort_by(|a, b| b.updated_at.cmp(&a.updated_at));
+            group_entries.sort_by_key(|a| std::cmp::Reverse(a.updated_at));
             let brand_color = group_entries.iter().find_map(|e| e.brand_color.clone());
             let brand_icon_slug = group_entries.iter().find_map(|e| e.brand_icon_slug.clone());
             let display_name = group_entries[0].title.clone();

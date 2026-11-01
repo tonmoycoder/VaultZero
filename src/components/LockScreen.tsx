@@ -16,6 +16,7 @@ import {
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import { hapticSuccess } from "./Tactile";
 import { Logo, Tooltip } from "./ui";
+import VaultRecoveryModal from "./VaultRecoveryModal";
 import {
   createNewVault,
   downloadKeyfile,
@@ -49,6 +50,7 @@ export default function LockScreen({
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
   const [biometric, setBiometric] = useState(false);
+  const [showRecovery, setShowRecovery] = useState(false);
 
   const inputRef = useRef<HTMLInputElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -235,7 +237,13 @@ export default function LockScreen({
             <Sparkle size={9} weight="fill" style={{ color: "var(--accent)" }} /> VaultZero · Zero-Knowledge Gate
           </p>
           <h1 className="mt-1.5 font-display text-[24px] font-semibold tracking-[-0.035em] text-main sm:text-[26px]">
-            {isSetup ? t(lang, "setupTitle") : t(lang, "unlockTitle")}
+            {isSetup
+              ? t(lang, "setupTitle")
+              : (() => {
+                  const stored = typeof window !== "undefined" ? localStorage.getItem("vaultzero_username") : null;
+                  const name = stored?.trim() || (lang === "bn" ? "আয়ান" : "Ayaan");
+                  return lang === "bn" ? `স্বাগতম, ${name}।` : `Welcome back, ${name}.`;
+                })()}
           </h1>
           <p className="mt-1 max-w-[320px] text-[10px] leading-relaxed text-muted">
             {isSetup ? t(lang, "setupSubtitle") : t(lang, "unlockSubtitle")}
@@ -415,6 +423,19 @@ export default function LockScreen({
             </button>
           </form>
 
+          {/* Master Password Recovery Action */}
+          {!isSetup && (
+            <div className="mt-2.5 flex justify-center">
+              <button
+                type="button"
+                onClick={() => setShowRecovery(true)}
+                className="text-[9px] font-semibold text-[var(--accent)] hover:underline"
+              >
+                {lang === "bn" ? "পাসওয়ার্ড ভুলে গেছেন? ভল্ট রিকভার করুন" : "Forgot master password? Recover vault"}
+              </button>
+            </div>
+          )}
+
           {/* Quick Biometric Simulation */}
           {!isSetup && (
             <>
@@ -474,6 +495,24 @@ export default function LockScreen({
           </div>
         </div>
       </div>
+
+      {showRecovery && (
+        <VaultRecoveryModal
+          onClose={() => setShowRecovery(false)}
+          onRecovered={(sess) => {
+            setShowRecovery(false);
+            onUnlocked(sess);
+          }}
+          onResetVault={() => {
+            setShowRecovery(false);
+            setIsSetup(true);
+            setPassword("");
+            setConfirmPassword("");
+            setError("");
+          }}
+          lang={lang}
+        />
+      )}
     </div>
   );
 }
