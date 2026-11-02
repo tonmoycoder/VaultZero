@@ -93,17 +93,26 @@ async function main() {
 
   for (const file of files) {
     const source = readFileSync(file, "utf8");
+    /*
+     * CI checks out this repository on `windows-latest`, where Git converts
+     * LF to CRLF. rustfmt always emits LF, so comparing its output with the
+     * raw file reported every Rust source as unformatted on Windows while
+     * the same commit passed on Linux. Normalise before comparing, and put
+     * the original line-ending style back when writing.
+     */
+    const normalised = source.replace(/\r\n/g, "\n");
     let formatted;
     try {
-      formatted = await format(source, { edition: "2021" });
+      formatted = await format(normalised, { edition: "2021" });
     } catch (error) {
       console.error(`${relative(root, file)}: the formatter could not parse the file.`);
       console.error(error.message ?? error);
       process.exit(1);
     }
-    if (formatted === source) continue;
+    if (formatted === normalised) continue;
     if (write) {
-      writeFileSync(file, formatted);
+      const eol = source.includes("\r\n") ? "\r\n" : "\n";
+      writeFileSync(file, formatted.replace(/\n/g, eol));
       console.log(`formatted ${relative(root, file)}`);
     } else {
       unformatted.push(relative(root, file));

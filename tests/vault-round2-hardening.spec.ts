@@ -14,126 +14,131 @@
  *   V-33        the native vault path is absolute, never relative
  *   V-36        vault writes are coalesced, not one-per-mutation
  */
-import { expect, test } from "@playwright/test";
+import { expect, test, type Page } from "@playwright/test";
 
 /* ------------------------------------------------------------------ */
 /* V-19 / V-21 / V-22 — batched breach scanning                        */
 /* ------------------------------------------------------------------ */
 
 test.describe("V-19 breach scan batching", () => {
+  /**
+   * Counts the requests that actually leave for HIBP at the network layer.
+   *
+   * The old tests replaced `window.fetch` and counted every call. The app
+   * also checks GitHub for updates on startup and again from the update
+   * banner, so the count depended on how far startup had progressed when
+   * the stub was installed. CI measured 3 requests for a scan that made 1,
+   * while a local run measured 21 for a scan that made 20.
+   *
+   * Routing by URL makes the assertion about the scanner alone, leaves the
+   * rest of the app's network behaviour untouched, and works regardless of
+   * StrictMode, timers or network availability.
+   */
+  const HIBP_RANGE = "https://api.pwnedpasswords.com/range/";
+
+  async function trackRangeRequests(
+    page: Page,
+    options: { delayMs?: number; body?: string } = {}
+  ) {
+    const urls: string[] = [];
+    let current = 0;
+    let peak = 0;
+
+    await page.route(`${HIBP_RANGE}**`, async (route) => {
+      urls.push(route.request().url());
+      current += 1;
+      peak = Math.max(peak, current);
+      if (options.delayMs) {
+        await new Promise((resolve) => setTimeout(resolve, options.delayMs));
+      }
+      current -= 1;
+      await route.fulfill({
+        status: 200,
+        contentType: "text/plain",
+        // A range body with no matching suffix.
+        body: options.body ?? "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA:12\r\n",
+      });
+    });
+
+    return {
+      get count() {
+        return urls.length;
+      },
+      get uniquePrefixes() {
+        return new Set(urls.map((url) => url.slice(HIBP_RANGE.length))).size;
+      },
+      get peak() {
+        return peak;
+      },
+    };
+  }
+
   test("distinct prefixes are fetched concurrently and duplicates are deduplicated", async ({
     page,
   }) => {
+    const ranges = await trackRangeRequests(page, { delayMs: 25 });
     await page.goto("/");
 
     const result = await page.evaluate(async () => {
       const module = await import("/src/lib/breachScanner.ts");
+      module.setBreachOnlineEnabled(true);
+      module.clearBreachRangeCache();
 
-      const requests: string[] = [];
-      const inFlight: number[] = [];
-      let current = 0;
-      let peak = 0;
+      // 20 distinct passwords, each repeated twice -> 20 unique, 40 inputs.
+      const passwords = Array.from({ length: 20 }, (_, i) => `pass-${i}-unique`);
+      const batch = await module.scanPasswordsBreach([...passwords, ...passwords], "en");
 
-      const originalFetch = window.fetch;
-      window.fetch = (async (input: any, init?: any) => {
-        const url = String(input);
-        requests.push(url);
-        current += 1;
-        peak = Math.max(peak, current);
-        inFlight.push(current);
-        await new Promise((resolve) => setTimeout(resolve, 25));
-        current -= 1;
-        // A range body with no matching suffix.
-        return new Response("AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA:12\r\n", {
-          status: 200,
-          headers: { "Content-Type": "text/plain" },
-        });
-      }) as typeof window.fetch;
-
-      try {
-        module.setBreachOnlineEnabled(true);
-        module.clearBreachRangeCache();
-
-        // 20 distinct passwords, each repeated twice -> 20 unique, 40 inputs.
-        const passwords = Array.from({ length: 20 }, (_, i) => `pass-${i}-unique`);
-        const all = [...passwords, ...passwords];
-
-        const batch = await module.scanPasswordsBreach(all, "en");
-
-        return {
-          requestCount: requests.length,
-          uniquePrefixes: new Set(requests.map((u) => u.split("/").pop())).size,
-          peakConcurrency: peak,
-          resultCount: batch.results.size,
-          prefixesQueried: batch.prefixesQueried,
-        };
-      } finally {
-        window.fetch = originalFetch;
-      }
+      return { resultCount: batch.results.size, prefixesQueried: batch.prefixesQueried };
     });
 
     // 20 distinct prefixes -> 20 requests, not 40.
-    expect(result.requestCount).toBe(20);
-    expect(result.uniquePrefixes).toBe(20);
+    expect(ranges.count).toBe(20);
+    expect(ranges.uniquePrefixes).toBe(20);
     // Every unique password gets a result.
     expect(result.resultCount).toBe(20);
+    expect(result.prefixesQueried).toBe(20);
     // Requests must overlap: the old implementation was strictly sequential.
-    expect(result.peakConcurrency).toBeGreaterThan(1);
+    expect(ranges.peak).toBeGreaterThan(1);
   });
 
   test("a repeated password costs exactly one request", async ({ page }) => {
+    const ranges = await trackRangeRequests(page, { body: "" });
     await page.goto("/");
 
-    const requestCount = await page.evaluate(async () => {
+    const result = await page.evaluate(async () => {
       const module = await import("/src/lib/breachScanner.ts");
-      let count = 0;
-      const originalFetch = window.fetch;
-      window.fetch = (async () => {
-        count += 1;
-        return new Response("", { status: 200 });
-      }) as typeof window.fetch;
-
-      try {
-        module.setBreachOnlineEnabled(true);
-        module.clearBreachRangeCache();
-        await module.scanPasswordsBreach(["same-password"], "en");
-        await module.scanPasswordsBreach(["same-password"], "en");
-        return count;
-      } finally {
-        window.fetch = originalFetch;
-      }
+      module.setBreachOnlineEnabled(true);
+      module.clearBreachRangeCache();
+      await module.scanPasswordsBreach(["same-password"], "en");
+      const second = await module.scanPasswordsBreach(["same-password"], "en");
+      return { offline: second.offline, results: second.results.size };
     });
 
     // The second scan is served entirely from the cache.
-    expect(requestCount).toBe(1);
+    expect(ranges.count).toBe(1);
+    expect(ranges.uniquePrefixes).toBe(1);
+    expect(result.results).toBe(1);
+    // A verdict backed by a range fetched earlier in this session is live
+    // breach data, not an offline-only result.
+    expect(result.offline).toBe(false);
   });
 
   test("the scan is offline unless the user explicitly opts in (V-18)", async ({
     page,
   }) => {
+    const ranges = await trackRangeRequests(page, { body: "" });
     await page.goto("/");
 
     const result = await page.evaluate(async () => {
       const module = await import("/src/lib/breachScanner.ts");
-      let requests = 0;
-      const originalFetch = window.fetch;
-      window.fetch = (async () => {
-        requests += 1;
-        return new Response("", { status: 200 });
-      }) as typeof window.fetch;
-
-      try {
-        module.setBreachOnlineEnabled(false);
-        module.clearBreachRangeCache();
-        const batch = await module.scanPasswordsBreach(["hunter2", "correct horse"], "en");
-        return { requests, offline: batch.offline, results: batch.results.size };
-      } finally {
-        window.fetch = originalFetch;
-      }
+      module.setBreachOnlineEnabled(false);
+      module.clearBreachRangeCache();
+      const batch = await module.scanPasswordsBreach(["hunter2", "correct horse"], "en");
+      return { offline: batch.offline, results: batch.results.size };
     });
 
     // Nothing left the device.
-    expect(result.requests).toBe(0);
+    expect(ranges.count).toBe(0);
     expect(result.offline).toBe(true);
     // The offline dictionary still produced a verdict for each password.
     expect(result.results).toBe(2);

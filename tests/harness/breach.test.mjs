@@ -101,6 +101,48 @@ t(
 t("the result is a well-formed report", typeof first.breached === "boolean");
 t("the report carries a source", typeof first.source === "string");
 
+console.log("=== a cached scan stays live and does not refetch ===");
+
+m.clearBreachRangeCache();
+let rangeFetches = 0;
+globalThis.fetch = async () => {
+  rangeFetches += 1;
+  return { ok: true, status: 200, text: async () => "" };
+};
+
+await m.scanPasswordsBreach(["cache-probe-password"], "en");
+const cachedBatch = await m.scanPasswordsBreach(["cache-probe-password"], "en");
+
+t("the first scan fetched one range", rangeFetches === 1, `count ${rangeFetches}`);
+t("the second scan made no request", rangeFetches === 1, `count ${rangeFetches}`);
+t("a fully cached scan is not reported offline", cachedBatch.offline === false);
+t("the cached scan still returns a verdict", cachedBatch.results.size === 1);
+
+console.log("=== an expired range is not resurrected after a failed refresh ===");
+
+m.clearBreachRangeCache();
+let reachable = true;
+globalThis.fetch = async () => {
+  if (!reachable) throw new Error("offline");
+  return { ok: true, status: 200, text: async () => "" };
+};
+await m.scanPasswordsBreach(["stale-probe-password"], "en");
+
+const realNow = Date.now;
+Date.now = () => realNow() + 60 * 60 * 1000 + 1000; // past the 1 hour TTL
+reachable = false;
+const staleBatch = await m.scanPasswordsBreach(["stale-probe-password"], "en");
+Date.now = realNow;
+reachable = true;
+
+const staleVerdict = [...staleBatch.results.values()][0];
+t("the failed refresh reports an offline scan", staleBatch.offline === true);
+t(
+  "the failed refresh falls back to the offline verdict",
+  /Offline/.test(staleVerdict?.source ?? ""),
+  staleVerdict?.source
+);
+
 console.log("=== the audit log is redacted and memory-only ===");
 
 const log = m.getSecurityAuditLog();

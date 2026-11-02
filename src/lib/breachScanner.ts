@@ -178,10 +178,13 @@ async function fetchRange(
     return cached;
   }
 
-  try {
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 6000);
+  const controller = new AbortController();
+  // The abort timer must be cleared on *every* exit path. Clearing it only
+  // after a successful fetch left a live 6-second timer behind for each
+  // failed request, and kept a controller alive for work already finished.
+  const timeoutId = setTimeout(() => controller.abort(), 6000);
 
+  try {
     const res = await fetch(`https://api.pwnedpasswords.com/range/${prefix}`, {
       signal: controller.signal,
       headers: {
@@ -193,7 +196,6 @@ async function fetchRange(
         "Add-Padding": "true",
       },
     });
-    clearTimeout(timeoutId);
 
     if (!res.ok) throw new Error(`API returned ${res.status}`);
 
@@ -221,6 +223,8 @@ async function fetchRange(
   } catch {
     void lang;
     return null;
+  } finally {
+    clearTimeout(timeoutId);
   }
 }
 
@@ -287,8 +291,8 @@ export async function scanPasswordsBreach(
   });
 
   // Fetch the missing ranges with bounded concurrency.
-  const fetched = new Map<string, { suffixes: Set<string>; counts: Map<string, number> } | null>();
-  let succeeded = 0;
+  type RangeData = { suffixes: Set<string>; counts: Map<string, number> };
+  const fetched = new Map<string, RangeData | null>();
   let cursor = 0;
   let done = 0;
 
@@ -298,7 +302,6 @@ export async function scanPasswordsBreach(
       const prefix = pending[index];
       const range = await fetchRange(prefix, lang);
       fetched.set(prefix, range);
-      if (range) succeeded += 1;
       done += 1;
       onProgress?.(done, pending.length);
     }
@@ -307,6 +310,25 @@ export async function scanPasswordsBreach(
   await Promise.all(
     Array.from({ length: Math.min(MAX_BREACH_CONCURRENCY, pending.length) }, () => worker())
   );
+
+  /**
+   * A range is usable only when it came from a successful fetch in this
+   * scan, or from a cache entry that has not expired.
+   *
+   * `fetched.has(prefix)` distinguishes "the refresh failed" (a recorded
+   * `null`, so there is no usable range) from "the prefix never needed a
+   * request" (a valid cached range). The old `fetched.get(...) ?? cache`
+   * expression resurrected an expired cache entry after a failed refresh
+   * and reported stale data as a fresh verdict.
+   */
+  const rangeFor = (prefix: string): RangeData | null => {
+    if (fetched.has(prefix)) return fetched.get(prefix) ?? null;
+    const cached = RANGE_CACHE.get(prefix);
+    return cached && Date.now() - cached.fetchedAt < RANGE_CACHE_TTL_MS ? cached : null;
+  };
+
+  // A cached range is live breach data fetched earlier in this session.
+  const liveRanges = prefixes.filter((prefix) => rangeFor(prefix) !== null).length;
 
   // Assemble a result for every password.
   for (const password of candidates) {
@@ -329,8 +351,7 @@ export async function scanPasswordsBreach(
       continue;
     }
 
-    const range = fetched.get(hash.prefix) ?? RANGE_CACHE.get(hash.prefix);
-    const rangeData = range && "suffixes" in range ? range : null;
+    const rangeData = rangeFor(hash.prefix);
 
     if (!rangeData) {
       results.set(password, {
@@ -378,11 +399,11 @@ export async function scanPasswordsBreach(
   return {
     results,
     prefixesQueried: prefixes.length,
-    // "Offline" means no live breach data was available for this scan —
+    // "Offline" means no live breach data backed any verdict in this scan —
     // either the user has not opted in, or every attempt to reach the range
     // API failed. A scan served entirely from the cache is NOT offline: the
     // verdict came from live breach data fetched earlier in the session.
-    offline: prefixes.length > 0 && succeeded === 0,
+    offline: prefixes.length > 0 && liveRanges === 0,
   };
 }
 
