@@ -1,4 +1,5 @@
 import {
+  ArrowsClockwise,
   ArrowsLeftRight,
   CaretRight,
   CreditCard,
@@ -74,6 +75,7 @@ export default function Sidebar({
   onLock,
   onOpenMobileMenu,
   onOpenProfile,
+  onOpenUpdate,
 }: {
   lang: Language;
   active: string;
@@ -86,6 +88,7 @@ export default function Sidebar({
   onLock: () => void;
   onOpenMobileMenu?: () => void;
   onOpenProfile?: () => void;
+  onOpenUpdate?: () => void;
 }) {
   const groupId = useId();
   const [hovered, setHovered] = useState<string | null>(null);
@@ -119,20 +122,26 @@ export default function Sidebar({
   return (
     <LayoutGroup id={groupId}>
     <aside className="glass vault-sidebar hidden h-full w-[246px] shrink-0 flex-col overflow-hidden rounded-[28px] lg:flex xl:w-[260px]" onPointerLeave={() => setHovered(null)}>
-      <div className="flex items-center justify-between pb-4">
-        <div className="flex min-w-0 items-center gap-2.5">
-          <Logo size={39} />
-          <div className="min-w-0">
-            <div className="flex items-baseline gap-1.5">
-              <span className="font-display text-[17px] font-semibold leading-none tracking-[-0.035em] text-main">
+      <div className="flex min-w-0 items-center justify-between gap-2 pb-4">
+        <div className="flex min-w-0 flex-1 items-center gap-2.5">
+          <Logo size={38} />
+          <div className="min-w-0 flex-1">
+            <div className="flex min-w-0 items-center gap-1.5 flex-wrap sm:flex-nowrap">
+              <span className="truncate font-display text-[16px] font-semibold leading-none tracking-[-0.03em] text-main">
                 VaultZero
               </span>
-              <span className="rounded-full bg-[var(--accent-soft)] px-1.5 py-0.5 font-mono text-[7.5px] font-semibold text-accent">
-                v{APP_VERSION}
-              </span>
+              <Tooltip label={lang === "bn" ? "আপডেট চেক করতে ক্লিক করুন" : "Click to check for updates"}>
+                <button
+                  type="button"
+                  onClick={onOpenUpdate}
+                  className="shrink-0 whitespace-nowrap rounded-full bg-[var(--accent-soft)] px-1.5 py-0.5 font-mono text-[7.5px] font-bold text-accent transition-transform hover:scale-105 active:scale-95"
+                >
+                  v{APP_VERSION}
+                </button>
+              </Tooltip>
             </div>
-            <p className="mt-1 flex items-center gap-1 text-[7.5px] font-bold uppercase leading-none tracking-[0.14em] text-faint">
-              <LockSimple size={8} weight="fill" />
+            <p className="mt-1 flex items-center gap-1 truncate text-[7.5px] font-bold uppercase leading-none tracking-[0.14em] text-faint">
+              <LockSimple size={8} weight="fill" className="shrink-0" />
               Local-only vault
             </p>
           </div>
@@ -140,10 +149,10 @@ export default function Sidebar({
         <Tooltip label="Security center" side>
           <button
             onClick={() => onTool("security")}
-            className="icon-button hidden h-7 w-7 rounded-lg xl:flex"
+            className="icon-button hidden h-7 w-7 shrink-0 items-center justify-center rounded-lg xl:flex"
             aria-label="Open security center"
           >
-            <ShieldCheck size={12} weight="duotone" />
+            <ShieldCheck size={13} weight="duotone" />
           </button>
         </Tooltip>
       </div>
@@ -341,15 +350,27 @@ export default function Sidebar({
             <p className="mt-1 truncate text-[8px] leading-none text-faint">XChaCha20 · Argon2id · local</p>
           </div>
           </button>
-          <Tooltip label="Panic lock · Ctrl L" side={false} up>
-            <button
-              onClick={onLock}
-              className="flex h-[22px] w-[22px] shrink-0 items-center justify-center rounded-[7px] border border-[var(--border-soft)] bg-[var(--glass-strong)] text-muted transition-colors hover:text-main"
-              aria-label="Lock vault now"
-            >
-              <LockKey size={11} weight="duotone" />
-            </button>
-          </Tooltip>
+          <div className="flex items-center gap-1 shrink-0">
+            <Tooltip label={lang === "bn" ? "সফটওয়্যার আপডেট চেক" : "Check for updates"} side={false} up>
+              <button
+                type="button"
+                onClick={onOpenUpdate}
+                className="flex h-[22px] w-[22px] shrink-0 items-center justify-center rounded-[7px] border border-[var(--border-soft)] bg-[var(--glass-strong)] text-muted transition-colors hover:text-accent hover:border-accent"
+                aria-label="Check for software updates"
+              >
+                <ArrowsClockwise size={11} weight="bold" />
+              </button>
+            </Tooltip>
+            <Tooltip label="Panic lock · Ctrl L" side={false} up>
+              <button
+                onClick={onLock}
+                className="flex h-[22px] w-[22px] shrink-0 items-center justify-center rounded-[7px] border border-[var(--border-soft)] bg-[var(--glass-strong)] text-muted transition-colors hover:text-main"
+                aria-label="Lock vault now"
+              >
+                <LockKey size={11} weight="duotone" />
+              </button>
+            </Tooltip>
+          </div>
         </div>
 
         <button

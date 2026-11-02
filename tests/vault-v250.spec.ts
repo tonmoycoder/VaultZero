@@ -41,10 +41,10 @@ test.describe("VaultZero v2.5.0 Master Verification Suite", () => {
   });
 
   test("2. Strict Semantic Versioning Comparison Engine", () => {
-    expect(APP_VERSION).toBe("2.5.1");
+    expect(APP_VERSION).toBe("2.5.2");
 
     // Identifies newer versions
-    expect(compareSemver("2.5.2", "2.5.1")).toBe(1);
+    expect(compareSemver("2.5.3", "2.5.2")).toBe(1);
     expect(compareSemver("v2.6.0", "v2.5.0")).toBe(1);
     expect(compareSemver("3.0.0", "2.5.0")).toBe(1);
 

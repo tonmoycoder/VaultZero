@@ -2,11 +2,30 @@ import { Minus, Plus, TextAa } from "@phosphor-icons/react";
 import { Tooltip } from "./ui";
 import { cn } from "../utils/cn";
 
-export const TEXT_STEPS = [0.9, 1, 1.1, 1.22, 1.35] as const;
-export const DEFAULT_TEXT_STEP = 1;
+/**
+ * Base visual multiplier:
+ * 122% visual size from v2.5.1 is now established as the 100% baseline.
+ */
+export const BASE_FONT_MULTIPLIER = 1.22;
+
+/**
+ * Display percentage steps:
+ * Index 0: 80% (Compact)
+ * Index 1: 90% (Small)
+ * Index 2: 100% (Default baseline, rendering at 1.22x visual scale)
+ * Index 3: 115% (Large)
+ * Index 4: 130% (Largest)
+ */
+export const TEXT_STEPS = [0.80, 0.90, 1.00, 1.15, 1.30] as const;
+export const DEFAULT_TEXT_STEP = 2; // 1.00 -> 100%
+
+export const getEffectiveScale = (index: number): number => {
+  const normalized = TEXT_STEPS[index] ?? 1.00;
+  return Number((normalized * BASE_FONT_MULTIPLIER).toFixed(4));
+};
 
 export const stepLabel = (index: number) =>
-  ["Compact", "Default", "Comfortable", "Large", "Largest"][index] ?? "Default";
+  ["Compact", "Small", "Default", "Large", "Largest"][index] ?? "Default";
 
 export default function TextSizeControl({
   index,

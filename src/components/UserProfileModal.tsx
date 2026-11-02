@@ -1,7 +1,8 @@
 import { useState, useRef, type ChangeEvent, type FormEvent } from "react";
-import { Camera, Check, Trash, User, Sparkle, UploadSimple } from "@phosphor-icons/react";
+import { Camera, Check, Trash, User, Sparkle, UploadSimple, ArrowsClockwise, ShieldCheck } from "@phosphor-icons/react";
 import { Modal, Avatar } from "./ui";
 import { t, type Language } from "../lib/vault";
+import { CURRENT_APP_VERSION } from "../lib/updater";
 
 export interface UserProfileData {
   name: string;
@@ -24,11 +25,13 @@ export default function UserProfileModal({
   onClose,
   onNotify,
   onProfileUpdated,
+  onCheckUpdates,
   lang = "en",
 }: {
   onClose: () => void;
   onNotify: (msg: string) => void;
   onProfileUpdated?: (data: UserProfileData) => void;
+  onCheckUpdates?: () => void;
   lang?: Language;
 }) {
   const current = getUserProfile();
@@ -225,6 +228,41 @@ export default function UserProfileModal({
               placeholder="e.g. Vault Owner / Security Lead"
               className="min-w-0 flex-1 bg-transparent text-[11px] font-medium text-main outline-none placeholder:text-faint"
             />
+          </div>
+        </div>
+
+        {/* Software Update & Version Check Section */}
+        <div className="rounded-[14px] border border-[var(--border-soft)] bg-[var(--glass-soft)] p-3 text-left">
+          <div className="flex items-center justify-between">
+            <span className="flex items-center gap-1.5 text-[8.5px] font-bold uppercase tracking-[0.12em] text-faint">
+              <ArrowsClockwise size={12} weight="bold" className="text-accent" />
+              {lang === "bn" ? "সফটওয়্যার আপডেট ও ভার্সন" : "Software Update & Version"}
+            </span>
+            <span className="rounded-full bg-[var(--accent-soft)] px-2 py-0.5 font-mono text-[7.5px] font-bold text-accent">
+              v{CURRENT_APP_VERSION}
+            </span>
+          </div>
+          <p className="mt-1 text-[8.5px] text-muted">
+            {lang === "bn"
+              ? "অফিসিয়াল গিটহাব রিলিজ থেকে নতুন ফিচার বা সিকিউরিটি প্যাচ চেক করুন।"
+              : "Check for newer releases or security patches from official GitHub releases."}
+          </p>
+          <div className="mt-2.5 flex items-center justify-between">
+            <span className="flex items-center gap-1 text-[7.5px] text-faint">
+              <ShieldCheck size={10} weight="duotone" className="text-success" />
+              {lang === "bn" ? "নিরাপদ জিরো-নলেজ ক্লায়েন্ট" : "Zero-knowledge offline client"}
+            </span>
+            <button
+              type="button"
+              onClick={() => {
+                onClose();
+                onCheckUpdates?.();
+              }}
+              className="secondary-button flex h-7 items-center gap-1.5 rounded-lg px-2.5 text-[9px] font-semibold"
+            >
+              <ArrowsClockwise size={11} weight="bold" />
+              {lang === "bn" ? "🔄 আপডেট চেক করুন" : "🔄 Check for Updates"}
+            </button>
           </div>
         </div>
       </form>

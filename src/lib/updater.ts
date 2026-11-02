@@ -47,31 +47,46 @@ export function isNewerVersion(candidate: string, current = CURRENT_APP_VERSION)
   return compareSemver(candidate, current) > 0;
 }
 
+export interface CheckReleaseStatus {
+  status: "idle" | "checking" | "up_to_date" | "update_available" | "error" | "offline";
+  currentVersion: string;
+  remoteVersion?: string;
+  updateInfo?: UpdateInfo;
+  message?: string;
+}
+
 /**
- * Checks for the latest release on GitHub.
- * Fallbacks cleanly without breaking if offline or air-gapped.
+ * Checks for the latest release on GitHub with explicit status reporting.
+ * Uses cache-busting timestamp and application/vnd.github+json header.
  */
-export async function checkForUpdates(): Promise<UpdateInfo | null> {
+export async function checkReleaseStatus(): Promise<CheckReleaseStatus> {
   try {
-    const res = await fetch(`https://api.github.com/repos/${GITHUB_REPO}/releases/latest`, {
+    const res = await fetch(`https://api.github.com/repos/${GITHUB_REPO}/releases/latest?t=${Date.now()}`, {
       headers: {
-        Accept: "application/vnd.github.v3+json",
+        Accept: "application/vnd.github+json",
       },
       cache: "no-store",
     });
 
     if (!res.ok) {
-      if (res.status === 404) return null;
-      throw new Error(`GitHub API returned status ${res.status}`);
+      if (res.status === 404) {
+        return {
+          status: "up_to_date",
+          currentVersion: CURRENT_APP_VERSION,
+          remoteVersion: CURRENT_APP_VERSION,
+          message: "No releases found on remote repository.",
+        };
+      }
+      return {
+        status: "error",
+        currentVersion: CURRENT_APP_VERSION,
+        message: `GitHub API returned HTTP status ${res.status}`,
+      };
     }
 
     const data = await res.json();
     const tagName = data.tag_name || "";
-    const cleanVersion = tagName.replace(/^v/i, "");
-
-    if (!isNewerVersion(cleanVersion, CURRENT_APP_VERSION)) {
-      return null;
-    }
+    const cleanVersion = tagName.replace(/^v/i, "").trim();
 
     const assets: GitHubAsset[] = Array.isArray(data.assets)
       ? data.assets.map((a: any) => ({
@@ -82,14 +97,14 @@ export async function checkForUpdates(): Promise<UpdateInfo | null> {
       : [];
 
     const installerAsset = assets.find(
-      (a) => a.name.includes("Setup.exe") || a.name.includes("Installer")
+      (a) => a.name.endsWith(".exe") && (a.name.includes("Setup") || a.name.includes("Installer") || a.name.includes("setup"))
     );
     const portableAsset = assets.find(
-      (a) => a.name.includes("Portable.zip") || a.name.includes("Portable.exe")
+      (a) => a.name.includes("portable") || a.name.includes("Portable") || a.name.endsWith(".exe")
     );
-    const androidAsset = assets.find((a) => a.name.includes(".apk") || a.name.includes("Android"));
+    const androidAsset = assets.find((a) => a.name.endsWith(".apk"));
 
-    return {
+    const updateInfo: UpdateInfo = {
       version: cleanVersion,
       tagName,
       name: data.name || `VaultZero ${tagName}`,
@@ -100,11 +115,38 @@ export async function checkForUpdates(): Promise<UpdateInfo | null> {
       portableAsset,
       androidAsset,
     };
-  } catch (err) {
-    // Air-gapped / offline environment fail-open
-    console.debug("Updater note (air-gapped check):", err);
-    return null;
+
+    if (isNewerVersion(cleanVersion, CURRENT_APP_VERSION)) {
+      return {
+        status: "update_available",
+        currentVersion: CURRENT_APP_VERSION,
+        remoteVersion: cleanVersion,
+        updateInfo,
+      };
+    }
+
+    return {
+      status: "up_to_date",
+      currentVersion: CURRENT_APP_VERSION,
+      remoteVersion: cleanVersion,
+      updateInfo,
+    };
+  } catch (err: any) {
+    return {
+      status: "offline",
+      currentVersion: CURRENT_APP_VERSION,
+      message: err?.message || "Air-gapped / offline environment",
+    };
   }
+}
+
+/**
+ * Checks for the latest release on GitHub.
+ * Fallbacks cleanly without breaking if offline or air-gapped.
+ */
+export async function checkForUpdates(): Promise<UpdateInfo | null> {
+  const result = await checkReleaseStatus();
+  return result.status === "update_available" ? result.updateInfo ?? null : null;
 }
 
 /**
@@ -120,6 +162,7 @@ export function createPreUpdateBackup(): string {
 
   if (raw) {
     window.localStorage.setItem(backupKey, raw);
+    window.localStorage.setItem("pre-update-backup.pmv", raw);
     // Also save duplicate into sessionStorage for instant restoration if needed
     window.sessionStorage.setItem("vaultzero_pre_update_backup", raw);
   }

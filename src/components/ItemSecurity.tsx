@@ -66,7 +66,7 @@ export default function ItemSecurity({
   };
 
   return (
-    <div className="inspector-security thin-scrollbar space-y-4">
+    <div className="inspector-security thin-scrollbar overflow-y-auto overflow-x-hidden min-h-0 flex-1 px-3 pb-4 pt-1 space-y-4 max-w-full box-border">
       <div className="security-item-heading">
         <span className="security-emblem">
           <ShieldCheck size={25} weight="duotone" />

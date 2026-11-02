@@ -845,7 +845,7 @@ export default function VaultHome({
   }, [onQuery]);
 
   return (
-    <div className="relative flex min-h-0 flex-col lg:h-full px-3 sm:px-4">
+    <div className="relative flex min-h-0 flex-col overflow-x-hidden lg:h-full px-3 sm:px-4">
       {/* Mobile-only brand header */}
       <div className="mb-3 flex items-center justify-between gap-2 lg:hidden">
         <div className="flex min-w-0 items-center gap-2">

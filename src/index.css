@@ -158,17 +158,27 @@
 @layer base {
 html {
   background: var(--app-base);
+  overflow-x: hidden !important;
+  max-width: 100vw;
 }
 
 body {
   margin: 0;
   min-width: 320px;
+  max-width: 100vw;
   background: var(--app-base);
   color: var(--text-main);
   font-family: var(--font-sans);
   -webkit-font-smoothing: antialiased;
   text-rendering: optimizeLegibility;
   overflow: hidden;
+  overflow-x: hidden !important;
+}
+
+#root {
+  overflow-x: hidden !important;
+  max-width: 100vw;
+  width: 100%;
 }
 
 button,

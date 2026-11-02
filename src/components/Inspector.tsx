@@ -143,7 +143,7 @@ function InspectorBody({
   const siteUrl = item.url ? (item.url.startsWith("http") ? item.url : `https://${item.url}`) : null;
 
   return (
-    <div className="inspector-body thin-scrollbar min-h-0 flex-1 overflow-y-auto px-3 pb-4 pt-1">
+    <div className="inspector-body thin-scrollbar min-h-0 flex-1 overflow-y-auto overflow-x-hidden px-3 pb-4 pt-1 max-w-full box-border">
       {/* Item hero */}
       <div
         className="relative overflow-visible rounded-[18px] border p-3.5"
@@ -450,7 +450,7 @@ export default function DetailInspector({
   return (
     <div
       className={cn(
-        "glass inspector-surface flex h-full min-h-0 flex-col overflow-hidden",
+        "glass inspector-surface flex h-full min-h-0 flex-col overflow-hidden overflow-x-hidden max-w-full box-border",
         mode === "panel" && "rounded-[28px]",
         mode === "drawer" && "h-full w-full rounded-[26px]",
         mode === "sheet" && "h-full w-full rounded-t-[28px]"
@@ -563,14 +563,14 @@ export default function DetailInspector({
           ))}
         </div>
       </LayoutGroup>
-      <div className="inspector-content" id={`inspector-content-${groupId}`} role="tabpanel">
+      <div className="inspector-content overflow-x-hidden min-h-0 flex-1 flex flex-col max-w-full" id={`inspector-content-${groupId}`} role="tabpanel">
         <AnimatePresence mode="wait" initial={false}>
           <motion.div
             key={`${item.id}-${tab}`}
-            className="inspector-page"
-            initial={{ opacity: 0, x: reduceMotion ? 0 : 12 }}
+            className="inspector-page overflow-x-hidden w-full min-w-0 max-w-full box-border flex-1 flex flex-col"
+            initial={{ opacity: 0, x: reduceMotion ? 0 : 8 }}
             animate={{ opacity: 1, x: 0 }}
-            exit={{ opacity: 0, x: reduceMotion ? 0 : -8 }}
+            exit={{ opacity: 0, x: reduceMotion ? 0 : -6 }}
             transition={{ duration: reduceMotion ? 0 : 0.16, ease: "easeOut" }}
           >
             {tab === "details" ? (

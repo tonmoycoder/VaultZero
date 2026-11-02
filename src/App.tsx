@@ -23,7 +23,7 @@ import TactileProvider, { hapticSuccess } from "./components/Tactile";
 import Sidebar, { MobileQuickMenu, type ToolName } from "./components/Sidebar";
 import { exportVaultToCsv } from "./lib/csv";
 import { Avatar, Modal, Toggle, Tooltip } from "./components/ui";
-import TextSizeControl, { DEFAULT_TEXT_STEP, TEXT_STEPS, stepLabel } from "./components/TextSize";
+import TextSizeControl, { DEFAULT_TEXT_STEP, TEXT_STEPS, getEffectiveScale, stepLabel } from "./components/TextSize";
 import LofiPlayer from "./components/LofiPlayer";
 import VaultHome from "./components/VaultHome";
 import UpdateBanner from "./components/UpdateBanner";
@@ -38,6 +38,7 @@ const SyncModal = lazy(() => import("./components/toolModals").then((m) => ({ de
 const SecurityCenterModal = lazy(() => import("./components/SecurityCenter"));
 const CsvImportModal = lazy(() => import("./components/CsvImportModal").then((m) => ({ default: m.CsvImportModal })));
 const UserProfileModal = lazy(() => import("./components/UserProfileModal"));
+const UpdateModal = lazy(() => import("./components/UpdateModal"));
 import { APP_VERSION, compareSemver } from "./lib/version";
 import {
   checkGitHubUpdate,
@@ -85,10 +86,13 @@ function readStoredFeel(): FeelSettings {
 
 function readStoredTextStep(): number {
   if (typeof window === "undefined") return DEFAULT_TEXT_STEP;
-  const raw = window.localStorage.getItem("vaultzero-text-step");
-  if (raw === null) return DEFAULT_TEXT_STEP;
-  const stored = Number(raw);
-  return Number.isInteger(stored) && stored >= 0 && stored < TEXT_STEPS.length ? stored : DEFAULT_TEXT_STEP;
+  const rawV2 = window.localStorage.getItem("vaultzero_font_scale_v2");
+  if (rawV2 !== null) {
+    const stored = Number(rawV2);
+    if (Number.isInteger(stored) && stored >= 0 && stored < TEXT_STEPS.length) return stored;
+  }
+  window.localStorage.removeItem("vaultzero-text-step");
+  return DEFAULT_TEXT_STEP;
 }
 
 function shouldStartLocked(): boolean {
@@ -98,7 +102,7 @@ function shouldStartLocked(): boolean {
   return getActiveSession() === null;
 }
 
-type ModalName = ToolName | "mobileMenu" | "profile";
+type ModalName = ToolName | "mobileMenu" | "profile" | "update";
 
 function MobileNav({
   active,
@@ -220,9 +224,10 @@ export default function App() {
   }, [feel]);
 
   useEffect(() => {
-    document.documentElement.style.setProperty("--font-scale", String(TEXT_STEPS[textStep]));
+    const effective = getEffectiveScale(textStep);
+    document.documentElement.style.setProperty("--font-scale", String(effective));
     document.documentElement.dataset.textStep = String(textStep);
-    window.localStorage.setItem("vaultzero-text-step", String(textStep));
+    window.localStorage.setItem("vaultzero_font_scale_v2", String(textStep));
   }, [textStep]);
 
   useEffect(() => {
@@ -605,11 +610,12 @@ export default function App() {
             onLock={lockVault}
             onOpenMobileMenu={() => setModal("mobileMenu")}
             onOpenProfile={() => setModal("profile")}
+            onOpenUpdate={() => setModal("update")}
           />
 
           <main
             className={cn(
-              "thin-scrollbar min-w-0 flex-1 overflow-y-auto px-3 pb-[90px] pt-3 sm:px-4 lg:overflow-hidden lg:px-0 lg:pb-0 lg:pt-0",
+              "thin-scrollbar min-w-0 flex-1 overflow-y-auto overflow-x-hidden px-3 pb-[90px] pt-3 sm:px-4 lg:overflow-hidden lg:px-0 lg:pb-0 lg:pt-0",
               !detailOpen && "xl:pr-0"
             )}
           >
@@ -880,6 +886,15 @@ export default function App() {
           {modal === "profile" && (
             <UserProfileModal
               key="profile"
+              onClose={() => setModal(null)}
+              onNotify={notify}
+              onCheckUpdates={() => setModal("update")}
+              lang={lang}
+            />
+          )}
+          {modal === "update" && (
+            <UpdateModal
+              key="update"
               onClose={() => setModal(null)}
               onNotify={notify}
               lang={lang}
