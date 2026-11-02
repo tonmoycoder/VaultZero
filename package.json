@@ -11,9 +11,10 @@
     "test": "playwright test",
     "build:test-bundles": "node scripts/build-test-bundles.mjs",
     "test:harness": "node scripts/run-harness.mjs",
-    "verify": "npm run build:test-bundles && npm run test:harness && npm run build && npm run check:contrast && npm run check:rust-format",
+    "verify": "npm run build:test-bundles && npm run test:harness && npm run build && npm run check:contrast && npm run check:rust-format && npm run check:bundle",
     "check:contrast": "node scripts/check-contrast.mjs",
-    "check:rust-format": "node scripts/check-rust-format.mjs"
+    "check:rust-format": "node scripts/check-rust-format.mjs",
+    "check:bundle": "node scripts/check-bundle-size.mjs"
   },
   "dependencies": {
     "@phosphor-icons/react": "^2.1.10",

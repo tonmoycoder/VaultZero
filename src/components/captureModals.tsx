@@ -33,7 +33,6 @@ import { cn } from "../utils/cn";
 import { BrandMark, CopyButton, GlassCheck, Modal, StrengthDots, Tooltip } from "./ui";
 import OcrCopyPad, { type OcrField } from "./OcrCopyPad";
 import { MAX_OCR_FILE_SIZE, runLocalOcr, type OcrLanguage } from "../lib/ocr";
-import jsQR from "jsqr";
 import { parseOtpAuthUri } from "../lib/totp";
 import type { Language } from "../lib/vault";
 
@@ -401,7 +400,7 @@ async function extractQrFromImage(file: File): Promise<string | null> {
   return new Promise((resolve) => {
     const img = new window.Image();
     const url = URL.createObjectURL(file);
-    img.onload = () => {
+    img.onload = async () => {
       URL.revokeObjectURL(url);
       try {
         const canvas = document.createElement("canvas");
@@ -411,6 +410,13 @@ async function extractQrFromImage(file: File): Promise<string | null> {
         if (!ctx) { resolve(null); return; }
         ctx.drawImage(img, 0, 0);
         const imgData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+        /*
+         * PERFORMANCE: the QR decoder is 132 KB of JavaScript. It used to
+         * be imported statically, so every user downloaded it on the first
+         * paint even though it is only needed when a QR code is scanned.
+         * It is now loaded on demand, at the moment a frame is decoded.
+         */
+        const { default: jsQR } = await import("jsqr");
         const code = jsQR(imgData.data, imgData.width, imgData.height, {
           inversionAttempts: "dontInvert",
         });

@@ -26,11 +26,27 @@ export default defineConfig({
     chunkSizeWarningLimit: 600,
     rollupOptions: {
       output: {
+        /*
+         * PERFORMANCE: the chunk boundaries are explicit, because Rollup
+         * otherwise groups modules by the entry that reaches them first.
+         *
+         * `captureModals.tsx` imports both `lib/ocr.ts` and `lib/totp.ts`.
+         * Rollup put them in one chunk, and the chunk carried the OCR
+         * language table with it — 83 KB of Shift-JIS data. Opening the TOTP
+         * dialog, which only needs a base32 decoder, downloaded the whole
+         * OCR table first. The TOTP chunk was 135 KB for a 7 KB source
+         * file.
+         *
+         * Splitting the modules by name keeps every heavy payload in the
+         * chunk that actually uses it.
+         */
         manualChunks: {
           "vendor-react": ["react", "react-dom"],
           "vendor-icons": ["@phosphor-icons/react"],
           "vendor-motion": ["framer-motion"],
           "vendor-ocr": ["tesseract.js"],
+          "lib-totp": ["src/lib/totp.ts"],
+          "lib-wordlist": ["src/lib/wordlist.ts"],
         },
       },
     },

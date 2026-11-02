@@ -38,6 +38,12 @@ jobs:
       - name: Check Theme Contrast
         run: node scripts/check-contrast.mjs
 
+      # PERFORMANCE: the heavy payloads have to stay out of the initial
+      # download. The TOTP chunk used to carry the OCR language table, and
+      # the QR decoder used to be part of the first paint.
+      - name: Check Bundle Budget
+        run: node scripts/check-bundle-size.mjs
+
       # The browserless harnesses exercise the security-critical logic
       # (storage, KDF, updater, breach scanner, URL sanitiser) without a
       # browser, so they run on every CI machine — including ones where

@@ -20,9 +20,27 @@ import {
   Trash,
   WifiHigh,
 } from "@phosphor-icons/react";
-import jsQR from "jsqr";
 import { QRCodeSVG } from "qrcode.react";
 import { useEffect, useMemo, useRef, useState } from "react";
+
+/**
+ * The QR decoder, loaded on demand.
+ *
+ * PERFORMANCE: the decoder is 132 KB of JavaScript. It was imported
+ * statically, so it was part of the initial download even though it is
+ * only needed when the camera scanner runs.
+ *
+ * The camera scans a frame on every animation frame, so the module has to
+ * be fetched exactly once and then reused. The promise is cached, which
+ * means the first frame waits for the download and every later frame gets
+ * the module synchronously.
+ */
+let jsQrPromise: Promise<typeof import("jsqr").default> | null = null;
+
+function loadJsQr(): Promise<typeof import("jsqr").default> {
+  jsQrPromise ??= import("jsqr").then((module) => module.default);
+  return jsQrPromise;
+}
 import { t, type VaultItem } from "../lib/vault";
 import {
   defaultGeneratorOptions,
@@ -626,35 +644,53 @@ export function SyncModal({ onClose, onNotify }: { onClose: () => void; onNotify
     canvas.height = video.videoHeight;
     ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
     const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
-    const code = jsQR(imageData.data, imageData.width, imageData.height, {
-      inversionAttempts: "dontInvert",
+
+    // The decoder is fetched once and then reused for every frame. The
+    // scanner keeps its frame loop running while the module is in flight,
+    // so the first decoded frame simply arrives a moment later.
+    void loadJsQr().then((jsQR) => {
+      const code = jsQR(imageData.data, imageData.width, imageData.height, {
+        inversionAttempts: "dontInvert",
+      });
+      handleScannedCode(code ? code.data : null);
     });
 
-    if (code && code.data) {
-      try {
-        const parsed = JSON.parse(code.data);
-        if (parsed.app === "vaultzero" || parsed.ip) {
-          stopCamera();
-          // V-17: a scanned QR is a *peer selection*, not a completed
-          // connection. The authenticated handshake only succeeds when the
-          // transfer actually runs, so we do not claim "connected" yet.
-          setConnectedPeer(`${parsed.ip}:${parsed.port || 1420}`);
-          if (typeof parsed.code === "string" && parsed.code) {
-            setManualCode(parsed.code);
-          }
-          onNotify(`Peer selected: ${parsed.ip} — start the transfer to authenticate.`);
-          return;
-        }
-      } catch {
-        // Raw text QR code
+    animFrameRef.current = requestAnimationFrame(tickScanner);
+  };
+
+  /**
+   * Handles a decoded QR payload.
+   *
+   * PERFORMANCE: the decoder resolves asynchronously now, so the result
+   * arrives outside the frame loop. The loop keeps running in the
+   * meantime, which means a frame that was decoded before the scanner
+   * stopped could still arrive afterwards; the camera check makes sure a
+   * late result cannot reopen a session that was already closed.
+   */
+  const handleScannedCode = (text: string | null) => {
+    if (!text || !cameraActive) return;
+
+    try {
+      const parsed = JSON.parse(text);
+      if (parsed.app === "vaultzero" || parsed.ip) {
         stopCamera();
-        setConnectedPeer(code.data);
-        onNotify("Peer selected via QR scan — start the transfer to authenticate.");
+        // V-17: a scanned QR is a *peer selection*, not a completed
+        // connection. The authenticated handshake only succeeds when the
+        // transfer actually runs, so we do not claim "connected" yet.
+        setConnectedPeer(`${parsed.ip}:${parsed.port || 1420}`);
+        if (typeof parsed.code === "string" && parsed.code) {
+          setManualCode(parsed.code);
+        }
+        onNotify(`Peer selected: ${parsed.ip} — start the transfer to authenticate.`);
         return;
       }
+    } catch {
+      // Raw text QR code
+      stopCamera();
+      setConnectedPeer(text);
+      onNotify("Peer selected via QR scan — start the transfer to authenticate.");
+      return;
     }
-
-    animFrameRef.current = requestAnimationFrame(tickScanner);
   };
 
   const handleManualConnect = () => {
