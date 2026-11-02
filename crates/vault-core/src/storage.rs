@@ -246,9 +246,10 @@ impl StorageEngine {
         let kek = derive_kek(master_password, &salt, keyfile_bytes, &params)?;
 
         let primary_vk = generate_vault_key();
-        let primary_vk_bytes: [u8; KEY_LEN] = primary_vk.as_slice().try_into().map_err(|_| {
-            VaultError::CryptoError("Invalid key length".into())
-        })?;
+        let primary_vk_bytes: [u8; KEY_LEN] = primary_vk
+            .as_slice()
+            .try_into()
+            .map_err(|_| VaultError::CryptoError("Invalid key length".into()))?;
         let (primary_wrapped_key, primary_nonce) = wrap_key(&primary_vk_bytes, &kek)?;
 
         // Setup duress slot if provided
@@ -262,9 +263,10 @@ impl StorageEngine {
             OsRng.fill_bytes(&mut duress_salt);
             let d_kek = derive_kek(d_pwd, &duress_salt, None, &params)?;
             let d_vk = generate_vault_key();
-            let d_vk_bytes: [u8; KEY_LEN] = d_vk.as_slice().try_into().map_err(|_| {
-                VaultError::CryptoError("Invalid duress key length".into())
-            })?;
+            let d_vk_bytes: [u8; KEY_LEN] = d_vk
+                .as_slice()
+                .try_into()
+                .map_err(|_| VaultError::CryptoError("Invalid duress key length".into()))?;
             let (w_key, n_bytes) = wrap_key(&d_vk_bytes, &d_kek)?;
             duress_nonce = n_bytes;
             duress_wrapped_key = w_key;
@@ -374,12 +376,7 @@ impl StorageEngine {
         let aad_bytes = header.serialize_aad();
 
         // 1. Try unlocking primary vault
-        let primary_kek_res = derive_kek(
-            password,
-            &header.salt,
-            keyfile_bytes,
-            &header.kdf_params,
-        );
+        let primary_kek_res = derive_kek(password, &header.salt, keyfile_bytes, &header.kdf_params);
 
         if let Ok(primary_kek) = primary_kek_res {
             if let Ok(primary_vk) = unwrap_key(
@@ -440,7 +437,7 @@ impl StorageEngine {
                     let d_ciphertext = &data[d_start + NONCE_LEN..d_end];
 
                     let decrypted =
-                    decrypt_payload(d_ciphertext, &d_nonce, &duress_vk, &aad_bytes)?;
+                        decrypt_payload(d_ciphertext, &d_nonce, &duress_vk, &aad_bytes)?;
                     let vault: Vault = rmp_serde::from_slice(&decrypted)
                         .map_err(|e| VaultError::SerializationError(e.to_string()))?;
 

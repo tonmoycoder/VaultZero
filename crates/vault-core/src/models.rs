@@ -319,7 +319,6 @@ impl Entry {
     }
 }
 
-
 /// Current Unix timestamp in seconds.
 pub fn now_seconds() -> u64 {
     chrono::Utc::now().timestamp().max(0) as u64

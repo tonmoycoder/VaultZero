@@ -67,12 +67,8 @@ pub fn merge_vault_states(local: &Vault, remote: &Vault) -> Vault {
     let mut merged = local.clone();
 
     // 1. Merge Entries
-    let mut local_map: HashMap<Uuid, Entry> = local
-        .entries
-        .iter()
-        .cloned()
-        .map(|e| (e.id, e))
-        .collect();
+    let mut local_map: HashMap<Uuid, Entry> =
+        local.entries.iter().cloned().map(|e| (e.id, e)).collect();
 
     for remote_entry in &remote.entries {
         match local_map.get_mut(&remote_entry.id) {
@@ -88,16 +84,22 @@ pub fn merge_vault_states(local: &Vault, remote: &Vault) -> Vault {
                             .iter()
                             .any(|h| h.password == local_entry.password);
                         if !already_has {
-                            winner.password_history.push(crate::models::PasswordHistoryEntry {
-                                password: local_entry.password.clone(),
-                                changed_at: local_entry.updated_at,
-                            });
+                            winner
+                                .password_history
+                                .push(crate::models::PasswordHistoryEntry {
+                                    password: local_entry.password.clone(),
+                                    changed_at: local_entry.updated_at,
+                                });
                         }
                     }
 
                     // Also preserve any distinct history entries from local
                     for hist in &local_entry.password_history {
-                        if !winner.password_history.iter().any(|h| h.password == hist.password) {
+                        if !winner
+                            .password_history
+                            .iter()
+                            .any(|h| h.password == hist.password)
+                        {
                             winner.password_history.push(hist.clone());
                         }
                     }
@@ -114,10 +116,12 @@ pub fn merge_vault_states(local: &Vault, remote: &Vault) -> Vault {
                             .iter()
                             .any(|h| h.password == remote_entry.password);
                         if !already_has {
-                            local_entry.password_history.push(crate::models::PasswordHistoryEntry {
-                                password: remote_entry.password.clone(),
-                                changed_at: remote_entry.updated_at,
-                            });
+                            local_entry.password_history.push(
+                                crate::models::PasswordHistoryEntry {
+                                    password: remote_entry.password.clone(),
+                                    changed_at: remote_entry.updated_at,
+                                },
+                            );
                         }
                     }
 
@@ -145,12 +149,8 @@ pub fn merge_vault_states(local: &Vault, remote: &Vault) -> Vault {
     merged.entries = merged_entries;
 
     // 2. Merge Folders
-    let mut folder_map: HashMap<Uuid, Folder> = local
-        .folders
-        .iter()
-        .cloned()
-        .map(|f| (f.id, f))
-        .collect();
+    let mut folder_map: HashMap<Uuid, Folder> =
+        local.folders.iter().cloned().map(|f| (f.id, f)).collect();
 
     for remote_folder in &remote.folders {
         match folder_map.get_mut(&remote_folder.id) {

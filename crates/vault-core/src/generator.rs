@@ -38,16 +38,15 @@ const SYMBOLS: &[u8] = b"!@#$%^&*()-_=+[]{}|;:,.<>?";
 
 /// 77-word EFF Diceware curated compact offline list
 const DICEWARE_WORDLIST: &[&str] = &[
-    "ability", "absent", "absorb", "abstract", "academy", "accent", "account", "acquire",
-    "across", "actress", "advance", "airport", "album", "alibi", "alley", "alpha",
-    "alpine", "amber", "anchor", "angel", "anthem", "antique", "apron", "arcade",
-    "arctic", "arena", "artist", "aspect", "astral", "atlas", "atom", "audio",
-    "august", "avatar", "avenue", "bacon", "badge", "balcony", "banner", "baron",
-    "beacon", "breeze", "bronze", "cabin", "canyon", "castle", "cedar", "cipher",
-    "clover", "cobalt", "comet", "compass", "coral", "cosmos", "crater", "crystal",
-    "delta", "diamond", "drift", "echo", "ember", "falcon", "frost", "galaxy",
-    "glacier", "granite", "harbor", "horizon", "island", "jasper", "kinetic", "lagoon",
-    "lunar", "marble", "matrix", "meadow", "meteor",
+    "ability", "absent", "absorb", "abstract", "academy", "accent", "account", "acquire", "across",
+    "actress", "advance", "airport", "album", "alibi", "alley", "alpha", "alpine", "amber",
+    "anchor", "angel", "anthem", "antique", "apron", "arcade", "arctic", "arena", "artist",
+    "aspect", "astral", "atlas", "atom", "audio", "august", "avatar", "avenue", "bacon", "badge",
+    "balcony", "banner", "baron", "beacon", "breeze", "bronze", "cabin", "canyon", "castle",
+    "cedar", "cipher", "clover", "cobalt", "comet", "compass", "coral", "cosmos", "crater",
+    "crystal", "delta", "diamond", "drift", "echo", "ember", "falcon", "frost", "galaxy",
+    "glacier", "granite", "harbor", "horizon", "island", "jasper", "kinetic", "lagoon", "lunar",
+    "marble", "matrix", "meadow", "meteor",
 ];
 
 /// Generates a high-entropy CSPRNG password based on configuration options.
@@ -260,8 +259,33 @@ fn dictionary_entropy_cap(chars: &[char]) -> Option<f64> {
 /// A compact list of extremely common password words used for the
 /// dictionary entropy cap. This is intentionally small and offline.
 const COMMON_WORDS: &[&str] = &[
-    "password", "admin", "welcome", "letmein", "login", "master", "shadow", "sunshine",
-    "princess", "football", "dragon", "monkey", "superman", "batman", "trustno1",
-    "iloveyou", "starwars", "whatever", "qwerty", "abc123", "changeme", "secret",
-    "computer", "internet", "service", "google", "facebook", "instagram", "linkedin",
+    "password",
+    "admin",
+    "welcome",
+    "letmein",
+    "login",
+    "master",
+    "shadow",
+    "sunshine",
+    "princess",
+    "football",
+    "dragon",
+    "monkey",
+    "superman",
+    "batman",
+    "trustno1",
+    "iloveyou",
+    "starwars",
+    "whatever",
+    "qwerty",
+    "abc123",
+    "changeme",
+    "secret",
+    "computer",
+    "internet",
+    "service",
+    "google",
+    "facebook",
+    "instagram",
+    "linkedin",
 ];

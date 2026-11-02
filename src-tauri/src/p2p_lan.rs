@@ -1,3 +1,4 @@
+use futures_util::{SinkExt, StreamExt};
 use mdns_sd::{ServiceDaemon, ServiceInfo};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
@@ -6,7 +7,6 @@ use std::time::Duration;
 use tokio::net::TcpListener;
 use tokio_tungstenite::tungstenite::protocol::Message;
 use tokio_tungstenite::{accept_async, connect_async};
-use futures_util::{SinkExt, StreamExt};
 use vault_core::p2p::{P2PRole, P2PSessionHandshake, P2PSessionKey};
 
 pub const SERVICE_TYPE: &str = "_vaultzero._tcp.local.";
@@ -139,15 +139,9 @@ impl P2PManager {
         properties.insert("app".to_string(), "vaultzero".to_string());
         properties.insert("version".to_string(), "2.5.0".to_string());
 
-        let service_info = ServiceInfo::new(
-            SERVICE_TYPE,
-            &device_name,
-            &host_name,
-            "",
-            port,
-            properties,
-        )
-        .map_err(|e| format!("Failed to create service info: {}", e))?;
+        let service_info =
+            ServiceInfo::new(SERVICE_TYPE, &device_name, &host_name, "", port, properties)
+                .map_err(|e| format!("Failed to create service info: {}", e))?;
 
         daemon
             .register(service_info)
@@ -266,10 +260,8 @@ impl P2PManager {
 
         // Step 5: only NOW do we release the vault payload — encrypted.
         let payload = payload_clone.lock().unwrap().clone().unwrap_or_default();
-        let encrypted = session.encrypt_payload_with_direction(
-            payload.as_bytes(),
-            DIR_HOST_TO_CLIENT,
-        )?;
+        let encrypted =
+            session.encrypt_payload_with_direction(payload.as_bytes(), DIR_HOST_TO_CLIENT)?;
 
         ws_stream
             .send(Message::Binary(encrypted.into()))
@@ -351,12 +343,8 @@ impl P2PManager {
         let host_pub = to_public_key(&reply.public_key)?;
 
         // Step 3: derive our side of the session and verify the binding hash.
-        let session = client_hs.complete_handshake(
-            &host_pub,
-            &pin,
-            P2PRole::Client,
-            P2PRole::Host,
-        )?;
+        let session =
+            client_hs.complete_handshake(&host_pub, &pin, P2PRole::Client, P2PRole::Host)?;
 
         let mut peer_binding = [0u8; 32];
         if reply.binding.len() != 32 {

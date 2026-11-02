@@ -149,7 +149,9 @@ pub fn unwrap_key(
         .map_err(|_| VaultError::AuthenticationFailed)?;
 
     if decrypted.len() != KEY_LEN {
-        return Err(VaultError::CryptoError("Unwrapped key has invalid length".into()));
+        return Err(VaultError::CryptoError(
+            "Unwrapped key has invalid length".into(),
+        ));
     }
 
     Ok(LockedBuffer::new(decrypted))

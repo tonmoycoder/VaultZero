@@ -37,6 +37,7 @@
     "@fontsource/outfit": "^5.3.0",
     "@fontsource/plus-jakarta-sans": "^5.3.0",
     "@playwright/test": "^1.64.1",
+    "@scalar/rust-fmt": "^0.3.0",
     "@tailwindcss/vite": "4.1.17",
     "@tauri-apps/cli": "^2.2.0",
     "@types/node": "22.19.17",

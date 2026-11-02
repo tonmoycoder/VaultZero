@@ -63,17 +63,17 @@ pub mod commands {
     use super::*;
     use tauri::{Manager, State};
 
-/// SECURITY (V-26): converts a core error into a **user-safe** message.
-///
-/// The detailed error text (`e.to_string()`) used to be returned to the
-/// renderer verbatim, which leaked internal detail such as the file format,
-/// the expected magic bytes, and the platform's memory-protection mechanism
-/// to anyone who could trigger an error. The full text is still logged on
-/// the Rust side; only a fixed, safe message crosses the IPC boundary.
-fn safe_error(error: &vault_core::errors::VaultError) -> String {
-    eprintln!("[vaultzero] storage error: {}", error);
-    error.user_message().to_string()
-}
+    /// SECURITY (V-26): converts a core error into a **user-safe** message.
+    ///
+    /// The detailed error text (`e.to_string()`) used to be returned to the
+    /// renderer verbatim, which leaked internal detail such as the file format,
+    /// the expected magic bytes, and the platform's memory-protection mechanism
+    /// to anyone who could trigger an error. The full text is still logged on
+    /// the Rust side; only a fixed, safe message crosses the IPC boundary.
+    fn safe_error(error: &vault_core::errors::VaultError) -> String {
+        eprintln!("[vaultzero] storage error: {}", error);
+        error.user_message().to_string()
+    }
 
     #[tauri::command]
     pub fn is_vault_unlocked(state: State<AppState>) -> bool {
@@ -188,7 +188,12 @@ fn safe_error(error: &vault_core::errors::VaultError) -> String {
             .map_err(|e| e.to_string())?;
 
         let is_duress = session.is_duress;
-        let entry_count = session.vault.entries.iter().filter(|e| !e.is_deleted).count();
+        let entry_count = session
+            .vault
+            .entries
+            .iter()
+            .filter(|e| !e.is_deleted)
+            .count();
 
         *state.session.lock().unwrap() = Some(session);
         *state.vault_path.lock().unwrap() = Some(p.clone());
@@ -317,12 +322,7 @@ fn safe_error(error: &vault_core::errors::VaultError) -> String {
     /// Returns the in-memory security audit trail (V-07).
     #[tauri::command]
     pub fn get_audit_log(state: State<AppState>) -> Vec<String> {
-        state
-            .audit
-            .snapshot()
-            .iter()
-            .map(|e| e.format())
-            .collect()
+        state.audit.snapshot().iter().map(|e| e.format()).collect()
     }
 
     #[tauri::command]
@@ -442,7 +442,12 @@ fn safe_error(error: &vault_core::errors::VaultError) -> String {
             .as_ref()
             .ok_or_else(|| "Vault is locked".to_string())?;
 
-        let active_count = session.vault.entries.iter().filter(|e| !e.is_deleted).count();
+        let active_count = session
+            .vault
+            .entries
+            .iter()
+            .filter(|e| !e.is_deleted)
+            .count();
 
         // SECURITY (V-07): a bulk export releases *every* secret in the vault
         // in cleartext. It is recorded at CRITICAL severity.
@@ -574,7 +579,10 @@ fn safe_error(error: &vault_core::errors::VaultError) -> String {
 
     #[tauri::command]
     pub fn generate_totp_cmd(secret: String) -> Result<TotpResponse, String> {
-        let clean: String = secret.chars().filter(|c| !c.is_whitespace() && *c != '-').collect();
+        let clean: String = secret
+            .chars()
+            .filter(|c| !c.is_whitespace() && *c != '-')
+            .collect();
         let clean = clean.to_ascii_uppercase();
         let re = regex::Regex::new(r"^[A-Z2-7]+=*$").map_err(|e| e.to_string())?;
         if !re.is_match(&clean) {
@@ -586,7 +594,10 @@ fn safe_error(error: &vault_core::errors::VaultError) -> String {
         let now_epoch = chrono::Utc::now().timestamp() as u64;
         let (code, remaining) =
             generate_totp(&clean, now_epoch, 30, 6, "SHA1").map_err(|e| e.to_string())?;
-        Ok(TotpResponse { code, remaining_seconds: remaining })
+        Ok(TotpResponse {
+            code,
+            remaining_seconds: remaining,
+        })
     }
 }
 

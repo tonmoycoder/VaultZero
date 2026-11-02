@@ -39,10 +39,12 @@ impl OcrSmartParser {
         let mut recovery_codes = Vec::new();
         let mut title = None;
 
-        let url_regex = Regex::new(r"(?i)\b(https?://[^\s]+|www\.[a-zA-Z0-9-]+\.[a-zA-Z]{2,}[^\s]*)").unwrap();
+        let url_regex =
+            Regex::new(r"(?i)\b(https?://[^\s]+|www\.[a-zA-Z0-9-]+\.[a-zA-Z]{2,}[^\s]*)").unwrap();
         let email_regex = Regex::new(r"(?i)\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b").unwrap();
         let totp_regex = Regex::new(r"(?i)otpauth://totp/([^?]+)\?.*secret=([A-Z2-7]+)").unwrap();
-        let recovery_regex = Regex::new(r"(?i)\b[A-Za-z0-9]{4}-[A-Za-z0-9]{4}(?:-[A-Za-z0-9]{4})*\b").unwrap();
+        let recovery_regex =
+            Regex::new(r"(?i)\b[A-Za-z0-9]{4}-[A-Za-z0-9]{4}(?:-[A-Za-z0-9]{4})*\b").unwrap();
 
         for line in &lines {
             // Check TOTP otpauth://

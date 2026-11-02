@@ -128,7 +128,8 @@ impl VaultError {
                 VaultErrorCode::CryptoFailed
             }
             VaultError::IoError(_) | VaultError::Storage(_) => VaultErrorCode::IoFailed,
-            VaultError::SerializationError(_) | VaultError::MemoryLockError(_)
+            VaultError::SerializationError(_)
+            | VaultError::MemoryLockError(_)
             | VaultError::KdfError(_) => VaultErrorCode::Unknown,
         }
     }

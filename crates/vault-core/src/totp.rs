@@ -28,7 +28,12 @@ pub fn decode_base32(input: &str) -> Result<Vec<u8>> {
         let val = match c {
             'A'..='Z' => (c as u8 - b'A') as u32,
             '2'..='7' => (c as u8 - b'2' + 26) as u32,
-            _ => return Err(VaultError::CryptoError(format!("Invalid base32 character: {}", c))),
+            _ => {
+                return Err(VaultError::CryptoError(format!(
+                    "Invalid base32 character: {}",
+                    c
+                )))
+            }
         };
 
         bits = (bits << 5) | val;
@@ -132,7 +137,9 @@ pub fn parse_otpauth_uri(uri: &str) -> Result<TotpConfig> {
     }
 
     if secret.is_empty() {
-        return Err(VaultError::CryptoError("otpauth URI missing secret query parameter".into()));
+        return Err(VaultError::CryptoError(
+            "otpauth URI missing secret query parameter".into(),
+        ));
     }
 
     Ok(TotpConfig {

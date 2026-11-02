@@ -1,9 +1,9 @@
-pub mod auditor;
 pub mod audit_log;
+pub mod auditor;
 pub mod brands;
 pub mod crdt;
-pub mod data;
 pub mod crypto;
+pub mod data;
 pub mod errors;
 pub mod export;
 pub mod generator;
@@ -16,14 +16,14 @@ pub mod shredder;
 pub mod storage;
 pub mod totp;
 
-pub use auditor::{SecurityAuditReport, SecurityAuditor};
 pub use audit_log::{AuditEvent, AuditSeverity, SecurityAuditLog};
+pub use auditor::{SecurityAuditReport, SecurityAuditor};
 pub use brands::{BrandInfo, BrandRegistry};
 pub use crdt::{merge_vault_states, HlcClock};
 pub use crypto::{derive_kek, generate_vault_key, KdfParams};
+pub use data::wordlist::{WORDLIST, WORDLIST_LEN};
 pub use errors::{Result, VaultError};
 pub use export::{ImportPreview, VaultExporter};
-pub use data::wordlist::{WORDLIST, WORDLIST_LEN};
 pub use generator::{
     calculate_entropy, generate_passphrase, generate_password, passphrase_entropy,
     PasswordGenOptions,
@@ -134,15 +134,8 @@ mod tests {
         let kdf_params = KdfParams::fast_for_testing();
         let master_pwd = "TamperProofMaster#999";
 
-        StorageEngine::create_vault(
-            path,
-            &vault,
-            master_pwd,
-            None,
-            None,
-            Some(kdf_params),
-        )
-        .unwrap();
+        StorageEngine::create_vault(path, &vault, master_pwd, None, None, Some(kdf_params))
+            .unwrap();
 
         // Read raw data and tamper with a single bit in header
         let mut raw_data = fs::read(path).unwrap();
@@ -343,7 +336,11 @@ mod tests {
                 password: format!("Pass#{}", i),
                 notes: format!("Some notes for item {}", i),
                 folder_id: None,
-                category: if i % 2 == 0 { Category::Logins } else { Category::Payments },
+                category: if i % 2 == 0 {
+                    Category::Logins
+                } else {
+                    Category::Payments
+                },
                 tags: vec![format!("tag{}", i % 10)],
                 favorite: i % 5 == 0,
                 brand_color: None,
@@ -414,7 +411,15 @@ mod tests {
         assert!(summary.search_blob.contains("vcs"));
 
         // Every query that used to match a field must still match.
-        for query in ["github", "enterprise", "octocat", "acme", "dev", "vcs", "EXAMPLE"] {
+        for query in [
+            "github",
+            "enterprise",
+            "octocat",
+            "acme",
+            "dev",
+            "vcs",
+            "EXAMPLE",
+        ] {
             let filter = SearchFilter {
                 query: query.to_string(),
                 ..Default::default()
@@ -576,10 +581,8 @@ mod tests {
         assert!(brand1.is_some());
         assert_eq!(brand1.unwrap().slug, "github");
 
-        let brand2 = BrandRegistry::match_brand(
-            "Vacation Home Rental",
-            "https://www.airbnb.com/rooms/123",
-        );
+        let brand2 =
+            BrandRegistry::match_brand("Vacation Home Rental", "https://www.airbnb.com/rooms/123");
         assert!(brand2.is_some());
         assert_eq!(brand2.unwrap().slug, "airbnb");
     }
@@ -623,12 +626,7 @@ mod tests {
         // MITM Test: attacker relays with its own ephemeral key.
         let attacker_hs = P2PSessionHandshake::new();
         let attacker_session = attacker_hs
-            .complete_handshake(
-                &desktop_pub,
-                pin,
-                P2PRole::Client,
-                P2PRole::Host,
-            )
+            .complete_handshake(&desktop_pub, pin, P2PRole::Client, P2PRole::Host)
             .unwrap();
 
         // The attacker's binding hash must NOT match the host's.
@@ -683,7 +681,9 @@ mod tests {
             .encrypt_payload_with_direction(b"payload", 0x01)
             .unwrap();
         assert!(b_session.decrypt_payload_with_direction(&msg, 0x01).is_ok());
-        assert!(b_session.decrypt_payload_with_direction(&msg, 0x02).is_err());
+        assert!(b_session
+            .decrypt_payload_with_direction(&msg, 0x02)
+            .is_err());
     }
 
     #[test]
@@ -837,7 +837,10 @@ mod tests {
     fn test_duress_decoy_is_not_empty() {
         // SECURITY (V-04): an empty decoy vault is an obvious tell.
         let decoy = crate::models::decoy_entries();
-        assert!(!decoy.is_empty(), "duress decoy must contain filler entries");
+        assert!(
+            !decoy.is_empty(),
+            "duress decoy must contain filler entries"
+        );
         assert!(decoy.len() >= 5);
         for e in &decoy {
             assert!(!e.title.is_empty());

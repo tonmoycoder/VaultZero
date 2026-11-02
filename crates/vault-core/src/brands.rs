@@ -176,9 +176,26 @@ impl BrandRegistry {
     /// suffixes such as `co.uk` are handled by a small allowlist.
     fn registrable_domain(host: &str) -> String {
         const MULTI_LABEL_SUFFIXES: &[&str] = &[
-            "co.uk", "org.uk", "ac.uk", "gov.uk", "co.jp", "co.kr", "com.au",
-            "com.br", "com.cn", "co.in", "co.nz", "com.mx", "co.za", "com.tr",
-            "com.sg", "com.hk", "com.tw", "com.ar", "github.io", "gitlab.io",
+            "co.uk",
+            "org.uk",
+            "ac.uk",
+            "gov.uk",
+            "co.jp",
+            "co.kr",
+            "com.au",
+            "com.br",
+            "com.cn",
+            "co.in",
+            "co.nz",
+            "com.mx",
+            "co.za",
+            "com.tr",
+            "com.sg",
+            "com.hk",
+            "com.tw",
+            "com.ar",
+            "github.io",
+            "gitlab.io",
         ];
 
         let labels: Vec<&str> = host.split('.').filter(|l| !l.is_empty()).collect();
@@ -216,8 +233,7 @@ impl BrandRegistry {
             };
             let end = match_at + needle.len();
 
-            let left_ok = match_at == 0
-                || !bytes[match_at - 1].is_ascii_alphanumeric();
+            let left_ok = match_at == 0 || !bytes[match_at - 1].is_ascii_alphanumeric();
             let right_ok = end == bytes.len() || !bytes[end].is_ascii_alphanumeric();
 
             if left_ok && right_ok {
@@ -323,7 +339,6 @@ impl BrandRegistry {
     }
 }
 
-
 #[cfg(test)]
 mod tests {
     use super::BrandRegistry;
@@ -358,7 +373,10 @@ mod tests {
     /// V-27: genuine hosts (and their subdomains) must still match.
     #[test]
     fn genuine_domains_still_match() {
-        assert_eq!(slug_of("Google", "https://google.com"), Some("google".into()));
+        assert_eq!(
+            slug_of("Google", "https://google.com"),
+            Some("google".into())
+        );
         assert_eq!(
             slug_of("Google", "https://accounts.google.com/signin"),
             Some("google".into())
@@ -371,10 +389,7 @@ mod tests {
             slug_of("Netflix", "https://www.netflix.com/browse"),
             Some("netflix".into())
         );
-        assert_eq!(
-            slug_of("GitHub", "github.com"),
-            Some("github".into())
-        );
+        assert_eq!(slug_of("GitHub", "github.com"), Some("github".into()));
     }
 
     /// V-27: bare brand names are matched against the title as whole words,
@@ -393,21 +408,39 @@ mod tests {
 
     #[test]
     fn host_extraction_handles_malformed_input() {
-        assert_eq!(BrandRegistry::extract_host("https://a.b/c?d=1"), Some("a.b".into()));
+        assert_eq!(
+            BrandRegistry::extract_host("https://a.b/c?d=1"),
+            Some("a.b".into())
+        );
         assert_eq!(
             BrandRegistry::extract_host("user:pw@host.example.com:8443/x"),
             Some("host.example.com".into())
         );
-        assert_eq!(BrandRegistry::extract_host("example.com."), Some("example.com".into()));
+        assert_eq!(
+            BrandRegistry::extract_host("example.com."),
+            Some("example.com".into())
+        );
         assert_eq!(BrandRegistry::extract_host(""), None);
         assert_eq!(BrandRegistry::extract_host("   "), None);
     }
 
     #[test]
     fn registrable_domain_reduction() {
-        assert_eq!(BrandRegistry::registrable_domain("accounts.google.com"), "google.com");
-        assert_eq!(BrandRegistry::registrable_domain("notgoogle.com"), "notgoogle.com");
-        assert_eq!(BrandRegistry::registrable_domain("a.b.c.example.co.uk"), "example.co.uk");
-        assert_eq!(BrandRegistry::registrable_domain("example.com"), "example.com");
+        assert_eq!(
+            BrandRegistry::registrable_domain("accounts.google.com"),
+            "google.com"
+        );
+        assert_eq!(
+            BrandRegistry::registrable_domain("notgoogle.com"),
+            "notgoogle.com"
+        );
+        assert_eq!(
+            BrandRegistry::registrable_domain("a.b.c.example.co.uk"),
+            "example.co.uk"
+        );
+        assert_eq!(
+            BrandRegistry::registrable_domain("example.com"),
+            "example.com"
+        );
     }
 }

@@ -182,12 +182,7 @@ mod tests {
     fn test_audit_log_ring_buffer_evicts_oldest() {
         let log = SecurityAuditLog::new(3);
         for i in 0..5 {
-            log.record_action(
-                format!("action_{}", i),
-                AuditSeverity::Info,
-                None,
-                None,
-            );
+            log.record_action(format!("action_{}", i), AuditSeverity::Info, None, None);
         }
         let snap = log.snapshot();
         assert_eq!(snap.len(), 3);

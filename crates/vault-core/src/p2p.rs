@@ -253,11 +253,8 @@ impl P2PSessionKey {
     fn payload_key(&self, direction: u8) -> Result<[u8; 32], crate::errors::VaultError> {
         let hk = Hkdf::<Sha256>::new(None, self.key.as_ref());
         let mut okm = [0u8; 32];
-        hk.expand(
-            &[P2P_PAYLOAD_INFO, &[direction]].concat(),
-            &mut okm,
-        )
-        .map_err(|_| crate::errors::VaultError::CryptoError("HKDF expansion failed".into()))?;
+        hk.expand(&[P2P_PAYLOAD_INFO, &[direction]].concat(), &mut okm)
+            .map_err(|_| crate::errors::VaultError::CryptoError("HKDF expansion failed".into()))?;
         Ok(okm)
     }
 
@@ -351,7 +348,9 @@ impl OpticalQrChunk {
 
     pub fn reassemble(chunks: &[OpticalQrChunk]) -> Result<Vec<u8>, crate::errors::VaultError> {
         if chunks.is_empty() {
-            return Err(crate::errors::VaultError::Corrupted("No chunks provided".into()));
+            return Err(crate::errors::VaultError::Corrupted(
+                "No chunks provided".into(),
+            ));
         }
 
         let total = chunks[0].total_chunks as usize;

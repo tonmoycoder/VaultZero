@@ -61,7 +61,17 @@ jobs:
       - name: Rust Cache
         uses: swatinem/rust-cache@v2
 
+      # `cargo fmt --all -- --check` is the canonical gate, but it needs a
+      # Rust toolchain and its result shifts between rustfmt releases. The
+      # check below runs the same formatter through WebAssembly, so it is
+      # reproducible everywhere and does not depend on the toolchain
+      # version that happens to be installed.
       - name: Check Rust Formatting
+        run: node scripts/check-rust-format.mjs
+
+      # The toolchain check still runs, because a formatting pass that the
+      # toolchain disagrees with would be caught here.
+      - name: Check Rust Formatting with the toolchain
         run: cargo fmt --all -- --check
 
       - name: Run Cargo Clippy
