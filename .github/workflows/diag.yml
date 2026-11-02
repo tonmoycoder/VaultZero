@@ -3,6 +3,8 @@ on:
   workflow_dispatch:
   push:
     branches: [ arena/79f3d1ba-vaultzero ]
+  pull_request:
+    branches: [ arena/79f3d1ba-vaultzero ]
 jobs:
   diag:
     runs-on: windows-latest
@@ -101,9 +103,14 @@ jobs:
       # The job log and the artifact both live behind a signed blob URL that
       # is not reachable from every environment. Publishing the diagnostic as
       # a workflow output keeps it readable through the REST API.
-      - name: Publish the rustfmt diagnostic as a workflow output
+      # The job log, the artifact and the workflow output all sit behind
+      # endpoints that are not reachable from every environment. A PR comment
+      # is plain REST data, so it can always be read back.
+      - name: Publish the rustfmt diagnostic as a pull request comment
         if: always()
-        id: rustfmt
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
         run: |
           {
             echo "### rustfmt diagnostic"
@@ -111,9 +118,12 @@ jobs:
             sed -n '1,400p' rustfmt-diag.txt
             echo '```'
           } > rustfmt-summary.md
-          echo "summary<<EOF" >> "$GITHUB_OUTPUT"
-          cat rustfmt-summary.md >> "$GITHUB_OUTPUT"
-          echo "EOF" >> "$GITHUB_OUTPUT"
+          if [ -n "$PR_NUMBER" ]; then
+            gh pr comment "$PR_NUMBER" --body-file rustfmt-summary.md || true
+          else
+            gh issue comment "${GITHUB_REPOSITORY_OWNER}/${GITHUB_REPOSITORY}" \
+              --body-file rustfmt-summary.md || true
+          fi
           exit 0
       - name: Upload the diagnostic output
         if: always()
