@@ -7,7 +7,17 @@ echo ========================================================
 echo    Starting VaultZero - 100%% Offline Password Manager
 echo ========================================================
 
-:: 1. Ensure local engine is running and ready on port 1420 before opening browser
+:: 0. Instant Standalone Native Executable Launch (< 0.5s cold-start)
+if exist "%~dp0target\release\vaultzero-app.exe" (
+    start "" "%~dp0target\release\vaultzero-app.exe"
+    exit /b 0
+)
+if exist "%~dp0src-tauri\target\release\vaultzero-app.exe" (
+    start "" "%~dp0src-tauri\target\release\vaultzero-app.exe"
+    exit /b 0
+)
+
+:: 1. Fallback: Ensure local engine is running and ready on port 1420 before opening browser
 powershell -NoProfile -ExecutionPolicy Bypass -Command ^
   "$port = 1420; " ^
   "if (-not (Get-NetTCPConnection -LocalPort $port -ErrorAction SilentlyContinue)) { " ^

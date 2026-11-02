@@ -278,8 +278,8 @@ const ItemCard = memo(function ItemCard({
       role="button"
       tabIndex={0}
       onClick={onSelect}
-      whileHover={{ y: -5, scale: 1.012 }}
-      whileTap={{ scale: 0.965 }}
+      whileHover={{ y: -4 }}
+      whileTap={{ scale: 0.97 }}
       transition={colorOsBouncySpring}
       onKeyDown={(e) => {
         if (e.target === e.currentTarget && (e.key === "Enter" || e.key === " ")) {
@@ -845,7 +845,7 @@ export default function VaultHome({
   }, [onQuery]);
 
   return (
-    <div className="relative flex min-h-0 flex-col lg:h-full">
+    <div className="relative flex min-h-0 flex-col lg:h-full px-3 sm:px-4">
       {/* Mobile-only brand header */}
       <div className="mb-3 flex items-center justify-between gap-2 lg:hidden">
         <div className="flex min-w-0 items-center gap-2">
@@ -1032,7 +1032,7 @@ export default function VaultHome({
       </div>
 
       {/* Items Container */}
-      <div className="thin-scrollbar -mx-1 min-h-0 flex-1 overflow-y-auto overflow-x-hidden px-1 pt-3.5 pb-16 max-lg:overflow-visible">
+      <div className="thin-scrollbar min-h-0 flex-1 overflow-y-auto overflow-x-visible pt-1.5 pb-16">
         {sortedItems.length === 0 ? (
           <EmptyVault lang={lang} folder={folder} query={query} onAdd={onAdd} />
         ) : folderGroups ? (

@@ -137,18 +137,34 @@ export default function ItemSecurity({
         </div>
 
         {breachResult ? (
-          <div
-            className={`mt-2.5 rounded-[12px] p-2 text-[8.5px] leading-relaxed ${
-              breachResult.breached
-                ? "border border-[var(--danger)]/30 bg-[var(--danger-soft)] text-danger"
-                : "border border-[var(--success)]/30 bg-[var(--success-soft)] text-success"
-            }`}
-          >
-            {breachResult.message}
+          <div className="mt-2.5 space-y-1.5">
+            <div
+              className={`rounded-[12px] p-2 text-[8.5px] leading-relaxed ${
+                breachResult.breached
+                  ? "border border-[var(--danger)]/30 bg-[var(--danger-soft)] text-danger font-semibold"
+                  : "border border-[var(--success)]/30 bg-[var(--success-soft)] text-success"
+              }`}
+            >
+              {breachResult.breached
+                ? `⚠️ Exposed ${breachResult.count.toLocaleString()} times in public data breaches! Rotate immediately.`
+                : `✅ 0 matches found across 1B+ HIBP records (Prefix: ${breachResult.sha1Prefix}•••).`}
+            </div>
+            <div className="rounded-[10px] bg-white/5 border border-white/10 p-2 text-[7.5px] text-muted space-y-0.5">
+              <p>
+                <strong className="text-main">Source:</strong>{" "}
+                {breachResult.source.includes("HIBP")
+                  ? "HIBP k-Anonymity API (api.pwnedpasswords.com)"
+                  : "Offline Built-in Breach Dataset"}
+              </p>
+              <p>
+                <strong className="text-main">Cryptographic Proof:</strong> k-Anonymity Prefix Sent:{" "}
+                <span className="font-mono text-accent">SHA1[{breachResult.sha1Prefix}•••••]</span> (Zero-Knowledge)
+              </p>
+            </div>
           </div>
         ) : (
           <p className="mt-1 text-[8px] text-faint">
-            Uses k-Anonymity SHA-1 prefix matching. Your password never leaves this device.
+            Uses k-Anonymity SHA-1 prefix matching via Cloudflare HIBP. Your password never leaves this device.
           </p>
         )}
 

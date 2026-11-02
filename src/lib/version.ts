@@ -1,4 +1,4 @@
-export const APP_VERSION = "2.5.0";
+export const APP_VERSION = "2.5.1";
 export const APP_NAME = "VaultZero";
 export const APP_CODENAME = "ColorOS 17 Living Flow Edition";
 export const REPO_OWNER = "tonmoycoder";

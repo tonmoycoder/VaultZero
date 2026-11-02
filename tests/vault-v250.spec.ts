@@ -41,10 +41,10 @@ test.describe("VaultZero v2.5.0 Master Verification Suite", () => {
   });
 
   test("2. Strict Semantic Versioning Comparison Engine", () => {
-    expect(APP_VERSION).toBe("2.5.0");
+    expect(APP_VERSION).toBe("2.5.1");
 
     // Identifies newer versions
-    expect(compareSemver("2.5.1", "2.5.0")).toBe(1);
+    expect(compareSemver("2.5.2", "2.5.1")).toBe(1);
     expect(compareSemver("v2.6.0", "v2.5.0")).toBe(1);
     expect(compareSemver("3.0.0", "2.5.0")).toBe(1);
 
@@ -72,10 +72,10 @@ test.describe("VaultZero v2.5.0 Master Verification Suite", () => {
   });
 
   test("4. Zero-Knowledge Breach Scanner & Cryptographic Anatomy", async () => {
-    // Offline dictionary match
+    // Offline dataset match
     const res1 = await checkPasswordBreach("123456");
     expect(res1.breached).toBe(true);
-    expect(res1.source).toBe("offline_dictionary");
+    expect(res1.source).toMatch(/offline/i);
 
     const res2 = await checkPasswordBreach("password");
     expect(res2.breached).toBe(true);

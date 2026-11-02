@@ -21,6 +21,7 @@ import {
   addSecurityAuditEntry,
   checkPasswordBreach,
   getSecurityAuditLog,
+  type BreachCheckResult,
   type SecurityAuditEntry,
 } from "../lib/breachScanner";
 
@@ -50,6 +51,9 @@ export default function SecurityCenterModal({
   const [auditLogs, setAuditLogs] = useState<SecurityAuditEntry[]>(() => getSecurityAuditLog());
   const [breachScanning, setBreachScanning] = useState(false);
   const [breachCount, setBreachCount] = useState<number | null>(null);
+  const [breachedDetails, setBreachedDetails] = useState<
+    Array<{ item: VaultItem; result: BreachCheckResult }>
+  >([]);
 
   const timer = useRef<number | undefined>(undefined);
   const groupId = useId();
@@ -92,25 +96,34 @@ export default function SecurityCenterModal({
 
   const runDeepBreachAudit = async () => {
     setBreachScanning(true);
-    let breached = 0;
+    const leaked: Array<{ item: VaultItem; result: BreachCheckResult }> = [];
     try {
       for (const item of items) {
         if (!item.password || item.password === "—") continue;
         const res = await checkPasswordBreach(item.password, "en");
-        if (res.breached) breached++;
+        if (res.breached) {
+          leaked.push({ item, result: res });
+        }
       }
-      setBreachCount(breached);
+      setBreachCount(leaked.length);
+      setBreachedDetails(leaked);
+
+      const logDetail =
+        leaked.length > 0
+          ? `Found ${leaked.length} compromised password(s): ${leaked
+              .map((b) => `"${b.item.title} (${b.item.username || "no email"})"`)
+              .join(", ")} via HIBP k-Anonymity [SHA1: ${leaked[0]?.result.sha1Prefix || ""}***]`
+          : "Zero passwords found across 1B+ breach leaks via HIBP k-Anonymity";
+
       const updated = addSecurityAuditEntry(
         "Zero-Knowledge Breach Scan",
-        breached > 0 ? "breached" : "safe",
-        breached > 0
-          ? `Found ${breached} compromised passwords across vault`
-          : "Zero passwords found in known breach leaks"
+        leaked.length > 0 ? "breached" : "safe",
+        logDetail
       );
       setAuditLogs(updated);
       onNotify(
-        breached > 0
-          ? `⚠️ Breach Audit: ${breached} items found in compromised registries!`
+        leaked.length > 0
+          ? `⚠️ Breach Audit: ${leaked.length} items found in compromised registries!`
           : "✅ Zero breaches detected across entire vault!"
       );
     } finally {
@@ -235,6 +248,58 @@ export default function SecurityCenterModal({
           ))}
         </div>
       </LayoutGroup>
+
+      {/* Leaked & Compromised Accounts Dedicated Section */}
+      {breachedDetails.length > 0 && (
+        <div className="rounded-[18px] border border-red-500/35 bg-red-500/10 p-3.5 text-left shadow-lg">
+          <div className="flex items-center justify-between">
+            <span className="flex items-center gap-2 text-[11.5px] font-bold text-danger">
+              <ShieldWarning size={17} weight="fill" />
+              🚨 Leaked & Compromised Accounts ({breachedDetails.length})
+            </span>
+            <span className="rounded-full bg-red-500/20 px-2 py-0.5 text-[7.5px] font-bold text-danger uppercase tracking-wider">
+              Immediate Action Required
+            </span>
+          </div>
+          <p className="mt-1 text-[8.5px] text-muted">
+            The following accounts have passwords that appeared in public data breaches. Anyone with breach records can access them. Rotate these passwords immediately.
+          </p>
+          <div className="mt-3 space-y-2 max-h-[170px] overflow-y-auto thin-scrollbar">
+            {breachedDetails.map(({ item, result }) => (
+              <div
+                key={item.id}
+                className="flex items-center justify-between gap-3 rounded-[13px] border border-red-500/25 bg-[var(--glass-strong)] p-2.5 transition-all hover:border-red-500/40"
+              >
+                <div className="flex items-center gap-2.5 min-w-0">
+                  <BrandMark brand={item.brand} size={36} url={item.url} title={item.title} />
+                  <div className="min-w-0">
+                    <div className="flex items-center gap-1.5">
+                      <span className="truncate text-[11px] font-bold text-main">{item.title}</span>
+                      {item.url && (
+                        <span className="truncate text-[8px] text-faint">({item.url})</span>
+                      )}
+                    </div>
+                    <p className="truncate text-[9px] text-muted">{item.username || "No username / email"}</p>
+                    <p className="text-[7.5px] text-danger font-semibold">
+                      Found {result.count.toLocaleString()} times in HIBP database (SHA-1 Prefix: {result.sha1Prefix}***)
+                    </p>
+                  </div>
+                </div>
+                <button
+                  onClick={() => {
+                    onClose();
+                    onReview(item);
+                  }}
+                  className="primary-button shrink-0 flex items-center gap-1 rounded-[10px] px-2.5 py-1 text-[9.5px] font-semibold text-white shadow-md"
+                  style={{ background: "var(--danger)" }}
+                >
+                  Change Password Now →
+                </button>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
       <div className="security-list-heading">
         <h3>

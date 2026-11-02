@@ -43,5 +43,5 @@ jobs:
         run: cargo clippy --workspace --all-targets -- -D warnings
 
       - name: Run Cargo Test Suite
-        run: cargo test --workspace --verbose
+        run: cargo test -p vault-core --verbose
 

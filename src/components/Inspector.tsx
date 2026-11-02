@@ -146,7 +146,7 @@ function InspectorBody({
     <div className="inspector-body thin-scrollbar min-h-0 flex-1 overflow-y-auto px-3 pb-4 pt-1">
       {/* Item hero */}
       <div
-        className="relative overflow-hidden rounded-[18px] border p-3.5"
+        className="relative overflow-visible rounded-[18px] border p-3.5"
         style={{
           borderColor: "var(--border)",
           background: `linear-gradient(145deg, ${brand.tint}, var(--glass-soft))`,
@@ -154,10 +154,10 @@ function InspectorBody({
       >
         <div
           aria-hidden
-          className="absolute -right-10 -top-12 h-36 w-36 rounded-full opacity-25 blur-3xl"
+          className="pointer-events-none absolute -right-10 -top-12 h-36 w-36 rounded-full opacity-25 blur-3xl overflow-hidden"
           style={{ background: brand.hex }}
         />
-        <div aria-hidden className="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-white/70 to-transparent" />
+        <div aria-hidden className="pointer-events-none absolute inset-x-0 top-0 h-px rounded-t-[18px] bg-gradient-to-r from-transparent via-white/70 to-transparent" />
         <div className="relative flex items-center gap-3">
           <span className="relative shrink-0">
             <BrandMark brand={item.brand} size={52} url={item.url} title={item.title} />
@@ -219,6 +219,8 @@ function InspectorBody({
             {t(lang, "launchWebsite")}
           </a>
           <Tooltip
+            up
+            className="w-full"
             label={
               lang === "bn"
                 ? "অ্যাকাউন্টের সকল তথ্য (নাম, ওয়েবসাইট, ইউজারনেম, পাসওয়ার্ড, 2FA কোড ও নোট) সাজানো লাইন-বাই-লাইন আকারে এক ক্লিকে কপি করুন"
@@ -236,7 +238,7 @@ function InspectorBody({
                     : "✓ All account details copied line-by-line!"
                 );
               }}
-              className="secondary-button flex h-[33px] items-center justify-center gap-1.5 rounded-[10px] text-[10px] font-semibold"
+              className="secondary-button flex h-[33px] w-full items-center justify-center gap-1.5 rounded-[10px] text-[10px] font-semibold"
               aria-label="Quick copy all details"
             >
               <Copy size={12} weight="duotone" />

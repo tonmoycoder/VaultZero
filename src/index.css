@@ -913,7 +913,7 @@ button:not(:disabled):not([data-no-tactile]):active,
     border-radius: 42%;
   }
   .vault-card:hover {
-    transform: translateY(-3px) scale(1.006);
+    transform: translateY(-3px);
   }
 }
 

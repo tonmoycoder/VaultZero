@@ -129,8 +129,80 @@ export function extractCredentialsFromText(rawText: string): ExtractedCredential
 export type OcrLanguage = "eng" | "ben" | "eng+ben";
 
 /**
+ * Preprocesses an image on an HTML5 canvas:
+ * 1. Upscales screenshots (< 1200px width) by 1.5x–2x for high-DPI character edges
+ * 2. Applies high-contrast grayscale normalization
+ * 3. Exports an optimized Blob for OCR recognition
+ */
+export async function preprocessImageForOcr(file: File): Promise<Blob | File> {
+  if (typeof window === "undefined" || typeof document === "undefined") {
+    return file;
+  }
+
+  return new Promise((resolve) => {
+    const img = new Image();
+    const objectUrl = URL.createObjectURL(file);
+
+    img.onload = () => {
+      URL.revokeObjectURL(objectUrl);
+      try {
+        const canvas = document.createElement("canvas");
+        const ctx = canvas.getContext("2d", { willReadFrequently: true });
+        if (!ctx) {
+          resolve(file);
+          return;
+        }
+
+        // Upscale if small for sharper OCR line recognition
+        const scale = img.naturalWidth < 1200 ? Math.min(2, 1200 / img.naturalWidth) : 1;
+        canvas.width = Math.round(img.naturalWidth * scale);
+        canvas.height = Math.round(img.naturalHeight * scale);
+
+        ctx.imageSmoothingEnabled = true;
+        ctx.imageSmoothingQuality = "high";
+        ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+
+        // High-contrast grayscale conversion
+        const imgData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+        const data = imgData.data;
+        for (let i = 0; i < data.length; i += 4) {
+          const r = data[i];
+          const g = data[i + 1];
+          const b = data[i + 2];
+          let gray = 0.299 * r + 0.587 * g + 0.114 * b;
+          // Contrast enhancement
+          gray = (gray - 128) * 1.25 + 128;
+          gray = Math.max(0, Math.min(255, gray));
+          data[i] = gray;
+          data[i + 1] = gray;
+          data[i + 2] = gray;
+        }
+        ctx.putImageData(imgData, 0, 0);
+
+        canvas.toBlob(
+          (blob) => {
+            resolve(blob || file);
+          },
+          "image/png",
+          1.0
+        );
+      } catch {
+        resolve(file);
+      }
+    };
+
+    img.onerror = () => {
+      URL.revokeObjectURL(objectUrl);
+      resolve(file);
+    };
+
+    img.src = objectUrl;
+  });
+}
+
+/**
  * Executes local OCR on an image file using an off-thread Web Worker and bundled /tessdata/
- * Keeps the main UI thread at a silky smooth 120fps with zero frame drops.
+ * Preprocesses image on canvas, cleans noise characters, and extracts credentials.
  */
 export async function runLocalOcr(
   file: File,
@@ -139,56 +211,62 @@ export async function runLocalOcr(
 ): Promise<{ rawText: string; creds: ExtractedCredentials }> {
   await validateOcrImage(file);
 
+  if (onProgress) onProgress(10);
+
+  // Preprocess image on canvas
+  const processedBlob = await preprocessImageForOcr(file);
+
+  if (onProgress) onProgress(25);
+
   let rawText = "";
   try {
-    if (typeof Worker !== "undefined") {
-      rawText = await new Promise((resolve, reject) => {
-        const worker = new Worker(new URL("../workers/ocr.worker.ts", import.meta.url), {
-          type: "module",
-        });
-        const reqId = Math.random().toString(36).slice(2);
+    const { createWorker } = await import("tesseract.js");
+    const langPath =
+      typeof window !== "undefined" && window.location.origin
+        ? `${window.location.origin}/tessdata`
+        : "/tessdata";
 
-        worker.onmessage = (e) => {
-          if (e.data.id !== reqId) return;
-          if (e.data.type === "progress") {
-            if (onProgress) onProgress(e.data.progress);
-          } else if (e.data.type === "success") {
-            worker.terminate();
-            resolve(e.data.text);
-          } else if (e.data.type === "error") {
-            worker.terminate();
-            reject(new Error(e.data.error));
-          }
-        };
-
-        worker.onerror = (err) => {
-          worker.terminate();
-          reject(err);
-        };
-
-        worker.postMessage({ id: reqId, image: file, lang: ocrLang });
-      });
-    } else {
-      const { createWorker } = await import("tesseract.js");
-      const worker = await createWorker(ocrLang, undefined, {
-        langPath: "/tessdata",
+    let worker;
+    try {
+      worker = await createWorker(ocrLang, 1, {
+        langPath,
         gzip: false,
         logger: (m) => {
           if (m.status === "recognizing text" && onProgress && typeof m.progress === "number") {
-            onProgress(Math.min(99, Math.round(m.progress * 100)));
+            onProgress(Math.min(99, Math.round(25 + m.progress * 70)));
           }
         },
       });
-      const ret = await worker.recognize(file);
-      await worker.terminate();
-      rawText = ret.data.text.trim();
+    } catch (langPathErr) {
+      console.warn("Local /tessdata path fallback:", langPathErr);
+      worker = await createWorker(ocrLang, 1, {
+        logger: (m) => {
+          if (m.status === "recognizing text" && onProgress && typeof m.progress === "number") {
+            onProgress(Math.min(99, Math.round(25 + m.progress * 70)));
+          }
+        },
+      });
     }
-  } catch (err) {
-    console.warn("Tesseract runtime warning:", err);
-    rawText = `Captured Image: ${file.name}\nSize: ${(file.size / 1024).toFixed(1)} KB\nType: ${file.type}`;
+
+    const ret = await worker.recognize(processedBlob);
+    await worker.terminate();
+    rawText = (ret.data?.text || "").trim();
+  } catch (err: any) {
+    console.error("Local OCR recognition error:", err);
+    throw new Error(
+      err?.message ||
+        "Could not extract text from this image. Please ensure the screenshot has readable text."
+    );
   }
 
   if (onProgress) onProgress(100);
+
+  if (!rawText) {
+    throw new Error(
+      "No readable characters detected in image. Try uploading a higher-contrast screenshot."
+    );
+  }
+
   const creds = extractCredentialsFromText(rawText);
   return { rawText, creds };
 }

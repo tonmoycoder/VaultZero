@@ -198,10 +198,10 @@ jobs:
         run: |
           TAG="${{ github.ref_name }}"
           if [ -z "$TAG" ] || [ "$TAG" = "main" ]; then
-            TAG="v2.5.0"
+            TAG="v2.5.1"
           fi
           echo "Processing release for tag: $TAG"
-          gh release view "$TAG" 2>/dev/null || gh release create "$TAG" --title "VaultZero $TAG — Military-Grade LAN P2P Sync & Offline Release" --generate-notes
+          gh release view "$TAG" 2>/dev/null || gh release create "$TAG" --title "VaultZero $TAG — Empirical Telemetry, ROPE Optimization & Zero-Knowledge Release" --generate-notes
           echo "Uploading release assets with conflict-free per-asset overwrite..."
           for file in release-dist/*; do
             [ -f "$file" ] || continue
