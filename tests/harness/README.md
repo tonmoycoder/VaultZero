@@ -6,7 +6,14 @@ Playwright browser download is not always available.
 
 Every harness imports a **bundle built from the real source** — run
 `node scripts/build-test-bundles.mjs` first. The bundles are generated into
-`/tmp/vz-tests/` and are never committed.
+`.harness-build/` inside the repository and are gitignored.
+
+Two conventions make the suites portable:
+
+- every path is derived from `import.meta.url`, so a harness runs from any
+  working directory;
+- every bundle is imported through a `file://` URL, because a bare Windows
+  path is not a valid ESM specifier.
 
 | Harness | What it proves |
 | --- | --- |

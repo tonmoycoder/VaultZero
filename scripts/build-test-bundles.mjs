@@ -1,5 +1,5 @@
 /**
- * Builds the browserless test bundles used by the `/tmp/vz-tests` harnesses.
+ * Builds the browserless test bundles used by the `tests/harness` suites.
  *
  * The harnesses import the real source modules, so the bundles must be
  * regenerated whenever `src/lib/storage.ts` (or another module under test)
