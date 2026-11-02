@@ -56,3 +56,16 @@ jobs:
       - name: Publish the diagnosis as a job summary
         run: |
           cat diagnosis.txt >> "$GITHUB_STEP_SUMMARY"
+      - name: Publish the diagnosis to the pull request
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          BODY_PATH: ${{ github.workspace }}/diagnosis.txt
+        run: |
+          {
+            echo '### Diagnostic'
+            echo
+            echo '```'
+            cat "$BODY_PATH"
+            echo '```'
+          } > body.md
+          gh pr comment 1 --body-file body.md
