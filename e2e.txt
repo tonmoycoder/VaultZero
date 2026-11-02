@@ -1,0 +1,126 @@
+=== playwright ===
+|■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■                        |  70% of 120 MiB
+|■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■                |  80% of 120 MiB
+|■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■        |  90% of 120 MiB
+|■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■| 100% of 120 MiB
+Chrome Headless Shell 156.0.8078.4 (playwright chromium-headless-shell v1248) downloaded to /home/runner/.cache/ms-playwright/chromium_headless_shell-1248
+  ✓   26 tests/vault-features.spec.ts:169:1 › OCR creates a real, editable item with autofill and clipboard support (8.3s)
+  ✓   29 tests/vault-interactions.spec.ts:189:3 › opens, switches and reopens a docked inspector at 1440px (6.4s)
+  ✓   30 tests/vault-interactions.spec.ts:189:3 › opens, switches and reopens a docked inspector at 1366px (6.3s)
+  ✓   31 tests/vault-interactions.spec.ts:189:3 › opens, switches and reopens a docked inspector at 1280px (6.1s)
+  ✓   32 tests/vault-interactions.spec.ts:212:3 › right drawer is visible and dismissible at 1180px (7.5s)
+  ✓   33 tests/vault-interactions.spec.ts:212:3 › right drawer is visible and dismissible at 1024px (7.1s)
+  ✓   34 tests/vault-interactions.spec.ts:212:3 › right drawer is visible and dismissible at 900px (7.2s)
+  ✓   35 tests/vault-interactions.spec.ts:212:3 › right drawer is visible and dismissible at 768px (7.0s)
+  ✓   36 tests/vault-interactions.spec.ts:229:3 › mobile 390px uses a scrollable, swipe-dismissable sheet (6.6s)
+  ✓   37 tests/vault-interactions.spec.ts:229:3 › mobile 320px uses a scrollable, swipe-dismissable sheet (6.5s)
+  ✓   38 tests/vault-interactions.spec.ts:254:1 › inspector survives resizing without duplicate panels (5.2s)
+  ✓   40 tests/vault-interactions.spec.ts:286:1 › dragging the brand rail never accidentally selects a brand (4.1s)
+  ✓   39 tests/vault-interactions.spec.ts:264:1 › brand rail supports wheel, arrows, filtering and keyboard navigation (6.7s)
+  ✓   41 tests/vault-interactions.spec.ts:298:1 › native touch swiping moves the brand rail (8.0s)
+  ✓   42 tests/vault-interactions.spec.ts:320:1 › glass selection follows theme and sidebar buttons (7.7s)
+  ✓   43 tests/vault-interactions.spec.ts:338:1 › press physics spring back and honor reduced motion (4.8s)
+  ✓   44 tests/vault-interactions.spec.ts:353:1 › individual security details and recovery codes open correctly (4.8s)
+  ✓   46 tests/vault-interactions.spec.ts:379:1 › editing from inspector updates the item without duplicating it (5.8s)
+  ✓   45 tests/vault-interactions.spec.ts:365:1 › security report drills into real filtered items and animates out (6.9s)
+  ✓   47 tests/vault-interactions.spec.ts:390:1 › copy action does not trigger parent card; keyboard selection opens details (4.2s)
+  ✓   48 tests/vault-interactions.spec.ts:404:1 › modal exits finish before removal and keyboard focus is restored (4.6s)
+  ✓   49 tests/vault-interactions.spec.ts:418:1 › command palette opens a selected item at laptop size (6.1s)
+  ✓   50 tests/vault-interactions.spec.ts:430:1 › motion preferences disable physical effects and persist (6.6s)
+  ✓   51 tests/vault-interactions.spec.ts:443:1 › an empty add form gives useful validation and can save an item (6.7s)
+  ✓   52 tests/vault-interactions.spec.ts:458:1 › opening a tool from the mobile inspector returns to that inspector (7.7s)
+  ✓   53 tests/vault-interactions.spec.ts:472:1 › the original card hover spotlight and lift are preserved (4.0s)
+  ✓   55 tests/vault-local-privacy.spec.ts:14:3 › WP-06: Local Privacy Components (TOTP, Bounded OCR, Secure Clipboard) › RFC 6238 TOTP generates deterministic code matching RFC test vector (5ms)
+  ✓   56 tests/vault-local-privacy.spec.ts:31:3 › WP-06: Local Privacy Components (TOTP, Bounded OCR, Secure Clipboard) › Base32 decoder handles spaces, hyphens, and lowercase gracefully (1ms)
+  ✓   57 tests/vault-local-privacy.spec.ts:37:3 › WP-06: Local Privacy Components (TOTP, Bounded OCR, Secure Clipboard) › Parses otpauth://totp/ URI correctly (2ms)
+  ✓   58 tests/vault-local-privacy.spec.ts:49:3 › WP-06: Local Privacy Components (TOTP, Bounded OCR, Secure Clipboard) › OCR credential extraction accurately identifies username, password, url, totp, and recovery codes (3ms)
+  ✓   59 tests/vault-local-privacy.spec.ts:70:3 › WP-06: Local Privacy Components (TOTP, Bounded OCR, Secure Clipboard) › Secure clipboard auto-wipe cleans up state and cancels existing timers (1ms)
+  ✓   60 tests/vault-platform-ipc.spec.ts:9:3 › WP-08: Fail-Closed IPC & Runtime Boundaries › fails closed in standard browser runtime (2ms)
+  ✓   61 tests/vault-platform-ipc.spec.ts:30:3 › WP-08: Fail-Closed IPC & Runtime Boundaries › never leaks raw passwords or credentials in error messages (1ms)
+  ✓   62 tests/vault-queue-epoch.spec.ts:8:3 › SerializedMutationQueue & Session Epoch Safety › runs tasks sequentially and maintains epoch consistency (3.0s)
+  ✓   54 tests/vault-interactions.spec.ts:480:1 › the tablet inspector contains keyboard focus without trapping the closed page (6.3s)
+  ✓   63 tests/vault-queue-epoch.spec.ts:42:3 › SerializedMutationQueue & Session Epoch Safety › aborts queued mutation if epoch is bumped (vault locked) before or during task (2.9s)
+  ✓   64 tests/vault-recovery.spec.ts:12:3 › Task 2: Master Password Recovery & Safety Reset › recovers vault with 24-character recovery key and sets new master password (5.6s)
+  ✓   65 tests/vault-recovery.spec.ts:52:3 › Task 2: Master Password Recovery & Safety Reset › rejects invalid recovery key and preserves original vault intact (4.8s)
+  ✓   66 tests/vault-recovery.spec.ts:94:3 › Task 2: Master Password Recovery & Safety Reset › archiveAndResetVault guarantees zero accidental data loss by preserving timestamped archive (3.3s)
+  ✓   67 tests/vault-round2-hardening.spec.ts:24:3 › V-19 breach scan batching › distinct prefixes are fetched concurrently and duplicates are deduplicated (3.1s)
+  ✘   68 tests/vault-round2-hardening.spec.ts:84:3 › V-19 breach scan batching › a repeated password costs exactly one request (3.0s)
+  ✓   69 tests/vault-round2-hardening.spec.ts:111:3 › V-19 breach scan batching › the scan is offline unless the user explicitly opts in (V-18) (3.1s)
+  ✓   70 tests/vault-round2-hardening.spec.ts:173:3 › V-20 security audit log › the redaction helper removes hashes, e-mails and quoted labels (3.0s)
+  ✓   71 tests/vault-round2-hardening.spec.ts:148:3 › V-20 security audit log › no vault metadata is written to localStorage (3.1s)
+  ✓   72 tests/vault-round2-hardening.spec.ts:196:3 › V-23 passphrase wordlist › the wordlist is the EFF large list, not a toy list (2.8s)
+  ✓   73 tests/vault-round2-hardening.spec.ts:218:3 › V-23 passphrase wordlist › a 5-word passphrase exceeds 64 bits of entropy (3.1s)
+  ✓   74 tests/vault-round2-hardening.spec.ts:230:3 › V-23 passphrase wordlist › words are drawn without replacement (3.0s)
+  ✓   75 tests/vault-round2-hardening.spec.ts:254:3 › V-27 brand matching › a look-alike domain does not inherit a real brand's identity (3.0s)
+  ✓   76 tests/vault-round2-hardening.spec.ts:288:3 › V-30 quick copy › the copy bundle excludes the TOTP setup key and recovery codes (2.9s)
+  ✓   77 tests/vault-round2-hardening.spec.ts:328:3 › V-32 updater hardening › only HTTPS release-asset URLs on the trusted host are accepted (3.0s)
+  ✓   78 tests/vault-round2-hardening.spec.ts:359:3 › V-32 updater hardening › the checksum manifest parser finds the right digest (3.0s)
+  ✓   79 tests/vault-round2-hardening.spec.ts:380:3 › V-36 coalesced writes › a burst of mutations results in a single vault write (3.1s)
+  ✓   80 tests/vault-security-hardening.spec.ts:23:3 › V-03 — plaintext must never be persisted to sessionStorage › unlocking the vault never writes item payloads to sessionStorage (3.2s)
+  ✓   81 tests/vault-security-hardening.spec.ts:57:3 › V-03 — plaintext must never be persisted to sessionStorage › the persisted vault container holds no plaintext secrets (3.4s)
+  ✓   82 tests/vault-security-hardening.spec.ts:88:3 › V-03 — plaintext must never be persisted to sessionStorage › locking clears the persisted session entirely (3.6s)
+  ✓   83 tests/vault-security-hardening.spec.ts:125:3 › V-04 — the duress decoy must not be an empty vault › the duress password unlocks a populated decoy vault (4.8s)
+  ✓   84 tests/vault-security-hardening.spec.ts:171:3 › V-06 — the vault must auto-lock › the auto-lock preference round-trips through localStorage (3.6s)
+  ✓   85 tests/vault-security-hardening.spec.ts:188:3 › V-06 — the vault must auto-lock › out-of-range auto-lock values are clamped (3.2s)
+  ✓   86 tests/vault-security-hardening.spec.ts:205:3 › V-06 — the vault must auto-lock › hiding the window locks the vault (3.1s)
+  ✓   88 tests/vault-security-hardening.spec.ts:266:3 › V-05 — the native runtime must fail closed › a native unlock failure never falls back to the browser vault (2.9s)
+  ✓   89 tests/vault-security-hardening.spec.ts:306:3 › Session storage hygiene › no key material is left in sessionStorage after any activity (2.6s)
+  ✓   90 tests/vault-security-hardening.spec.ts:324:3 › Session storage hygiene › the vault storage key is present after setup and is a v3 envelope (3.0s)
+  ✓   91 tests/vault-storage-v3.spec.ts:12:3 › Browser Vault v3 Envelope & Cryptographic Safety › creates a v3 envelope with 600,000 PBKDF2 iterations and unlocks (4.9s)
+  ✓   92 tests/vault-storage-v3.spec.ts:62:3 › Browser Vault v3 Envelope & Cryptographic Safety › handles keyfile bounding (1 byte to 1 MB allowed, rejects 0 bytes and >1MB) (4.4s)
+  ✓   93 tests/vault-storage-v3.spec.ts:92:3 › Browser Vault v3 Envelope & Cryptographic Safety › authenticates and auto-migrates legacy v2 container to v3 envelope (4.9s)
+  ✓   94 tests/vault-storage-v3.spec.ts:173:3 › Browser Vault v3 Envelope & Cryptographic Safety › duress decoy password unlocks decoy vault and isolates primary vault (6.1s)
+  ✓   95 tests/vault-transfer-qr.spec.ts:11:3 › WP-07: QR-First One-Time Transfer Protocol › chunks a large payload and reconstructs it successfully out-of-order (14ms)
+  ✓   96 tests/vault-transfer-qr.spec.ts:40:3 › WP-07: QR-First One-Time Transfer Protocol › rejects corrupted chunk and locks out after 8 failed attempts (9ms)
+  ✓   97 tests/vault-transfer-qr.spec.ts:57:3 › WP-07: QR-First One-Time Transfer Protocol › enforces 120s TTL expiration on chunks (1ms)
+  ✓   98 tests/vault-transfer-qr.spec.ts:70:3 › WP-07: QR-First One-Time Transfer Protocol › creates and parses ephemeral file-key payload with TTL (4ms)
+  ✓   99 tests/vault-transfer-qr.spec.ts:90:3 › WP-07: QR-First One-Time Transfer Protocol › rejects payloads exceeding 16 MiB ceiling (1ms)
+  ✓  100 tests/vault-ui-overlap.spec.ts:27:3 › tooltip rendering › U-02 the tooltip is rendered in a portal, outside its trigger (3.2s)
+  ✓  101 tests/vault-ui-overlap.spec.ts:62:3 › tooltip rendering › U-01 a long tooltip wraps instead of running off the panel (2.7s)
+  ✓  102 tests/vault-ui-overlap.spec.ts:85:3 › tooltip rendering › U-03 showing a tooltip does not change the trigger's layout (2.7s)
+  ✓  103 tests/vault-ui-overlap.spec.ts:113:3 › sidebar offline card › U-04 the label is not clipped by a zero line-height (2.6s)
+  ✓  104 tests/vault-ui-overlap.spec.ts:131:3 › sidebar offline card › U-05 the crypto line is not truncated (2.7s)
+  ✓  105 tests/vault-ui-overlap.spec.ts:159:3 › featured vault card › U-06 the two halves are top-aligned, not bottom-aligned (2.6s)
+  ✓  106 tests/vault-ui-overlap.spec.ts:183:3 › modal header › U-07 the title truncates and the header clips its content (2.6s)
+  ✓  107 tests/vault-ui-overlap.spec.ts:220:3 › colour contrast › U-08 --text-faint meets WCAG AA on the light theme (2.6s)
+  ✓  108 tests/vault-v250.spec.ts:8:3 › VaultZero v2.5.0 Master Verification Suite › 1. Strict Google Authenticator 2FA Validation (RFC 4226 / Base32) (13ms)
+  ✓  109 tests/vault-v250.spec.ts:43:3 › VaultZero v2.5.0 Master Verification Suite › 2. Strict Semantic Versioning Comparison Engine (4ms)
+  ✓  110 tests/vault-v250.spec.ts:61:3 › VaultZero v2.5.0 Master Verification Suite › 3. Multi-Line Formatted Quick Copy Engine (4ms)
+  ✓  111 tests/vault-v250.spec.ts:84:3 › VaultZero v2.5.0 Master Verification Suite › 4. Zero-Knowledge Breach Scanner & Cryptographic Anatomy (4ms)
+  ✓  112 tests/vault-v250.spec.ts:107:3 › VaultZero v2.5.0 Master Verification Suite › 5. Factory Clean Default State (1ms)
+  ✓   87 tests/vault-security-hardening.spec.ts:232:3 › V-06 — the vault must auto-lock › an idle timeout eventually locks the vault (1.1m)
+
+
+  1) tests/vault-round2-hardening.spec.ts:84:3 › V-19 breach scan batching › a repeated password costs exactly one request 
+
+    Error: expect(received).toBe(expected) // Object.is equality
+
+    Expected: 1
+    Received: 3
+
+      106 |
+      107 |     // The second scan is served entirely from the cache.
+    > 108 |     expect(requestCount).toBe(1);
+          |                          ^
+      109 |   });
+      110 |
+      111 |   test("the scan is offline unless the user explicitly opts in (V-18)", async ({
+        at /home/runner/work/VaultZero/VaultZero/tests/vault-round2-hardening.spec.ts:108:26
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    .artifacts/test-results/vault-round2-hardening-V-1-44394-d-costs-exactly-one-request/test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: .artifacts/test-results/vault-round2-hardening-V-1-44394-d-costs-exactly-one-request/error-context.md
+
+    attachment #3: trace (application/zip) ─────────────────────────────────────────────────────────
+    .artifacts/test-results/vault-round2-hardening-V-1-44394-d-costs-exactly-one-request/trace.zip
+    Usage:
+
+        npx playwright show-trace .artifacts/test-results/vault-round2-hardening-V-1-44394-d-costs-exactly-one-request/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  1 failed
+    tests/vault-round2-hardening.spec.ts:84:3 › V-19 breach scan batching › a repeated password costs exactly one request 
+  111 passed (4.2m)
