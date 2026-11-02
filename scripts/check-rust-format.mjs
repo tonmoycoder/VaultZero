@@ -16,10 +16,9 @@
  *   node scripts/check-rust-format.mjs          # report and exit non-zero
  *   node scripts/check-rust-format.mjs --write  # format in place
  */
-import { readFileSync, writeFileSync } from "node:fs";
+import { readFileSync, readdirSync, writeFileSync } from "node:fs";
 import { dirname, join, relative } from "node:path";
 import { fileURLToPath } from "node:url";
-import { globSync } from "node:fs";
 
 const root = join(dirname(fileURLToPath(import.meta.url)), "..");
 const write = process.argv.includes("--write");
@@ -33,17 +32,36 @@ const write = process.argv.includes("--write");
 const ROOTS = [join(root, "crates", "vault-core", "src"), join(root, "src-tauri", "src")];
 const EXTRA_FILES = [join(root, "src-tauri", "build.rs")];
 
-/** Collects every `.rs` file below the given directories. */
+/**
+ * Collects every `.rs` file below the given directories.
+ *
+ * The walk is written out rather than using `fs.globSync`, because that
+ * helper only exists from Node 22 onwards and the CI job runs on Node 20.
+ */
 function collectRustFiles() {
   const found = [];
-  for (const dir of ROOTS) {
-    for (const entry of globSync("**/*.rs", { cwd: dir })) {
-      found.push(join(dir, entry));
+
+  const walk = (dir) => {
+    let entries;
+    try {
+      entries = readdirSync(dir, { withFileTypes: true });
+    } catch {
+      // A directory that is not present holds no sources.
+      return;
     }
-  }
-  for (const file of EXTRA_FILES) {
-    found.push(file);
-  }
+    for (const entry of entries) {
+      const full = join(dir, entry.name);
+      if (entry.isDirectory()) {
+        walk(full);
+      } else if (entry.isFile() && entry.name.endsWith(".rs")) {
+        found.push(full);
+      }
+    }
+  };
+
+  for (const dir of ROOTS) walk(dir);
+  for (const file of EXTRA_FILES) found.push(file);
+
   return found.sort();
 }
 

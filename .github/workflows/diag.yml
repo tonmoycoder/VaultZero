@@ -28,42 +28,24 @@ jobs:
           {
             echo "=== node version ==="
             node --version
-            echo "=== npm version ==="
-            npm --version
-            echo "=== rust-fmt package contents ==="
-            ls -la node_modules/@scalar/rust-fmt/ 2>&1
             echo "=== script output ==="
             node scripts/check-rust-format.mjs 2>&1
             echo "=== script exit: $? ==="
-            echo "=== per-file diff ==="
-            node -e "
-            import('@scalar/rust-fmt').then(async (m) => {
-              const fs = await import('node:fs');
-              const path = await import('node:path');
-              const files = [];
-              const walk = (d) => { let e; try { e = fs.readdirSync(d, {withFileTypes:true}) } catch { return }
-                for (const x of e) { const f = path.join(d, x.name); if (x.isDirectory()) walk(f); else if (x.name.endsWith('.rs')) files.push(f) } };
-              walk('crates/vault-core/src'); walk('src-tauri/src'); files.push('src-tauri/build.rs');
-              for (const f of files.sort()) {
-                const src = fs.readFileSync(f,'utf8');
-                let out;
-                try { out = await m.format(src, { edition: '2021' }); }
-                catch (e) { console.log('PARSE FAIL', f, e.message); continue }
-                if (out === src) { console.log('OK  ', f); continue }
-                console.log('DIFF', f);
-                const a = src.split('\n'), b = out.split('\n');
-                for (let i=0;i<Math.max(a.length,b.length);i++){
-                  if (a[i] !== b[i]) { console.log('  line', i+1); console.log('  have:', JSON.stringify(a[i])); console.log('  want:', JSON.stringify(b[i])); break }
-                }
-              }
-            }).catch(e => { console.error('FORMAT ERROR', e && e.stack || e) });
-            " 2>&1
           } > diagnosis.txt 2>&1
           cat diagnosis.txt
+      - name: Run the browser suite
+        run: |
+          set +e
+          {
+            echo "=== playwright ==="
+            npx playwright install --with-deps chromium 2>&1 | tail -5
+            npx playwright test --reporter=list 2>&1 | tail -120
+          } > e2e.txt 2>&1
+          cat e2e.txt
       - name: Publish the diagnosis to the branch
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add diagnosis.txt
-          git commit -m "chore(ci): publish the formatter diagnosis" || true
+          git add diagnosis.txt e2e.txt
+          git commit -m "chore(ci): publish the diagnosis" || true
           git push origin HEAD:arena/79f3d1ba-vaultzero
