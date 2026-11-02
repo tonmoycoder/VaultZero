@@ -91,6 +91,12 @@ jobs:
             echo "--- rustfmt check ---"
             cargo fmt --all -- --check 2>&1
           } > rustfmt-diag.txt 2>&1
+          {
+            echo "## rustfmt diagnostic"
+            echo '```'
+            cat rustfmt-diag.txt
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
           exit 0
       - name: Upload the diagnostic output
         if: always()
