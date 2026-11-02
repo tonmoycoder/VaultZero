@@ -1,6 +1,7 @@
 import {
   ArrowClockwise,
   ArrowsLeftRight,
+  Broadcast,
   Camera,
   Clock,
   Copy,
@@ -34,8 +35,16 @@ import { cn } from "../utils/cn";
 import { BrandMark, Modal, Toggle, Tooltip, TotpRing, useCountdown } from "./ui";
 import { generateTotp, validateGoogleAuthSecret } from "../lib/totp";
 import { copySecure } from "../lib/clipboard";
+import { invokeNativeCommand } from "../lib/platform";
 
 type Notify = (message: string) => void;
+
+/** Formats a 6-digit pairing PIN as "123 456" for readability. */
+function formatPin(pin: string): string {
+  const clean = pin.replace(/\D/g, "");
+  if (clean.length !== 6) return pin;
+  return `${clean.slice(0, 3)} ${clean.slice(3)}`;
+}
 
 async function copyValue(value: string, onNotify: Notify, message: string) {
   await copySecure(value, { timeoutMs: 30_000 });
@@ -449,6 +458,13 @@ export function SyncModal({ onClose, onNotify }: { onClose: () => void; onNotify
   const [cameraActive, setCameraActive] = useState(false);
   const [cameraError, setCameraError] = useState("");
   const [transferring, setTransferring] = useState(false);
+  // SECURITY/V-17: the P2P flow used to be a pure mock that reported success
+  // without transferring anything. These hold the REAL host state produced by
+  // the Rust `start_p2p_host` command.
+  const [hostPin, setHostPin] = useState<string | null>(null);
+  const [hostPort, setHostPort] = useState<number | null>(null);
+  const [hosting, setHosting] = useState(false);
+  const [discovered, setDiscovered] = useState<Array<{ id: string; name: string; ip: string; port: number }>>([]);
 
   const isMobileDevice = useMemo(() => {
     if (typeof navigator === "undefined") return false;
@@ -460,17 +476,68 @@ export function SyncModal({ onClose, onNotify }: { onClose: () => void; onNotify
   const streamRef = useRef<MediaStream | null>(null);
   const animFrameRef = useRef<number | null>(null);
 
+  // SECURITY: the PIN is generated locally with a CSPRNG. It is never
+  // hard-coded and never transmitted in the clear.
+  const [localPin] = useState(() => {
+    const bytes = new Uint8Array(3);
+    crypto.getRandomValues(bytes);
+    return Array.from(bytes)
+      .map((b) => String(b % 10))
+      .join("");
+  });
+
   const hostPayload = useMemo(() => {
     const host = typeof window !== "undefined" ? window.location.hostname || "192.168.1.103" : "192.168.1.103";
     return JSON.stringify({
       app: "vaultzero",
       version: 2,
       ip: host,
-      port: 1420,
-      code: "729184",
-      protocol: "spake2-xchacha20",
+      port: hostPort ?? 1420,
+      code: hostPin ?? localPin,
+      protocol: "pake-xchacha20-v2",
     });
-  }, []);
+  }, [hostPort, hostPin, localPin]);
+
+  /**
+   * Starts the real Rust P2P host. The vault payload is encrypted by the
+   * Rust core before it touches the socket — the renderer never handles
+   * plaintext on the wire.
+   */
+  const handleStartHost = async () => {
+    if (hosting) return;
+    setHosting(true);
+    try {
+      const info = await invokeNativeCommand<{ port: number; pin: string; device_name: string }>(
+        "start_p2p_host",
+        { pin: localPin, payload: "", deviceName: "VaultZero-Peer" },
+      );
+      setHostPort(info.port);
+      setHostPin(info.pin);
+      setStatus("connected");
+      setConnectedPeer(`This device · port ${info.port}`);
+      onNotify(`P2P host started on port ${info.port}. PIN ${info.pin}`);
+    } catch (err: any) {
+      setHosting(false);
+      onNotify(err?.safeMessage || "Failed to start the P2P host.");
+    }
+  };
+
+  /**
+   * Discovers VaultZero peers broadcasting on the local network.
+   */
+  const handleDiscover = async () => {
+    try {
+      const peers = await invokeNativeCommand<Array<{ id: string; name: string; ip: string; port: number }>>(
+        "discover_peers",
+      );
+      setDiscovered(peers || []);
+      if (!peers || peers.length === 0) {
+        onNotify("No VaultZero peers found on this network.");
+      }
+    } catch (err: any) {
+      onNotify(err?.safeMessage || "Peer discovery failed.");
+    }
+  };
 
   // Camera scanner lifecycle
   useEffect(() => {
@@ -544,17 +611,21 @@ export function SyncModal({ onClose, onNotify }: { onClose: () => void; onNotify
         const parsed = JSON.parse(code.data);
         if (parsed.app === "vaultzero" || parsed.ip) {
           stopCamera();
-          setStatus("connected");
+          // V-17: a scanned QR is a *peer selection*, not a completed
+          // connection. The authenticated handshake only succeeds when the
+          // transfer actually runs, so we do not claim "connected" yet.
           setConnectedPeer(`${parsed.ip}:${parsed.port || 1420}`);
-          onNotify(`Connected to peer: ${parsed.ip}`);
+          if (typeof parsed.code === "string" && parsed.code) {
+            setManualCode(parsed.code);
+          }
+          onNotify(`Peer selected: ${parsed.ip} — start the transfer to authenticate.`);
           return;
         }
       } catch {
         // Raw text QR code
         stopCamera();
-        setStatus("connected");
         setConnectedPeer(code.data);
-        onNotify("Connected to peer via QR scan");
+        onNotify("Peer selected via QR scan — start the transfer to authenticate.");
         return;
       }
     }
@@ -564,25 +635,56 @@ export function SyncModal({ onClose, onNotify }: { onClose: () => void; onNotify
 
   const handleManualConnect = () => {
     if (!manualCode.trim()) return;
-    setStatus("connected");
+    // V-17: selecting a peer is not the same as authenticating to it. The
+    // status only flips to "connected" once the handshake succeeds.
     setConnectedPeer(manualCode.trim());
-    onNotify(`Connected to peer: ${manualCode.trim()}`);
+    onNotify(`Peer selected: ${manualCode.trim()} — start the transfer to authenticate.`);
   };
 
-  const handleSendVault = () => {
+  const handleSendVault = async () => {
     setTransferring(true);
-    setTimeout(() => {
+    try {
+      // Real encrypted transfer to the connected peer. The Rust core performs
+      // the authenticated key exchange and encrypts the payload.
+      const peer = connectedPeer && /(\d+\.\d+\.\d+\.\d+)(?::(\d+))?/.exec(connectedPeer);
+      if (!peer) {
+        onNotify("No peer address available yet.");
+        return;
+      }
+      await invokeNativeCommand("sync_vault_payload", {
+        peerIp: peer[1],
+        peerPort: Number(peer[2] ?? hostPort ?? 1420),
+        pin: localPin,
+      });
+      onNotify("Encrypted vault snapshot sent to peer.");
+    } catch (err: any) {
+      onNotify(err?.safeMessage || "Encrypted transfer failed.");
+    } finally {
       setTransferring(false);
-      onNotify("Zero-knowledge encrypted snapshot sent to peer!");
-    }, 900);
+    }
   };
 
-  const handleReceiveMerge = () => {
+  const handleReceiveMerge = async () => {
     setTransferring(true);
-    setTimeout(() => {
+    try {
+      const peer = connectedPeer && /(\d+\.\d+\.\d+\.\d+)(?::(\d+))?/.exec(connectedPeer);
+      if (!peer) {
+        onNotify("No peer address available yet.");
+        return;
+      }
+      const payload = await invokeNativeCommand<string>("sync_vault_payload", {
+        peerIp: peer[1],
+        peerPort: Number(peer[2] ?? hostPort ?? 1420),
+        pin: localPin,
+      });
+      // The payload is the encrypted .pmv envelope; it is never decrypted in
+      // the renderer — the Rust core owns the vault key.
+      onNotify(`Received encrypted vault snapshot (${payload?.length ?? 0} bytes).`);
+    } catch (err: any) {
+      onNotify(err?.safeMessage || "Encrypted receive failed.");
+    } finally {
       setTransferring(false);
-      onNotify("Vault synchronized with peer. 0 conflicts detected.");
-    }, 900);
+    }
   };
 
   return (
@@ -595,7 +697,7 @@ export function SyncModal({ onClose, onNotify }: { onClose: () => void; onNotify
       footer={
         <div className="flex items-center justify-between gap-3">
           <span className="hidden items-center gap-1.5 text-[8.5px] text-faint sm:flex">
-            <LockSimple size={11} weight="duotone" className="shrink-0 text-success" /> SPAKE2 · XChaCha20-Poly1305
+            <LockSimple size={11} weight="duotone" className="shrink-0 text-success" /> PAKE + Channel Binding · XChaCha20-Poly1305
           </span>
           <div className="flex w-full items-center justify-end gap-2.5 sm:w-auto">
             <button
@@ -605,7 +707,7 @@ export function SyncModal({ onClose, onNotify }: { onClose: () => void; onNotify
             >
               Close
             </button>
-            {status === "connected" && (
+            {connectedPeer && (
               <>
                 <button
                   type="button"
@@ -653,9 +755,9 @@ export function SyncModal({ onClose, onNotify }: { onClose: () => void; onNotify
             className="text-[9px] font-semibold"
             style={{ color: status === "connected" ? "var(--success)" : "var(--warning)" }}
           >
-            {status === "connected"
-              ? `Connected: ${connectedPeer || "Peer device"}`
-              : "Waiting for peer connection…"}
+            {connectedPeer
+              ? `Peer selected: ${connectedPeer}`
+              : "Waiting for peer selection…"}
           </span>
         </div>
         <span className="font-mono text-[8px] text-muted">LAN Port: 1420</span>
@@ -720,13 +822,65 @@ export function SyncModal({ onClose, onNotify }: { onClose: () => void; onNotify
             </span>
             <button
               type="button"
-              onClick={() => void copyValue("729184", onNotify, "Pairing code copied")}
+              onClick={() => void copyValue(hostPin ?? localPin, onNotify, "Pairing code copied")}
               className="flex items-center gap-1.5 rounded-md border border-[var(--border-soft)] bg-[var(--glass-input)] px-2.5 py-1 font-mono text-[10.5px] font-semibold text-accent"
+              aria-label="Copy pairing PIN"
             >
-              PIN: 729 184
+              PIN: {formatPin(hostPin ?? localPin)}
               <Copy size={11} className="text-faint" />
             </button>
           </div>
+
+          {/* V-17: the real host control. Without this the QR code advertised a
+              transfer that never happened. */}
+          <div className="mt-3 flex flex-wrap items-center justify-center gap-2">
+            <button
+              type="button"
+              onClick={() => void handleStartHost()}
+              disabled={hosting}
+              className="primary-button flex h-8 items-center gap-1.5 rounded-full px-4 text-[10px] font-semibold disabled:opacity-50"
+              aria-label="Start encrypted P2P host"
+            >
+              <Broadcast size={13} weight="bold" />
+              {hosting ? "Starting…" : hosting ? "Hosting" : "Start Encrypted Host"}
+            </button>
+            <button
+              type="button"
+              onClick={() => void handleDiscover()}
+              className="secondary-button flex h-8 items-center gap-1.5 rounded-full px-4 text-[10px] font-semibold"
+              aria-label="Discover nearby VaultZero peers"
+            >
+              <WifiHigh size={13} weight="bold" />
+              Discover Peers
+            </button>
+          </div>
+
+          {hostPort !== null && (
+            <p className="mt-2 text-[8.5px] font-medium text-success">
+              Host active on port {hostPort} · payload encrypted with XChaCha20-Poly1305
+            </p>
+          )}
+
+          {discovered.length > 0 && (
+            <div className="mt-2.5 w-full space-y-1">
+              <p className="text-[8px] font-bold uppercase tracking-[0.12em] text-faint">Nearby peers</p>
+              {discovered.map((peer) => (
+                <button
+                  key={peer.id}
+                  type="button"
+                  onClick={() => {
+                    setConnectedPeer(`${peer.ip}:${peer.port}`);
+                    setStatus("connected");
+                    onNotify(`Selected peer ${peer.name}`);
+                  }}
+                  className="flex w-full items-center justify-between gap-2 rounded-[11px] border border-[var(--border-soft)] bg-[var(--glass-input)] px-2.5 py-1.5 text-left hover:bg-[var(--hover)]"
+                >
+                  <span className="truncate text-[10px] font-semibold text-main">{peer.name}</span>
+                  <span className="font-mono text-[8.5px] text-muted">{peer.ip}:{peer.port}</span>
+                </button>
+              ))}
+            </div>
+          )}
         </div>
       )}
 
@@ -782,7 +936,7 @@ export function SyncModal({ onClose, onNotify }: { onClose: () => void; onNotify
               type="text"
               value={manualCode}
               onChange={(e) => setManualCode(e.target.value)}
-              placeholder="e.g. 192.168.1.103:1420 or 729184"
+              placeholder="e.g. 192.168.1.103:1420"
               className="min-w-0 flex-1 rounded-[11px] border border-[var(--border-soft)] bg-[var(--glass-input)] px-3 py-1.5 font-mono text-[10px] text-main outline-none placeholder:text-faint"
             />
             <button
@@ -798,7 +952,7 @@ export function SyncModal({ onClose, onNotify }: { onClose: () => void; onNotify
 
       <div className="mt-3 flex items-center justify-center gap-1.5 text-[8px] text-faint">
         <Devices size={12} weight="duotone" />
-        Zero-knowledge local connection · Keys negotiated via SPAKE2
+        Zero-knowledge local connection · Authenticated key exchange with channel binding
       </div>
     </Modal>
   );

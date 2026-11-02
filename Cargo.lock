@@ -4109,6 +4109,7 @@ dependencies = [
  "futures-util",
  "mdns-sd",
  "regex",
+ "rmp-serde",
  "serde",
  "serde_json",
  "subtle",
@@ -4119,6 +4120,7 @@ dependencies = [
  "uuid",
  "vault-core",
  "windows-sys 0.59.0",
+ "x25519-dalek",
 ]
 
 [[package]]

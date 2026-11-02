@@ -1,4 +1,4 @@
-import { memo, useEffect, useId, useMemo, useRef, useState, type CSSProperties, type ReactNode } from "react";
+import { cloneElement, isValidElement, memo, useEffect, useId, useMemo, useRef, useState, type CSSProperties, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { AnimatePresence, motion, useIsPresent } from "framer-motion";
 import { Check, Copy, Timer, X } from "@phosphor-icons/react";
@@ -314,6 +314,19 @@ export function Avatar({
   );
 }
 
+/**
+ * Tooltip.
+ *
+ * ACCESSIBILITY (V-16): the tooltip bubble is only a *visual* affordance, so
+ * assistive technology never learns what an icon-only button does. We
+ * therefore:
+ *   1. give the bubble a stable `id`,
+ *   2. clone the child element and inject `aria-describedby` pointing at it,
+ *      so screen readers announce the label when the control is focused.
+ *
+ * When the child already has its own `aria-label`, we still attach the
+ * description (it adds context rather than replacing the name).
+ */
 export function Tooltip({
   label,
   children,
@@ -327,10 +340,18 @@ export function Tooltip({
   up?: boolean;
   className?: string;
 }) {
+  const bubbleId = useId();
+
+  const child = isValidElement(children)
+    ? cloneElement(children as React.ReactElement<Record<string, unknown>>, {
+        "aria-describedby": bubbleId,
+      })
+    : children;
+
   return (
     <span className={cn("tooltip-wrap inline-flex", className)}>
-      {children}
-      <span className={cn("tooltip-bubble", side && "side", up && "up")} role="tooltip">
+      {child}
+      <span id={bubbleId} className={cn("tooltip-bubble", side && "side", up && "up")} role="tooltip">
         {label}
       </span>
     </span>

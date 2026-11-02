@@ -2,6 +2,7 @@ use std::path::PathBuf;
 use std::sync::Mutex;
 use uuid::Uuid;
 use vault_core::auditor::{SecurityAuditReport, SecurityAuditor};
+use vault_core::audit_log::{AuditSeverity, SecurityAuditLog};
 use vault_core::brands::{BrandInfo, BrandRegistry};
 use vault_core::export::{ImportPreview, VaultExporter};
 use vault_core::generator::{generate_passphrase, generate_password, PasswordGenOptions};
@@ -20,6 +21,9 @@ pub struct AppState {
     pub vault_path: Mutex<Option<PathBuf>>,
     pub hlc: HlcClock,
     pub p2p: tokio::sync::Mutex<p2p_lan::P2PManager>,
+    /// SECURITY (V-07): in-memory audit trail of secret-revealing operations.
+    /// Kept in memory only so it never lands on disk beside the vault.
+    pub audit: SecurityAuditLog,
 }
 
 impl Default for AppState {
@@ -29,6 +33,7 @@ impl Default for AppState {
             vault_path: Mutex::new(None),
             hlc: HlcClock::new(1),
             p2p: tokio::sync::Mutex::new(p2p_lan::P2PManager::new()),
+            audit: SecurityAuditLog::default(),
         }
     }
 }
@@ -88,6 +93,9 @@ pub mod commands {
     pub fn lock_vault(state: State<AppState>) -> Result<(), String> {
         let mut session_guard = state.session.lock().unwrap();
         *session_guard = None;
+        // SECURITY (V-07): the audit trail is cleared on lock so it cannot be
+        // harvested after the session ends.
+        state.audit.clear();
         Ok(())
     }
 
@@ -242,11 +250,30 @@ pub mod commands {
             .find(|e| e.id == uid && !e.is_deleted)
             .ok_or_else(|| "Entry not found".to_string())?;
 
+        // SECURITY (V-07): record every secret reveal.
+        state.audit.record_action(
+            "reveal_entry_secret",
+            AuditSeverity::Warning,
+            Some(entry.title.clone()),
+            Some("manual reveal".into()),
+        );
+
         Ok(EntrySecretPayload {
             password: entry.password.clone(),
             notes: entry.notes.clone(),
             recovery_codes: entry.recovery_codes.clone(),
         })
+    }
+
+    /// Returns the in-memory security audit trail (V-07).
+    #[tauri::command]
+    pub fn get_audit_log(state: State<AppState>) -> Vec<String> {
+        state
+            .audit
+            .snapshot()
+            .iter()
+            .map(|e| e.format())
+            .collect()
     }
 
     #[tauri::command]
@@ -278,6 +305,14 @@ pub mod commands {
             &totp_cfg.algorithm,
         )
         .map_err(|e| e.to_string())?;
+
+        // SECURITY (V-07): generating a 2FA code is a secret-revealing action.
+        state.audit.record_action(
+            "get_totp_code",
+            AuditSeverity::Info,
+            Some(entry.title.clone()),
+            None,
+        );
 
         Ok(TotpResponse {
             code,
@@ -357,6 +392,17 @@ pub mod commands {
         let session = session_guard
             .as_ref()
             .ok_or_else(|| "Vault is locked".to_string())?;
+
+        let active_count = session.vault.entries.iter().filter(|e| !e.is_deleted).count();
+
+        // SECURITY (V-07): a bulk export releases *every* secret in the vault
+        // in cleartext. It is recorded at CRITICAL severity.
+        state.audit.record_action(
+            "export_vault",
+            AuditSeverity::Critical,
+            Some(format.to_lowercase()),
+            Some(format!("{} entries exported in cleartext", active_count)),
+        );
 
         match format.to_lowercase().as_str() {
             "csv" => Ok(VaultExporter::export_csv(&session.vault.entries)),
@@ -489,6 +535,7 @@ pub fn run() {
             commands::generate_password_cmd,
             commands::generate_passphrase_cmd,
             commands::reveal_entry_secret,
+            commands::get_audit_log,
             commands::get_totp_code,
             commands::upsert_entry,
             commands::delete_entry,

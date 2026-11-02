@@ -5,7 +5,21 @@ use uuid::Uuid;
 
 /// Hybrid Logical Clock (HLC) providing monotonically increasing timestamps
 /// across devices and preserving causal ordering.
-/// Format: 40 bits physical ms | 16 bits logical counter | 8 bits node id
+///
+/// # Bit layout (48-bit physical | 8-bit logical | 8-bit node id)
+///
+/// `| 48 bits physical ms | 8 bits logical counter | 8 bits node id |`
+///
+/// The physical field holds milliseconds since the Unix epoch. 48 bits of
+/// milliseconds covers ~8,900 years, so the packed value never overflows a
+/// `u64`.
+///
+/// SECURITY (V-10): the previous layout used `(ms << 24)`, which requires
+/// 40 bits of milliseconds — but the value being shifted was already in
+/// *milliseconds* (~1.78e12, needing 41 bits). `1.78e12 << 24 ≈ 3.0e19`
+/// overflows `u64::MAX` (1.8e19). In debug builds that panics; in release
+/// builds (`panic = "abort"`) it wraps silently, producing non-monotonic
+/// timestamps that break CRDT last-write-wins merge ordering.
 pub struct HlcClock {
     last_physical_ms: AtomicU64,
     logical_counter: AtomicU64,
@@ -13,6 +27,11 @@ pub struct HlcClock {
 }
 
 impl HlcClock {
+    /// Mask for the physical millisecond field (48 bits).
+    const PHYSICAL_MASK: u64 = (1u64 << 48) - 1;
+    /// Mask for the logical counter field (8 bits).
+    const LOGICAL_MASK: u64 = 0xFF;
+
     pub fn new(node_id: u8) -> Self {
         Self {
             last_physical_ms: AtomicU64::new(0),
@@ -22,7 +41,7 @@ impl HlcClock {
     }
 
     pub fn now(&self) -> u64 {
-        let physical = chrono::Utc::now().timestamp_millis() as u64;
+        let physical = chrono::Utc::now().timestamp_millis().max(0) as u64;
         let last = self.last_physical_ms.load(Ordering::SeqCst);
 
         let (chosen_time, counter) = if physical > last {
@@ -34,8 +53,9 @@ impl HlcClock {
             (last, next_count)
         };
 
-        // Combine: (ms << 24) | ((counter & 0xFFFF) << 8) | (node_id & 0xFF)
-        (chosen_time << 24) | ((counter & 0xFFFF) << 8) | (self.node_id as u64)
+        // Combine: (physical_ms & 0xFFFFFFFFFFFF) << 16 | (counter & 0xFF) << 8 | node_id
+        let packed_physical = chosen_time & Self::PHYSICAL_MASK;
+        (packed_physical << 16) | ((counter & Self::LOGICAL_MASK) << 8) | (self.node_id as u64)
     }
 }
 

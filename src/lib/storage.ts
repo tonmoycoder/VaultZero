@@ -2,7 +2,7 @@
 // WebCrypto AES-GCM 256-bit Data Key + PBKDF2-SHA256 (600,000 iterations)
 // Multi-slot Key Wrapping, Hardware Keyfile (.vzkey), Duress Vault & Legacy v2 Migration
 
-import type { VaultItem } from "./vault";
+import type { BrandKey, Strength, VaultItem } from "./vault";
 import { isNativeRuntime, invokeNativeCommand, type VaultError } from "./platform";
 
 export { isNativeRuntime as isTauri };
@@ -354,6 +354,40 @@ export function getStoredVaultContainer(): StoredVaultContainer | null {
   }
 }
 
+/**
+ * SECURITY (V-04): plausible, obviously-low-value filler accounts used to
+ * populate the duress decoy vault.
+ *
+ * A duress vault containing zero entries is an immediate tell: anyone holding
+ * the device under coercion can see the "vault" is empty and conclude the
+ * user is being forced. These entries are deliberately mundane so the decoy
+ * reads as a real but unremarkable vault.
+ */
+function buildDecoyItems(): VaultItem[] {
+  const seeds: Array<[string, string, string, string, VaultItem["category"]]> = [
+    ["example-news", "https://news.example.com", "reader@example.com", "Reader#2024", "login"],
+    ["example-forum", "https://forum.example.org", "guest_user", "Forums#8812", "login"],
+    ["Example Recipes", "https://recipes.example.net", "homecook@example.com", "Recipe#5521", "note"],
+    ["example-shop", "https://shop.example.com", "shopper@example.com", "Shopping#7723", "payment"],
+    ["example-music", "https://music.example.net", "listener@example.com", "Music#4417", "login"],
+  ];
+
+  return seeds.map(([title, url, username, password, category], i) => ({
+    id: `decoy-${i}-${title}`,
+    title,
+    username,
+    password,
+    url,
+    category,
+    brand: "vault" as BrandKey,
+    favorite: false,
+    strength: "fair" as Strength,
+    score: 2,
+    modified: "Last year",
+    folder: "Personal",
+  }));
+}
+
 export async function createNewVault(
   masterPassword: string,
   initialItems: VaultItem[],
@@ -361,55 +395,74 @@ export async function createNewVault(
   duressPassword?: string,
   recoveryKey?: string
 ): Promise<UnlockedSession> {
-  // If native Tauri runtime is active, invoke native command
+  // If native Tauri runtime is active, invoke native command.
+  //
+  // SECURITY (V-05): the native runtime is FAIL-CLOSED. Any error from the
+  // native command must propagate — we must never silently fall back to the
+  // WebCrypto/localStorage vault, because that would create (or unlock) a
+  // *different* vault than the user asked for and report success.
   if (isNativeRuntime()) {
-    try {
-      const kfHex = keyfileBytes ? bytesToHex(keyfileBytes) : null;
-      await invokeNativeCommand("create_vault", {
-        path: "local-vault.pmv",
-        masterPassword,
-        keyfileContent: kfHex,
-        duressPassword: duressPassword || null,
+    const kfHex = keyfileBytes ? bytesToHex(keyfileBytes) : null;
+    await invokeNativeCommand("create_vault", {
+      path: "local-vault.pmv",
+      masterPassword,
+      keyfileContent: kfHex,
+      duressPassword: duressPassword || null,
+    });
+    for (const item of initialItems) {
+      await invokeNativeCommand("upsert_entry", {
+        entry: {
+          id: item.id,
+          title: item.title,
+          username: item.username,
+          password: item.password,
+          url: item.url,
+          notes: item.note || "",
+          folder: item.folder || "",
+          category: item.category,
+          brand: item.brand,
+          is_favorite: item.favorite,
+          password_history: (item.passwordHistory || []).map((h) => ({
+            password: h.password,
+            changed_at: 0,
+          })),
+          recovery_codes: (item.recoveryCodes || []).map((code) => ({
+            code,
+            used: false,
+          })),
+          totp_config: item.totp
+            ? {
+                secret: "JBSWY3DPEHPK3PXP",
+                period: 30,
+                digits: 6,
+                algorithm: "SHA1",
+              }
+            : null,
+          created_at: 0,
+          updated_at: 0,
+          hlc_timestamp: 0,
+          is_deleted: false,
+        },
       });
-      for (const item of initialItems) {
-        await invokeNativeCommand("upsert_entry", {
-          entry: {
-            id: item.id,
-            title: item.title,
-            username: item.username,
-            password: item.password,
-            url: item.url,
-            notes: item.note || "",
-            folder: item.folder || "",
-            category: item.category,
-            brand: item.brand,
-            is_favorite: item.favorite,
-            password_history: (item.passwordHistory || []).map((h) => ({
-              password: h.password,
-              changed_at: 0,
-            })),
-            recovery_codes: (item.recoveryCodes || []).map((code) => ({
-              code,
-              used: false,
-            })),
-            totp_config: item.totp
-              ? {
-                  secret: "JBSWY3DPEHPK3PXP",
-                  period: 30,
-                  digits: 6,
-                  algorithm: "SHA1",
-                }
-              : null,
-            created_at: 0,
-            updated_at: 0,
-            hlc_timestamp: 0,
-            is_deleted: false,
-          },
-        });
-      }
-    } catch (err) {
-      console.warn("Native create_vault error:", err);
     }
+    // Native path succeeded: the native Rust engine owns the vault from here.
+    // Return an in-memory session that mirrors what the native vault holds.
+    const nativeItems: VaultItem[] = initialItems.map((item) => ({
+      ...item,
+      strength: item.strength ?? "strong",
+      score: item.score ?? 4,
+      modified: item.modified ?? "Recently",
+    }));
+    const nativeSession: UnlockedSession = {
+      isDuress: false,
+      items: nativeItems,
+      masterPassword,
+      keyfileHex: keyfileBytes ? bytesToHex(keyfileBytes) : undefined,
+      recoveryKey,
+    };
+    inMemorySession = nativeSession;
+    saveActiveSession(nativeSession);
+    return nativeSession;
   }
 
   // 1. Generate random 256-bit AES-GCM data key
@@ -454,7 +507,10 @@ export async function createNewVault(
     const duressSalt = crypto.getRandomValues(new Uint8Array(16));
     const duressKek = await deriveKek(duressPassword.trim(), duressSalt, PBKDF2_ITERATIONS_V3, keyfileBytes);
     duressKeySlot = await wrapDataKey(rawDuressKey, duressKek, duressSalt, PBKDF2_ITERATIONS_V3);
-    duressPayloadSlot = await encryptPayloadWithDataKey([], duressDataKey);
+    // SECURITY (V-04): the decoy must NOT be an empty vault. An empty vault
+    // is an obvious tell that the user is under duress. Populate it with
+    // plausible, low-value filler accounts so it reads as a real vault.
+    duressPayloadSlot = await encryptPayloadWithDataKey(buildDecoyItems(), duressDataKey);
     rawDuressKey.fill(0);
   }
 
@@ -492,44 +548,48 @@ export async function unlockVault(
   password: string,
   keyfileBytes?: Uint8Array
 ): Promise<UnlockedSession> {
-  // If in native Tauri runtime, attempt native unlock
+  // If native Tauri runtime is active, use the native Rust vault.
+  //
+  // SECURITY (V-05): FAIL-CLOSED. A native error (wrong password, tampered
+  // file, missing vault) MUST propagate. Falling back to the WebCrypto /
+  // localStorage vault here would unlock a *different* key store than the
+  // user intended, and would report a native failure as a browser success.
   if (isNativeRuntime()) {
-    try {
-      const kfHex = keyfileBytes ? bytesToHex(keyfileBytes) : null;
-      const res = await invokeNativeCommand<{ is_unlocked: boolean; is_duress: boolean }>("unlock_vault", {
-        path: "local-vault.pmv",
-        masterPassword: password,
-        keyfileContent: kfHex,
-      });
-      if (res && res.is_unlocked) {
-        const entries = await invokeNativeCommand<any[]>("list_entries");
-        const items: VaultItem[] = (entries || []).map((e) => ({
-          id: e.id,
-          title: e.title,
-          username: e.username,
-          password: "••••••••",
-          url: e.url,
-          category: e.category,
-          brand: e.brand,
-          favorite: e.is_favorite,
-          strength: "strong",
-          score: 4,
-          modified: "Recently",
-          folder: e.folder,
-        }));
-        const session: UnlockedSession = {
-          isDuress: res.is_duress,
-          items,
-          masterPassword: password,
-          keyfileHex: keyfileBytes ? bytesToHex(keyfileBytes) : undefined,
-        };
-        inMemorySession = session;
-        saveActiveSession(session);
-        return session;
-      }
-    } catch (err) {
-      console.warn("Native unlock error, falling back to WebCrypto:", err);
+    const kfHex = keyfileBytes ? bytesToHex(keyfileBytes) : null;
+    const res = await invokeNativeCommand<{ is_unlocked: boolean; is_duress: boolean }>("unlock_vault", {
+      path: "local-vault.pmv",
+      masterPassword: password,
+      keyfileContent: kfHex,
+    });
+
+    if (!res || !res.is_unlocked) {
+      throw new Error("Incorrect master password or keyfile.");
     }
+
+    const entries = await invokeNativeCommand<any[]>("list_entries");
+    const items: VaultItem[] = (entries || []).map((e) => ({
+      id: e.id,
+      title: e.title,
+      username: e.username,
+      password: "••••••••",
+      url: e.url,
+      category: e.category,
+      brand: e.brand,
+      favorite: e.is_favorite,
+      strength: "strong",
+      score: 4,
+      modified: "Recently",
+      folder: e.folder,
+    }));
+    const session: UnlockedSession = {
+      isDuress: res.is_duress,
+      items,
+      masterPassword: password,
+      keyfileHex: keyfileBytes ? bytesToHex(keyfileBytes) : undefined,
+    };
+    inMemorySession = session;
+    saveActiveSession(session);
+    return session;
   }
 
   const container = getStoredVaultContainer();
@@ -692,18 +752,29 @@ export async function persistVaultChanges(
   saveActiveSession(session);
 }
 
+/**
+ * Persists ONLY non-sensitive session flags.
+ *
+ * SECURITY (V-03): vault items (which contain every cleartext password) and
+ * the keyfile bytes must NEVER be written to `sessionStorage`. They live only
+ * in the in-memory session reference, which is cleared on lock, on tab close,
+ * and whenever the vault mutation queue detects a session change.
+ *
+ * A page reload therefore requires an explicit re-unlock — that is the
+ * intended fail-closed behaviour for a password manager.
+ */
 function saveActiveSession(session: UnlockedSession): void {
   if (typeof window === "undefined") return;
   try {
     // Session state stored only in memory for highest security
     inMemorySession = session;
-    // Keep minimum non-sensitive flags in sessionStorage for page refresh UI continuity
+    // Keep ONLY non-sensitive flags in sessionStorage for UI continuity.
+    // No items, no passwords, no keyfile material.
     window.sessionStorage.setItem(
       SESSION_STORAGE_KEY,
       JSON.stringify({
         isDuress: session.isDuress,
-        items: session.items,
-        keyfileHex: session.keyfileHex,
+        hasItems: Array.isArray(session.items) && session.items.length > 0,
       })
     );
   } catch {
@@ -712,17 +783,12 @@ function saveActiveSession(session: UnlockedSession): void {
 }
 
 export function getActiveSession(): UnlockedSession | null {
+  // In-memory session always wins. A restored session from sessionStorage
+  // carries no secrets, so it is intentionally NOT treated as an unlocked
+  // session — the caller must re-unlock to obtain the vault key.
   if (inMemorySession) return inMemorySession;
   if (typeof window === "undefined") return null;
-  const raw = window.sessionStorage.getItem(SESSION_STORAGE_KEY);
-  if (!raw) return null;
-  try {
-    const parsed = JSON.parse(raw);
-    inMemorySession = parsed as UnlockedSession;
-    return inMemorySession;
-  } catch {
-    return null;
-  }
+  return null;
 }
 
 export function clearActiveSession(): void {

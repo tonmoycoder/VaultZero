@@ -24,6 +24,7 @@ import Sidebar, { MobileQuickMenu, type ToolName } from "./components/Sidebar";
 import { exportVaultToCsv } from "./lib/csv";
 import { Avatar, Modal, Toggle, Tooltip } from "./components/ui";
 import TextSizeControl, { DEFAULT_TEXT_STEP, TEXT_STEPS, getEffectiveScale, stepLabel } from "./components/TextSize";
+import AutoLockControl from "./components/AutoLockControl";
 import LofiPlayer from "./components/LofiPlayer";
 import VaultHome from "./components/VaultHome";
 import UpdateBanner from "./components/UpdateBanner";
@@ -58,6 +59,8 @@ import {
 } from "./lib/vault";
 import { cn } from "./utils/cn";
 import { useMediaQuery } from "./lib/motion";
+import { createAutoLock, readAutoLockMinutes, writeAutoLockMinutes, type AutoLockController } from "./lib/autoLock";
+import { clearClipboardWipe } from "./lib/clipboard";
 
 function readStoredTheme(): Theme {
   if (typeof window === "undefined") return "light";
@@ -100,6 +103,28 @@ function shouldStartLocked(): boolean {
   const urlParams = new URLSearchParams(window.location.search);
   if (urlParams.get("unlocked") === "true") return false;
   return getActiveSession() === null;
+}
+
+/**
+ * PERFORMANCE: cache of lowercased search haystacks, keyed by the item
+ * object identity.
+ *
+ * Previously every keystroke rebuilt a template string for *every* item and
+ * called `toLowerCase()` on it — O(n) allocations per keypress. With a
+ * `WeakMap` the haystack is computed once per item and reused; entries are
+ * collected automatically when the item is dropped, so the cache can never go
+ * stale or leak.
+ */
+const searchHaystackCache = new WeakMap<VaultItem, string>();
+
+function getSearchHaystack(item: VaultItem): string {
+  const cached = searchHaystackCache.get(item);
+  if (cached !== undefined) return cached;
+  const haystack = `${item.title} ${item.username} ${item.url} ${item.category} ${(
+    item.tags ?? []
+  ).join(" ")}`.toLowerCase();
+  searchHaystackCache.set(item, haystack);
+  return haystack;
 }
 
 type ModalName = ToolName | "mobileMenu" | "profile" | "update";
@@ -183,6 +208,7 @@ export default function App() {
   const [editingItem, setEditingItem] = useState<VaultItem | undefined>();
   const [draft, setDraft] = useState<Partial<VaultItem> | undefined>();
   const [textStep, setTextStep] = useState<number>(readStoredTextStep);
+  const [autoLockMinutes, setAutoLockMinutes] = useState<number>(readAutoLockMinutes);
   const [modal, setModal] = useState<ModalName | null>(null);
   const [commandOpen, setCommandOpen] = useState(false);
   const [feel, setFeel] = useState<FeelSettings>(readStoredFeel);
@@ -245,7 +271,59 @@ export default function App() {
     setModal(null);
     setCommandOpen(false);
     setDetailOpen(false);
+    // SECURITY (V-06): a copied secret must not survive a lock. Scrub the
+    // clipboard so the next person to use the machine cannot simply paste
+    // the password that was copied a moment ago.
+    clearClipboardWipe().catch(() => {
+      // Clipboard access may be denied; nothing else to do here.
+    });
   }, []);
+
+  // SECURITY (V-06): idle / blur / visibility auto-lock.
+  //
+  // A password manager that stays unlocked indefinitely is vulnerable to the
+  // walk-away attack. This locks the vault after a period of inactivity,
+  // when the window is hidden (screen locked / app switched away), or after
+  // the window has been blurred for a grace period.
+  const autoLockRef = useRef<AutoLockController | null>(null);
+  // The language is read through a ref so that switching the UI language does
+  // not tear down and recreate the auto-lock controller (which would reset
+  // the idle timer).
+  const langRef = useRef(lang);
+  langRef.current = lang;
+
+  useEffect(() => {
+    if (locked) {
+      autoLockRef.current?.stop();
+      autoLockRef.current = null;
+      return;
+    }
+
+    const controller = createAutoLock({
+      onBeforeLock: () => {
+        // Best-effort clipboard scrub before the session is torn down.
+        void clearClipboardWipe().catch(() => {});
+      },
+      onLock: (reason) => {
+        if (reason !== "manual") {
+          notify(
+            langRef.current === "bn"
+              ? "নিষ্ক্রিয়তার কারণে ভল্ট স্বয়ংক্রিয়ভাবে লক হয়েছে।"
+              : "Vault auto-locked due to inactivity.",
+          );
+        }
+        lockVault();
+      },
+    });
+
+    autoLockRef.current = controller;
+    controller.start();
+
+    return () => {
+      controller.stop();
+      autoLockRef.current = null;
+    };
+  }, [locked, lockVault, notify]);
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
@@ -318,11 +396,14 @@ export default function App() {
     if (brandFilter !== "all") result = result.filter((item) => item.brand === brandFilter);
     if (query.trim()) {
       const needle = query.toLowerCase();
-      result = result.filter((item) =>
-        `${item.title} ${item.username} ${item.url} ${item.category} ${(item.tags ?? []).join(" ")}`
-          .toLowerCase()
-          .includes(needle)
-      );
+      // PERFORMANCE: reuse a precomputed lowercase haystack per item instead
+      // of rebuilding the template string and calling toLowerCase() on every
+      // entry for every keystroke. The haystack cache is invalidated whenever
+      // the item list changes.
+      result = result.filter((item) => {
+        const haystack = getSearchHaystack(item);
+        return haystack.includes(needle);
+      });
     }
     return result;
   }, [items, folder, active, brandFilter, query]);
@@ -526,6 +607,22 @@ export default function App() {
   const changeTextStep = (index: number) => {
     setTextStep(index);
     notify(`Text size: ${stepLabel(index)} (${Math.round(TEXT_STEPS[index] * 100)}%)`);
+  };
+
+  const changeAutoLockMinutes = (minutes: number) => {
+    setAutoLockMinutes(minutes);
+    writeAutoLockMinutes(minutes);
+    // Apply immediately to the running controller.
+    autoLockRef.current?.setTimeoutMinutes?.(minutes);
+    notify(
+      minutes === 0
+        ? lang === "bn"
+          ? "স্বয়ংক্রিয় লক বন্ধ করা হয়েছে।"
+          : "Auto-lock disabled."
+        : lang === "bn"
+          ? `স্বয়ংক্রিয় লক: ${minutes} মিনিট`
+          : `Auto-lock: ${minutes} min`,
+    );
   };
 
   const openSeedItem = (item: VaultItem) => {
@@ -807,6 +904,16 @@ export default function App() {
                     Text size
                   </p>
                   <TextSizeControl index={textStep} onChange={changeTextStep} />
+                </div>
+                <div className="mb-2.5 flex items-center justify-between gap-3">
+                  <p className="flex items-center gap-1.5 text-[8px] font-bold uppercase tracking-[0.13em] text-faint">
+                    <LockKey size={12} weight="duotone" style={{ color: "var(--accent)" }} /> Auto-lock
+                  </p>
+                  <AutoLockControl
+                    minutes={autoLockMinutes}
+                    onChange={changeAutoLockMinutes}
+                    lang={lang}
+                  />
                 </div>
                 {theme === "lofi" && (
                   <div className="mb-3 flex items-center justify-between gap-3">

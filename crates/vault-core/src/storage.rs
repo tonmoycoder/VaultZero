@@ -4,7 +4,7 @@ use crate::crypto::{
 };
 use crate::errors::{Result, VaultError};
 use crate::memory::LockedBuffer;
-use crate::models::Vault;
+use crate::models::{now_seconds, Vault};
 use rand::rngs::OsRng;
 use rand::RngCore;
 use std::fs::{self, File, OpenOptions};
@@ -13,6 +13,33 @@ use std::path::{Path, PathBuf};
 use uuid::Uuid;
 
 pub const MAGIC_BYTES: &[u8; 4] = b"PMV1";
+
+/// Hard upper bound on the size of a vault file we are willing to read.
+/// SECURITY (V-13): the header parser already rejected files over 100 MiB,
+/// but that check happened *after* the entire file had been loaded into
+/// memory. A multi-gigabyte file on disk would have forced an equally large
+/// allocation.
+pub const MAX_VAULT_FILE_BYTES: u64 = 100 * 1024 * 1024;
+
+/// Reads a vault file into memory, refusing files that exceed
+/// [`MAX_VAULT_FILE_BYTES`] before allocating anything.
+fn read_vault_file(path: &Path) -> Result<Vec<u8>> {
+    let metadata = fs::metadata(path)?;
+    if metadata.len() > MAX_VAULT_FILE_BYTES {
+        return Err(VaultError::InvalidHeader);
+    }
+
+    let mut file = File::open(path)?;
+    let mut data = Vec::with_capacity(metadata.len() as usize);
+    file.read_to_end(&mut data)?;
+
+    // Guard against a file that grew between the stat and the read.
+    if data.len() as u64 > MAX_VAULT_FILE_BYTES {
+        return Err(VaultError::InvalidHeader);
+    }
+
+    Ok(data)
+}
 
 #[derive(Debug, Clone)]
 pub struct VaultFileHeader {
@@ -249,9 +276,25 @@ impl StorageEngine {
             .map_err(|e| VaultError::SerializationError(e.to_string()))?;
 
         // Prepare dummy/empty decoy vault if duress is active
+        //
+        // SECURITY (V-04): the decoy previously contained ZERO entries. An
+        // entirely empty vault is an obvious tell that the user is under
+        // duress — an attacker holding the device can tell instantly that
+        // they are looking at the decoy slot. We populate it with plausible,
+        // clearly-lower-value filler accounts so the decoy looks like a real
+        // (if boring) vault.
         let duress_payload = if has_duress {
             let mut decoy = Vault::new("decoy-device".to_string());
             decoy.metadata.duress_enabled = true;
+            for mut entry in crate::models::decoy_entries() {
+                entry.id = Uuid::new_v4();
+                entry.created_at = now_seconds();
+                entry.updated_at = now_seconds();
+                entry.hlc_timestamp = now_seconds();
+                entry.device_id = "decoy-device".to_string();
+                entry.is_deleted = false;
+                decoy.entries.push(entry);
+            }
             rmp_serde::to_vec_named(&decoy)
                 .map_err(|e| VaultError::SerializationError(e.to_string()))?
         } else {
@@ -325,9 +368,7 @@ impl StorageEngine {
         password: &str,
         keyfile_bytes: Option<&[u8]>,
     ) -> Result<UnlockedVaultSession> {
-        let mut file = File::open(path)?;
-        let mut data = Vec::new();
-        file.read_to_end(&mut data)?;
+        let data = read_vault_file(path)?;
 
         let (header, header_size) = VaultFileHeader::deserialize(&data)?;
         let aad_bytes = header.serialize_aad();
@@ -425,9 +466,7 @@ impl StorageEngine {
             .map_err(|e| VaultError::SerializationError(e.to_string()))?;
 
         // Read existing file header to preserve wrapped keys
-        let mut file = File::open(path)?;
-        let mut data = Vec::new();
-        file.read_to_end(&mut data)?;
+        let data = read_vault_file(path)?;
 
         let (mut header, header_size) = VaultFileHeader::deserialize(&data)?;
 
@@ -496,6 +535,13 @@ impl StorageEngine {
 
     /// Atomically writes data to a file by writing to a temporary file,
     /// flushing with sync_all(), and renaming over the destination.
+    ///
+    /// SECURITY (V-11): the parent **directory** is fsync'd after the rename.
+    /// Without this, a power loss can leave the rename unpersisted even
+    /// though the file contents were flushed — the classic ext4 rename
+    /// durability caveat. For a password manager that means `save_vault` could
+    /// report success while the on-disk vault still points at the old
+    /// content (or, worse, at nothing).
     fn atomic_write(path: &Path, data: &[u8]) -> Result<()> {
         let parent = path.parent().unwrap_or_else(|| Path::new("."));
         let tmp_path = parent.join(format!(
@@ -509,21 +555,60 @@ impl StorageEngine {
             .create_new(true)
             .open(&tmp_path)?;
 
-        tmp_file.write_all(data)?;
-        tmp_file.sync_all()?;
+        // On failure we must not leave the temp file behind.
+        let write_result = (|| -> Result<()> {
+            tmp_file.write_all(data)?;
+            tmp_file.sync_all()?;
+            Ok(())
+        })();
+
+        if let Err(e) = write_result {
+            drop(tmp_file);
+            let _ = fs::remove_file(&tmp_path);
+            return Err(e.into());
+        }
         drop(tmp_file);
 
-        fs::rename(&tmp_path, path)?;
+        if let Err(e) = fs::rename(&tmp_path, path) {
+            let _ = fs::remove_file(&tmp_path);
+            return Err(e.into());
+        }
+
+        // Persist the directory entry so the rename survives a crash.
+        Self::sync_directory(parent);
+
         Ok(())
     }
 
+    /// Flushes a directory entry to stable storage. On Windows the rename is
+    /// already journalled by the filesystem, so this is a no-op there.
+    fn sync_directory(dir: &Path) {
+        #[cfg(not(windows))]
+        {
+            if let Ok(handle) = File::open(dir) {
+                let _ = handle.sync_all();
+            }
+        }
+        #[cfg(windows)]
+        {
+            let _ = dir;
+        }
+    }
+
     /// Rotates the last 5 encrypted backups (.bak1 to .bak5).
+    ///
+    /// SECURITY (V-12): the outgoing oldest backup is **shredded** rather than
+    /// left on disk, and the copy into `.bak1` is atomic (write-to-temp then
+    /// rename) so a crash mid-copy cannot leave a truncated backup that the
+    /// app would happily restore from.
     pub fn rotate_backups(path: &Path) -> Result<()> {
         if !path.exists() {
             return Ok(());
         }
 
         let base_str = path.to_string_lossy();
+
+        // Shift the retention window up by one: .bak4 -> .bak5, ... .bak1 -> .bak2.
         for i in (1..5).rev() {
             let src = PathBuf::from(format!("{}.bak{}", base_str, i));
             let dst = PathBuf::from(format!("{}.bak{}", base_str, i + 1));
@@ -532,8 +617,25 @@ impl StorageEngine {
             }
         }
 
+        // The slot that just fell out of the window (.bak5) is shredded so
+        // stale vault copies do not accumulate on disk indefinitely.
+        let oldest = PathBuf::from(format!("{}.bak5", base_str));
+        if oldest.exists() {
+            let _ = crate::shredder::SecureShredder::shred_file(&oldest);
+        }
+
+        // Atomic copy: write to a temp file, fsync, then rename into place.
         let bak1 = PathBuf::from(format!("{}.bak1", base_str));
-        let _ = fs::copy(path, &bak1);
+        let bak_tmp = PathBuf::from(format!("{}.bak1.tmp.{}", base_str, Uuid::new_v4()));
+        if fs::copy(path, &bak_tmp).is_ok() {
+            if let Ok(f) = File::open(&bak_tmp) {
+                let _ = f.sync_all();
+            }
+            let _ = fs::rename(&bak_tmp, &bak1);
+        } else {
+            let _ = fs::remove_file(&bak_tmp);
+        }
+
         Ok(())
     }
 }
