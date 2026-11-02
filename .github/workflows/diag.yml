@@ -60,9 +60,19 @@ jobs:
       - name: harness brand-mirror
         run: node tests/harness/brand-mirror.test.mjs
       - name: harness prod-bundle
-        run: |
-          node tests/harness/prod-bundle.test.mjs >> harness-diag.txt 2>&1
-          type harness-diag.txt
+        run: node tests/harness/prod-bundle.test.mjs
+      # Break the prod-bundle assertions into separate steps so the CI log
+      # names the exact condition that fails on Windows.
+      - name: prod-bundle check - dist exists
+        run: node -e "const fs=require('fs');console.log('dist:',fs.existsSync('dist'));console.log('assets:',fs.existsSync('dist/assets'))"
+      - name: prod-bundle check - chunk inventory
+        run: node -e "const fs=require('fs');console.log(fs.readdirSync('dist/assets').filter(f=>f.endsWith('.js')).join('\n'))"
+      - name: prod-bundle check - wasm marker
+        run: node -e "const fs=require('fs');const p='dist/assets';for(const f of fs.readdirSync(p)){if(!f.endsWith('.js'))continue;const c=fs.readFileSync(p+'/'+f,'utf8').replace(/\s+/g,'');if(c.includes('AGFzbQ'))console.log('wasm in',f);}"
+      - name: prod-bundle check - wordlist marker
+        run: node -e "const fs=require('fs');const p='dist/assets';for(const f of fs.readdirSync(p)){if(!f.endsWith('.js'))continue;const c=fs.readFileSync(p+'/'+f,'utf8');if(c.includes('abdominal'))console.log('wordlist in',f);}"
+      - name: prod-bundle check - preloads
+        run: node -e "const fs=require('fs');const h=fs.readFileSync('dist/index.html','utf8');console.log([...h.matchAll(/modulepreload[^>]*href=\x22\.\/assets\/([^\x22]+)\x22/g)].map(m=>m[1]).join('\n'))"
       - name: harness lock-flush-proof
         run: node tests/harness/lock-flush-regression-proof.mjs
       # Keep the output even when a step fails, so the cause is readable

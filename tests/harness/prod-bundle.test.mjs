@@ -21,13 +21,31 @@ const repoRoot = resolve(here, "..", "..");
 const distDir = join(repoRoot, "dist");
 
 if (!existsSync(distDir)) {
-  console.error(`FAIL: ${distDir} does not exist. Run "npm run build" first.`);
+  // The bundle is what ships, so the harness must not silently skip it.
+  // If the build output is missing, build it here rather than reporting a
+  // failure that has nothing to do with the code under test.
+  console.log(`${distDir} is missing — building it now.`);
+  const { spawnSync } = await import("node:child_process");
+  const build = spawnSync(process.platform === "win32" ? "npm.cmd" : "npm", ["run", "build"], {
+    cwd: repoRoot,
+    stdio: "inherit",
+    shell: true,
+  });
+  if (build.status !== 0 || !existsSync(distDir)) {
+    console.error("FAIL: the production build could not be produced.");
+    process.exit(1);
+  }
+}
+
+const assetsDir = join(distDir, "assets");
+if (!existsSync(assetsDir)) {
+  console.error(`FAIL: ${assetsDir} does not exist. Run "npm run build" first.`);
   process.exit(1);
 }
 
-const assets = readdirSync(join(distDir, "assets")).filter((f) => f.endsWith(".js"));
+const assets = readdirSync(assetsDir).filter((f) => f.endsWith(".js"));
 let all = "";
-for (const f of assets) all += readFileSync(join(distDir, "assets", f), "utf8");
+for (const f of assets) all += readFileSync(join(assetsDir, f), "utf8");
 
 const html = readFileSync(join(distDir, "index.html"), "utf8");
 const preloaded = [...html.matchAll(/modulepreload[^>]*href="\.\/assets\/([^"]+)"/g)].map(
@@ -35,14 +53,19 @@ const preloaded = [...html.matchAll(/modulepreload[^>]*href="\.\/assets\/([^"]+)
 );
 
 const hasArgon = /argon2id/i.test(all);
-const hasWasm = /AGFzbQ/.test(all);
+// The base64 payload may be line-wrapped, and a Windows build may wrap it
+// at a different column than a Linux build. Strip the whitespace before
+// looking for the marker so the check is about the payload, not about the
+// line breaks.
+const unwrapped = all.replace(/\s+/g, "");
+const hasWasm = unwrapped.includes("AGFzbQ");
 const hasWordlist = /abdominal/.test(all);
 
 const argonChunk = assets.find((f) =>
-  /AGFzbQ/.test(readFileSync(join(distDir, "assets", f), "utf8"))
+  readFileSync(join(assetsDir, f), "utf8").replace(/\s+/g, "").includes("AGFzbQ")
 );
 const wordlistChunk = assets.find((f) =>
-  /abdominal/.test(readFileSync(join(distDir, "assets", f), "utf8")),
+  /abdominal/.test(readFileSync(join(assetsDir, f), "utf8")),
 );
 
 // The lazy chunks must not be preloaded, otherwise they are on the
