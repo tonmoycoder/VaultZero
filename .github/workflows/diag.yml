@@ -16,26 +16,43 @@ jobs:
           node-version: 20
       - name: Install Frontend Dependencies
         run: npm ci
-      - name: Show the environment
+      - name: Collect the diagnosis
         run: |
-          node --version
-          npm --version
-          ls -la node_modules/@scalar/rust-fmt/ || true
-      - name: Run the formatter check
-        run: node scripts/check-rust-format.mjs
-      - name: Show what the formatter says about lib.rs
-        run: |
-          node -e "
-          import('@scalar/rust-fmt').then(async (m) => {
-            const fs = await import('node:fs');
-            const src = fs.readFileSync('src-tauri/src/lib.rs','utf8');
-            const out = await m.format(src, { edition: '2021' });
-            if (out === src) { console.log('lib.rs is formatted'); }
-            else {
-              const a = src.split('\n'), b = out.split('\n');
-              for (let i=0;i<Math.max(a.length,b.length);i++){
-                if (a[i]!==b[i]) { console.log('first diff at line', i+1); console.log('have:', JSON.stringify(a[i])); console.log('want:', JSON.stringify(b[i])); break; }
+          set +e
+          {
+            echo "=== node version ==="
+            node --version
+            echo "=== rust-fmt package ==="
+            ls -la node_modules/@scalar/rust-fmt/ 2>&1
+            echo "=== script output ==="
+            node scripts/check-rust-format.mjs 2>&1
+            echo "=== exit: $? ==="
+            echo "=== per-file diff ==="
+            node -e "
+            import('@scalar/rust-fmt').then(async (m) => {
+              const fs = await import('node:fs');
+              const path = await import('node:path');
+              const files = [];
+              const walk = (d) => { let e; try { e = fs.readdirSync(d, {withFileTypes:true}) } catch { return }
+                for (const x of e) { const f = path.join(d, x.name); if (x.isDirectory()) walk(f); else if (x.name.endsWith('.rs')) files.push(f) } };
+              walk('crates/vault-core/src'); walk('src-tauri/src'); files.push('src-tauri/build.rs');
+              for (const f of files.sort()) {
+                const src = fs.readFileSync(f,'utf8');
+                let out;
+                try { out = await m.format(src, { edition: '2021' }); }
+                catch (e) { console.log('PARSE FAIL', f, e.message); continue }
+                if (out === src) { console.log('OK  ', f); continue }
+                console.log('DIFF', f);
+                const a = src.split('\n'), b = out.split('\n');
+                for (let i=0;i<Math.max(a.length,b.length);i++){
+                  if (a[i] !== b[i]) { console.log('  line', i+1); console.log('  have:', JSON.stringify(a[i])); console.log('  want:', JSON.stringify(b[i])); break }
+                }
               }
-            }
-          }).catch(e => { console.error('FORMAT ERROR', e); process.exit(1); });
-          "
+            }).catch(e => { console.error('FORMAT ERROR', e && e.stack || e) });
+            " 2>&1
+          } > diagnosis.txt 2>&1
+          echo "--- diagnosis.txt ---"
+          cat diagnosis.txt
+      - name: Publish the diagnosis as a job summary
+        run: |
+          cat diagnosis.txt >> "$GITHUB_STEP_SUMMARY"
