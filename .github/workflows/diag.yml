@@ -1,0 +1,38 @@
+name: Diagnostic
+
+on:
+  workflow_dispatch:
+
+jobs:
+  diag:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Install Frontend Dependencies
+        run: npm ci
+      - name: Show the environment
+        run: |
+          node --version
+          npm --version
+          ls -la node_modules/@scalar/rust-fmt/ || true
+      - name: Run the formatter check
+        run: node scripts/check-rust-format.mjs
+      - name: Show what the formatter says about lib.rs
+        run: |
+          node -e "
+          import('@scalar/rust-fmt').then(async (m) => {
+            const fs = await import('node:fs');
+            const src = fs.readFileSync('src-tauri/src/lib.rs','utf8');
+            const out = await m.format(src, { edition: '2021' });
+            if (out === src) { console.log('lib.rs is formatted'); }
+            else {
+              const a = src.split('\n'), b = out.split('\n');
+              for (let i=0;i<Math.max(a.length,b.length);i++){
+                if (a[i]!==b[i]) { console.log('first diff at line', i+1); console.log('have:', JSON.stringify(a[i])); console.log('want:', JSON.stringify(b[i])); break; }
+              }
+            }
+          }).catch(e => { console.error('FORMAT ERROR', e); process.exit(1); });
+          "
