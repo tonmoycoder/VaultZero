@@ -258,7 +258,7 @@ pub mod commands {
 
         // The encoded length has to be a multiple of four, and the input
         // may carry at most two padding characters.
-        if bytes.is_empty() || bytes.len() % 4 != 0 {
+        if bytes.is_empty() || !bytes.len().is_multiple_of(4) {
             return None;
         }
 

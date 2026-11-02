@@ -26,9 +26,11 @@ const MAX_FRAME_BYTES: usize = 8 * 1024 * 1024;
 /// trivial (10^6 attempts).
 const MAX_PIN_ATTEMPTS: u32 = 5;
 
-/// Direction separation constants for the payload cipher.
+/// Direction byte for the payload cipher. The current wire protocol only
+/// transfers the vault snapshot from the host to the client, so one
+/// direction is enough; a second direction must be introduced together with
+/// the feature that actually sends data back.
 const DIR_HOST_TO_CLIENT: u8 = 0x01;
-const DIR_CLIENT_TO_HOST: u8 = 0x02;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct DiscoveredPeer {
