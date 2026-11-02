@@ -1,6 +1,7 @@
+use crate::data::wordlist::{WORDLIST, WORDLIST_LEN};
 use rand::rngs::OsRng;
 use rand::seq::SliceRandom;
-use rand::RngCore;
+use rand::{Rng, RngCore};
 
 #[derive(Debug, Clone)]
 pub struct PasswordGenOptions {
@@ -36,18 +37,13 @@ const NUMBERS_SAFE: &[u8] = b"23456789"; // No 0, 1
 
 const SYMBOLS: &[u8] = b"!@#$%^&*()-_=+[]{}|;:,.<>?";
 
-/// 77-word EFF Diceware curated compact offline list
-const DICEWARE_WORDLIST: &[&str] = &[
-    "ability", "absent", "absorb", "abstract", "academy", "accent", "account", "acquire", "across",
-    "actress", "advance", "airport", "album", "alibi", "alley", "alpha", "alpine", "amber",
-    "anchor", "angel", "anthem", "antique", "apron", "arcade", "arctic", "arena", "artist",
-    "aspect", "astral", "atlas", "atom", "audio", "august", "avatar", "avenue", "bacon", "badge",
-    "balcony", "banner", "baron", "beacon", "breeze", "bronze", "cabin", "canyon", "castle",
-    "cedar", "cipher", "clover", "cobalt", "comet", "compass", "coral", "cosmos", "crater",
-    "crystal", "delta", "diamond", "drift", "echo", "ember", "falcon", "frost", "galaxy",
-    "glacier", "granite", "harbor", "horizon", "island", "jasper", "kinetic", "lagoon", "lunar",
-    "marble", "matrix", "meadow", "meteor",
-];
+/// The shared EFF wordlist.
+///
+/// V-23 / V-24: the generator used to carry a private 77-word toy list.
+/// A 5-word passphrase from that list has ~31 bits of entropy, while the UI
+/// reported 64 bits from the real 7,772-word list. The Rust and TypeScript
+/// generators now draw from the same canonical table, so the generated
+/// secret and the entropy shown for it can never disagree.
 
 /// Generates a high-entropy CSPRNG password based on configuration options.
 pub fn generate_password(opts: &PasswordGenOptions) -> String {
@@ -108,25 +104,51 @@ pub fn generate_password(opts: &PasswordGenOptions) -> String {
     String::from_utf8(password).unwrap_or_else(|_| "GeneratedPass123!".to_string())
 }
 
-/// Generates an EFF Diceware passphrase with random words separated by a delimiter.
+/// Generates a passphrase from the shared EFF wordlist.
+///
+/// Words are drawn **without replacement**, so a 5-word passphrase always
+/// contains 5 distinct words (matching `src/lib/generate.ts`). The trailing
+/// `!<number>` suffix is fixed punctuation plus a uniform two-digit draw;
+/// it is part of the generated secret and is counted by
+/// [`passphrase_entropy`].
 pub fn generate_passphrase(word_count: usize, separator: &str, capitalize: bool) -> String {
-    let count = word_count.clamp(3, 10);
-    let mut words = Vec::with_capacity(count);
+    let count = word_count.clamp(3, 12).min(WORDLIST_LEN);
+    let mut words: Vec<String> = Vec::with_capacity(count);
 
-    for _ in 0..count {
-        if let Some(word) = DICEWARE_WORDLIST.choose(&mut OsRng) {
-            let mut w = word.to_string();
-            if capitalize {
-                let mut chars = w.chars();
-                if let Some(first) = chars.next() {
-                    w = format!("{}{}", first.to_uppercase(), chars.as_str());
-                }
+    for word in WORDLIST.as_slice().choose_multiple(&mut OsRng, count) {
+        let mut w = (*word).to_string();
+        if capitalize {
+            let mut chars = w.chars();
+            if let Some(first) = chars.next() {
+                w = format!("{}{}", first.to_uppercase(), chars.as_str());
             }
-            words.push(w);
         }
+        words.push(w);
     }
 
-    words.join(separator)
+    let suffix = OsRng.gen_range(0..100u32);
+    format!("{}!{}", words.join(separator), suffix)
+}
+
+/// Reports the *actual* entropy of a generated passphrase, in bits.
+///
+/// The previous reporting assumed `k * log2(N)` even though words could
+/// repeat and an uncounted `!<digit>` suffix was appended. This mirrors the
+/// TypeScript implementation: a without-replacement draw has
+/// `log2(N!/(N-k)!)` bits, and the 100-valued suffix adds `log2(100)`.
+pub fn passphrase_entropy(word_count: usize) -> f64 {
+    let count = word_count.max(1);
+    if count > WORDLIST_LEN {
+        return (WORDLIST_LEN as f64) * (WORDLIST_LEN as f64).log2();
+    }
+
+    let mut without_replacement = 0.0f64;
+    for i in 0..count {
+        without_replacement += ((WORDLIST_LEN - i) as f64).log2();
+    }
+
+    let suffix_bits = 100.0f64.log2();
+    ((without_replacement + suffix_bits) * 100.0).round() / 100.0
 }
 
 /// Calculates the estimated entropy in bits for a given password.
@@ -289,3 +311,38 @@ const COMMON_WORDS: &[&str] = &[
     "instagram",
     "linkedin",
 ];
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::collections::HashSet;
+
+    #[test]
+    fn passphrase_entropy_uses_the_real_wordlist() {
+        assert!(passphrase_entropy(5) >= 64.0, "5 words must clear 64 bits");
+        assert!(passphrase_entropy(6) >= 77.0, "6 words must clear 77 bits");
+        assert!(passphrase_entropy(8) > passphrase_entropy(5));
+        assert_eq!(passphrase_entropy(0), passphrase_entropy(1));
+    }
+
+    #[test]
+    fn passphrase_words_are_distinct_and_come_from_the_shared_list() {
+        let phrase = generate_passphrase(6, "-", false);
+        let (body, suffix) = phrase.rsplit_once('!').expect("the numeric suffix");
+        assert!(
+            suffix
+                .parse::<u32>()
+                .map(|value| value < 100)
+                .unwrap_or(false),
+            "suffix must be a uniform 0..99 value: {suffix}"
+        );
+
+        let words: Vec<&str> = body.split('-').collect();
+        assert_eq!(words.len(), 6);
+        let mut seen = HashSet::new();
+        for word in words {
+            assert!(WORDLIST.contains(&word), "word not in the EFF list: {word}");
+            assert!(seen.insert(word), "word drawn twice: {word}");
+        }
+    }
+}

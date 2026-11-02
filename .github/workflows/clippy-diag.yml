@@ -20,13 +20,16 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
         with:
           components: clippy, rustfmt
+      - uses: swatinem/rust-cache@v2
       - name: Collect clippy diagnostics
         shell: bash
         run: |
           set +e
           cargo clippy --workspace --all-targets --message-format=short -- -D warnings > clippy.txt 2>&1
           echo "=== clippy exit: $? ===" >> clippy.txt
-          cat clippy.txt
+          cargo test -p vault-core --verbose >> clippy.txt 2>&1
+          echo "=== test exit: $? ===" >> clippy.txt
+          grep -E "error|warning|test result|panicked|FAILED|=== .* exit" clippy.txt | tail -80
       - name: Publish the diagnostics to the branch
         shell: bash
         run: |
