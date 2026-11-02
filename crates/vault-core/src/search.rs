@@ -59,8 +59,12 @@ impl SearchEngine {
                 if has_q {
                     // Fast path: precomputed blob.
                     if !e.search_blob.is_empty() {
-                        if e.search_blob.contains(&q) {
-                            return true;
+                        // V-45: a non-matching blob must reject the entry.
+                        // The old code returned `true` on a match and then
+                        // fell through to `true` for everything else, so
+                        // every query matched every modern entry.
+                        if !e.search_blob.contains(&q) {
+                            return false;
                         }
                         // Fall through to the per-field checks only when the
                         // blob is empty (e.g. summaries deserialised from an

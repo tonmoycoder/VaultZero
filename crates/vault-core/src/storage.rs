@@ -569,7 +569,7 @@ impl StorageEngine {
         if let Err(e) = write_result {
             drop(tmp_file);
             let _ = fs::remove_file(&tmp_path);
-            return Err(e.into());
+            return Err(e);
         }
         drop(tmp_file);
 

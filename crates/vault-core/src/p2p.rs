@@ -77,6 +77,15 @@ impl P2PRole {
             P2PRole::Client => 0x02,
         }
     }
+
+    /// The role of the other peer. Tags are direction-specific, so a peer's
+    /// tag must be recomputed for *that* role rather than compared to ours.
+    fn peer(self) -> Self {
+        match self {
+            P2PRole::Host => P2PRole::Client,
+            P2PRole::Client => P2PRole::Host,
+        }
+    }
 }
 
 /// Ephemeral key exchange session for MITM-proof pairing.
@@ -182,12 +191,8 @@ impl P2PSessionHandshake {
 
         // Step 4: Mutual authentication tag bound to the full transcript.
         // The tag is *direction-specific* (it includes our own role), so each
-        // side verifies the tag it receives against the peer's tag.
-        let mut mac = <HmacSha256 as hmac::Mac>::new_from_slice(&okm)
-            .map_err(|e| crate::errors::VaultError::CryptoError(e.to_string()))?;
-        mac.update(&transcript);
-        mac.update(&[local_role.as_byte()]);
-        let auth_tag: [u8; 32] = mac.finalize().into_bytes().into();
+        // side verifies the tag it receives against the peer's role.
+        let auth_tag = compute_auth_tag(&okm, &transcript, local_role)?;
 
         // Step 5: Channel binding hash. Both peers derive this from the same
         // session key, so it matches only when the transcript was identical —
@@ -204,6 +209,7 @@ impl P2PSessionHandshake {
             auth_tag,
             binding,
             transcript,
+            role: local_role,
         })
     }
 }
@@ -212,6 +218,33 @@ impl Default for P2PSessionHandshake {
     fn default() -> Self {
         Self::new()
     }
+}
+
+/// Derives a separate authentication subkey and MACs the transcript for one
+/// direction of the pairing.
+///
+/// V-45: the tag used to be `HMAC(session_key, transcript || own_role)` and
+/// `verify_auth_tag` compared two tags for equality. Honest peers have
+/// different roles, so their tags can never be equal and mutual
+/// authentication always failed. Verification now recomputes the tag the
+/// peer must have produced.
+fn compute_auth_tag(
+    session_key: &[u8; 32],
+    transcript: &[u8],
+    role: P2PRole,
+) -> Result<[u8; 32], crate::errors::VaultError> {
+    let hk = Hkdf::<Sha256>::new(None, session_key);
+    let mut auth_key = [0u8; 32];
+    hk.expand(P2P_AUTH_INFO, &mut auth_key)
+        .map_err(|_| crate::errors::VaultError::CryptoError("HKDF expansion failed".into()))?;
+
+    let mut mac = <HmacSha256 as hmac::Mac>::new_from_slice(&auth_key)
+        .map_err(|e| crate::errors::VaultError::CryptoError(e.to_string()))?;
+    mac.update(transcript);
+    mac.update(&[role.as_byte()]);
+    let tag: [u8; 32] = mac.finalize().into_bytes().into();
+    auth_key.zeroize();
+    Ok(tag)
 }
 
 /// Normalizes a pairing PIN: strips whitespace and separators, uppercases.
@@ -224,6 +257,8 @@ pub fn normalize_pin(pin: &str) -> String {
 
 pub struct P2PSessionKey {
     key: [u8; 32],
+    /// Role of the local peer, used to derive the peer's expected auth tag.
+    role: P2PRole,
     pub auth_tag: [u8; 32],
     /// Transcript binding hash. Both peers MUST verify that these match.
     pub binding: [u8; 32],
@@ -239,7 +274,10 @@ impl Drop for P2PSessionKey {
 
 impl P2PSessionKey {
     pub fn verify_auth_tag(&self, peer_tag: &[u8; 32]) -> bool {
-        subtle::ConstantTimeEq::ct_eq(self.auth_tag.as_slice(), peer_tag.as_slice()).into()
+        let Ok(expected) = compute_auth_tag(&self.key, &self.transcript, self.role.peer()) else {
+            return false;
+        };
+        subtle::ConstantTimeEq::ct_eq(expected.as_slice(), peer_tag.as_slice()).into()
     }
 
     /// Verifies that the peer's channel binding hash matches ours. This is the

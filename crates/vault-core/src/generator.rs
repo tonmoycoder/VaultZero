@@ -37,14 +37,6 @@ const NUMBERS_SAFE: &[u8] = b"23456789"; // No 0, 1
 
 const SYMBOLS: &[u8] = b"!@#$%^&*()-_=+[]{}|;:,.<>?";
 
-/// The shared EFF wordlist.
-///
-/// V-23 / V-24: the generator used to carry a private 77-word toy list.
-/// A 5-word passphrase from that list has ~31 bits of entropy, while the UI
-/// reported 64 bits from the real 7,772-word list. The Rust and TypeScript
-/// generators now draw from the same canonical table, so the generated
-/// secret and the entropy shown for it can never disagree.
-
 /// Generates a high-entropy CSPRNG password based on configuration options.
 pub fn generate_password(opts: &PasswordGenOptions) -> String {
     let mut charset: Vec<u8> = Vec::new();
@@ -225,7 +217,7 @@ pub fn calculate_entropy(password: &str) -> f64 {
 
     // Penalty 3 — repeated blocks (e.g. "abcabcabc").
     for block in [2usize, 3, 4] {
-        if len >= block * 2 && len % block == 0 {
+        if len >= block * 2 && len.is_multiple_of(block) {
             let mut is_repeating = true;
             for i in 0..(len / block) {
                 for j in 0..block {

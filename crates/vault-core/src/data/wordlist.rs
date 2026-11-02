@@ -19,6 +19,11 @@
 pub const WORDLIST_LEN: usize = 7772;
 
 /// The EFF long wordlist (hyphenated entries removed).
+///
+/// A `const` (rather than `static`) is intentional: `scripts/generate-wordlist.mjs`
+/// parses this declaration to produce the TypeScript copy, and a const array
+/// is inlined at the few call sites that need it.
+#[allow(clippy::large_const_arrays)]
 pub const WORDLIST: [&str; 7772] = [
     "abacus",
     "abdomen",

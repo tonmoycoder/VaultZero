@@ -150,7 +150,7 @@ impl BrandRegistry {
 
         // Cut at the first path, query or fragment marker.
         let host_part = after_scheme
-            .split(|c| c == '/' || c == '?' || c == '#')
+            .split(['/', '?', '#'])
             .next()
             .unwrap_or(after_scheme);
 

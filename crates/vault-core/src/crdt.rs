@@ -21,41 +21,65 @@ use uuid::Uuid;
 /// builds (`panic = "abort"`) it wraps silently, producing non-monotonic
 /// timestamps that break CRDT last-write-wins merge ordering.
 pub struct HlcClock {
-    last_physical_ms: AtomicU64,
-    logical_counter: AtomicU64,
+    /// `(physical_ms << 8) | logical_counter` in one atomic word.
+    ///
+    /// Keeping the two fields in a single atomic lets `now()` advance them
+    /// with one compare-and-swap, so two threads can never publish a pair
+    /// that is out of order.
+    state: AtomicU64,
     node_id: u8,
 }
 
 impl HlcClock {
     /// Mask for the physical millisecond field (48 bits).
     const PHYSICAL_MASK: u64 = (1u64 << 48) - 1;
-    /// Mask for the logical counter field (8 bits).
-    const LOGICAL_MASK: u64 = 0xFF;
+    /// The logical counter occupies 8 bits (0..=255).
+    const LOGICAL_MAX: u64 = 0xFF;
 
     pub fn new(node_id: u8) -> Self {
         Self {
-            last_physical_ms: AtomicU64::new(0),
-            logical_counter: AtomicU64::new(0),
+            state: AtomicU64::new(0),
             node_id,
         }
     }
 
     pub fn now(&self) -> u64 {
-        let physical = chrono::Utc::now().timestamp_millis().max(0) as u64;
-        let last = self.last_physical_ms.load(Ordering::SeqCst);
+        let physical = (chrono::Utc::now().timestamp_millis().max(0) as u64) & Self::PHYSICAL_MASK;
 
-        let (chosen_time, counter) = if physical > last {
-            self.last_physical_ms.store(physical, Ordering::SeqCst);
-            self.logical_counter.store(0, Ordering::SeqCst);
-            (physical, 0u64)
-        } else {
-            let next_count = self.logical_counter.fetch_add(1, Ordering::SeqCst) + 1;
-            (last, next_count)
-        };
+        loop {
+            let state = self.state.load(Ordering::SeqCst);
+            let last_physical = state >> 8;
+            let logical = state & Self::LOGICAL_MAX;
 
-        // Combine: (physical_ms & 0xFFFFFFFFFFFF) << 16 | (counter & 0xFF) << 8 | node_id
-        let packed_physical = chosen_time & Self::PHYSICAL_MASK;
-        (packed_physical << 16) | ((counter & Self::LOGICAL_MASK) << 8) | (self.node_id as u64)
+            let (chosen_time, counter) = if physical > last_physical {
+                // Wall clock moved forward: start a fresh logical sequence.
+                (physical, 0u64)
+            } else if logical < Self::LOGICAL_MAX {
+                // Same millisecond: bump the logical counter.
+                (last_physical, logical + 1)
+            } else {
+                // SECURITY (V-10 / V-45): the logical field is only 8 bits.
+                // The old implementation masked a `fetch_add` value with
+                // 0xFF, so after 256 calls inside one millisecond the packed
+                // timestamp went *backwards* and CRDT last-write-wins merge
+                // picked the older entry. An HLC is allowed to run ahead of
+                // wall time: advance the physical field by 1 ms and restart
+                // the logical sequence instead of wrapping.
+                (last_physical + 1, 0u64)
+            };
+
+            let next_state = (chosen_time << 8) | counter;
+            if self
+                .state
+                .compare_exchange(state, next_state, Ordering::SeqCst, Ordering::SeqCst)
+                .is_ok()
+            {
+                // 48-bit physical | 8-bit logical | 8-bit node id.
+                return ((chosen_time & Self::PHYSICAL_MASK) << 16)
+                    | (counter << 8)
+                    | (self.node_id as u64);
+            }
+        }
     }
 }
 
