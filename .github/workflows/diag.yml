@@ -1,6 +1,9 @@
 name: Diagnostic
 
 on:
+  push:
+    branches:
+      - arena/79f3d1ba-vaultzero
   workflow_dispatch:
 
 jobs:
