@@ -10,7 +10,7 @@ import {
   siSpotify,
   siX,
 } from "simple-icons";
-import { APP_VERSION, compareSemver } from "./version";
+import { APP_VERSION } from "./version";
 
 export type Theme = "light" | "dark" | "lofi";
 export type Language = "en" | "bn";
@@ -461,26 +461,46 @@ export function copyWithAutoClear(text: string, onNotify?: (msg: string) => void
   }, seconds * 1000);
 }
 
-export async function checkGitHubUpdate(currentVersion = APP_VERSION): Promise<{ hasUpdate: boolean; latestVersion?: string; downloadUrl?: string } | null> {
-  try {
-    const res = await fetch("https://api.github.com/repos/tonmoycoder/VaultZero/releases/latest", {
-      headers: { Accept: "application/vnd.github.v3+json" },
-    });
-    if (!res.ok) return null;
-    const data = await res.json();
-    const tag = data.tag_name;
-    if (tag && compareSemver(tag, currentVersion) > 0) {
-      const exeAsset = (data.assets || []).find((a: any) => typeof a.name === "string" && a.name.endsWith(".exe"));
-      return {
-        hasUpdate: true,
-        latestVersion: tag,
-        downloadUrl: exeAsset ? exeAsset.browser_download_url : data.html_url,
-      };
-    }
-    return { hasUpdate: false };
-  } catch {
-    return null;
+/**
+ * Checks GitHub for a newer release.
+ *
+ * This used to be a third, independent update check. The banner, the modal
+ * and this function each fetched the release list on their own, so the app
+ * made three identical requests to the GitHub API on every start and the
+ * three could disagree — the banner could show an update the modal
+ * reported as up to date.
+ *
+ * The check now lives in `lib/updater.ts`, which owns the whole update
+ * contract: the trusted-host allowlist, the checksum verification and the
+ * artifact selection. This wrapper keeps the old call shape for the
+ * existing callers and simply forwards to the shared implementation.
+ *
+ * The release page is never returned as a download URL. It is a web page
+ * that links to several files, so it cannot be checksum-verified.
+ */
+export async function checkGitHubUpdate(
+  currentVersion = APP_VERSION
+): Promise<{ hasUpdate: boolean; latestVersion?: string; downloadUrl?: string } | null> {
+  const { checkReleaseStatus, compareSemver, selectDownloadableAsset } = await import("./updater");
+  const result = await checkReleaseStatus();
+  if (result.status !== "update_available") {
+    return result.status === "up_to_date" ? { hasUpdate: false } : null;
   }
+
+  // The shared check compares against the running build. A caller that asks
+  // about a different version gets the answer for that version, so the
+  // comparison stays correct instead of being ignored.
+  const remoteVersion = result.remoteVersion ?? "";
+  if (!remoteVersion || compareSemver(remoteVersion, currentVersion) <= 0) {
+    return { hasUpdate: false };
+  }
+
+  const asset = selectDownloadableAsset(result.updateInfo);
+  return {
+    hasUpdate: true,
+    latestVersion: remoteVersion,
+    downloadUrl: asset?.browser_download_url,
+  };
 }
 
 export * from "./storage";

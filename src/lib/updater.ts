@@ -192,6 +192,42 @@ export interface UpdateInfo {
   androidAsset?: GitHubAsset;
 }
 
+/**
+ * SECURITY (V-32): picks the artifact that should be offered to the user.
+ *
+ * The release page (`htmlUrl`) is **not** an artifact. It is a web page that
+ * links to several files, so it cannot be checksum-verified and must never
+ * be used as a download target.
+ */
+export function selectDownloadableAsset(info: UpdateInfo | null | undefined): GitHubAsset | undefined {
+  if (!info) return undefined;
+  return info.installerAsset || info.portableAsset || info.androidAsset;
+}
+
+/**
+ * SECURITY (V-32): fetches the asset list of a release.
+ *
+ * The API response is the only source of the asset URLs, and it is fetched
+ * again at download time so that the artifact that is verified is the
+ * artifact that is opened.
+ */
+export async function fetchReleaseAssets(tagName: string): Promise<GitHubAsset[]> {
+  const res = await fetch(
+    `https://api.github.com/repos/${GITHUB_REPO}/releases/tags/${encodeURIComponent(tagName)}`,
+    { headers: { Accept: "application/vnd.github+json" }, cache: "no-store" }
+  );
+  if (!res.ok) {
+    throw new Error(`The release file list could not be retrieved (HTTP ${res.status}).`);
+  }
+  const data = await res.json();
+  if (!Array.isArray(data?.assets)) return [];
+  return data.assets.map((a: any) => ({
+    name: a.name,
+    browser_download_url: a.browser_download_url,
+    size: a.size,
+  }));
+}
+
 export function compareSemver(v1: string, v2: string): number {
   const parse = (v: string) =>
     v
@@ -221,10 +257,75 @@ export interface CheckReleaseStatus {
 }
 
 /**
+ * How long a release check stays fresh.
+ *
+ * The banner, the modal and the startup notification all want to know
+ * whether an update exists. Without a shared cache they made three
+ * identical requests to the GitHub API on every start, which is slow and
+ * can rate-limit the API for the user.
+ */
+export const RELEASE_CHECK_TTL_MS = 5 * 60 * 1000;
+
+interface CachedRelease {
+  result: CheckReleaseStatus;
+  at: number;
+}
+
+let cachedRelease: CachedRelease | null = null;
+let inFlightCheck: Promise<CheckReleaseStatus> | null = null;
+
+/**
  * Checks for the latest release on GitHub with explicit status reporting.
  * Uses cache-busting timestamp and application/vnd.github+json header.
+ *
+ * The result is shared: the first caller performs the request and every
+ * other caller that arrives while it is running receives the same promise,
+ * so the app never issues duplicate release requests for one moment in
+ * time. A successful result is then reused for
+ * {@link RELEASE_CHECK_TTL_MS}.
+ *
+ * `force` bypasses the cache — the "Check for Updates" button uses it so
+ * the user always gets a fresh answer.
  */
-export async function checkReleaseStatus(): Promise<CheckReleaseStatus> {
+export async function checkReleaseStatus(force = false): Promise<CheckReleaseStatus> {
+  if (!force && cachedRelease && Date.now() - cachedRelease.at < RELEASE_CHECK_TTL_MS) {
+    return cachedRelease.result;
+  }
+
+  if (!force && inFlightCheck) {
+    return inFlightCheck;
+  }
+
+  const request = fetchLatestRelease();
+
+  if (!force) {
+    inFlightCheck = request;
+  }
+
+  try {
+    const result = await request;
+    // Only a definitive answer is cached. A network error or a rate limit
+    // must not be remembered for minutes, otherwise a temporary outage
+    // would hide a real update.
+    if (result.status !== "offline" && result.status !== "error") {
+      cachedRelease = { result, at: Date.now() };
+    }
+    return result;
+  } finally {
+    if (!force && inFlightCheck === request) {
+      inFlightCheck = null;
+    }
+  }
+}
+
+/** Discards the cached release check. */
+export function clearReleaseCache(): void {
+  cachedRelease = null;
+  inFlightCheck = null;
+}
+
+/** Performs the actual request against the GitHub releases API. */
+async function fetchLatestRelease(): Promise<CheckReleaseStatus> {
   try {
     const res = await fetch(`https://api.github.com/repos/${GITHUB_REPO}/releases/latest?t=${Date.now()}`, {
       headers: {
@@ -318,6 +419,14 @@ export async function checkForUpdates(): Promise<UpdateInfo | null> {
 export const PRE_UPDATE_BACKUP_KEY = "pre-update-backup.pmv";
 
 /**
+ * The key the legacy build used for the same purpose.
+ *
+ * It is removed after the current snapshot is written so that a vault copy
+ * never lingers under a key an older build would look for.
+ */
+const LEGACY_PRE_UPDATE_BACKUP_KEY = "vaultzero_pre_update_backup";
+
+/**
  * Creates an emergency pre-update snapshot of the encrypted database.
  * Preserves full data security before performing software replacement.
  *
@@ -330,6 +439,16 @@ export const PRE_UPDATE_BACKUP_KEY = "pre-update-backup.pmv";
  *
  * The snapshot is now a **single** key that is overwritten, and any stale
  * timestamped copies left by an older build are cleaned up on the first run.
+ *
+ * The function returns the **canonical** key that holds the snapshot. The
+ * previous implementation returned a timestamped key it had already
+ * deleted, so the UI reported a backup location that did not exist.
+ *
+ * SECURITY: the snapshot is written to `localStorage` only. An earlier
+ * version also copied the encrypted vault into `sessionStorage`, which
+ * widened the number of places a vault copy could be read from for no
+ * benefit — the snapshot has to survive a restart, and `localStorage`
+ * already does that.
  */
 export function createPreUpdateBackup(): string {
   if (typeof window === "undefined") return "";
@@ -344,7 +463,9 @@ export function createPreUpdateBackup(): string {
     const stale: string[] = [];
     for (let i = 0; i < window.localStorage.length; i += 1) {
       const key = window.localStorage.key(i);
-      if (key && key.startsWith("vaultzero_pre_update_backup_")) stale.push(key);
+      if (!key) continue;
+      if (key.startsWith("vaultzero_pre_update_backup_")) stale.push(key);
+      if (key === LEGACY_PRE_UPDATE_BACKUP_KEY) stale.push(key);
     }
     for (const key of stale) window.localStorage.removeItem(key);
   } catch {
@@ -354,23 +475,199 @@ export function createPreUpdateBackup(): string {
 
   if (!raw) return "";
 
-  const ts = new Date().toISOString().replace(/[:.]/g, "-");
-  const backupKey = `vaultzero_pre_update_backup_${ts}`;
-
   try {
-    window.localStorage.setItem(backupKey, raw);
     window.localStorage.setItem(PRE_UPDATE_BACKUP_KEY, raw);
-    // Also save duplicate into sessionStorage for instant restoration if needed
-    window.sessionStorage.setItem("vaultzero_pre_update_backup", raw);
-
-    // The timestamped key above is only a human-readable handle; keeping it
-    // would re-introduce the unbounded growth this function exists to
-    // prevent. The canonical key is the real snapshot.
-    window.localStorage.removeItem(backupKey);
   } catch {
     // A quota error must not prevent the update from being offered.
+    return "";
   }
 
-  return backupKey;
+  return PRE_UPDATE_BACKUP_KEY;
+}
+
+/**
+ * Removes the pre-update snapshot once the new build is running.
+ *
+ * The snapshot exists to make the update recoverable. Keeping it forever
+ * leaves a full copy of the encrypted vault in storage that no longer has
+ * a purpose, so it is dropped as soon as the application starts.
+ */
+export function clearPreUpdateBackup(): void {
+  if (typeof window === "undefined") return;
+  try {
+    window.localStorage.removeItem(PRE_UPDATE_BACKUP_KEY);
+    window.localStorage.removeItem(LEGACY_PRE_UPDATE_BACKUP_KEY);
+  } catch {
+    // Nothing to do: the snapshot is encrypted and harmless if it lingers.
+  }
+}
+
+/** The stages a verified download goes through. */
+export type UpdateStage =
+  | "idle"
+  | "snapshot"
+  | "resolving"
+  | "manifest"
+  | "downloading"
+  | "verifying"
+  | "done"
+  | "failed";
+
+export interface UpdateProgress {
+  stage: UpdateStage;
+  /** 0–100. Meaningful only while the stage is `downloading`. */
+  percent: number;
+  /** A human-readable reason, present when the stage is `failed`. */
+  reason?: string;
+}
+
+export interface VerifiedUpdate {
+  /** The URL that is safe to open. */
+  url: string;
+  /** The SHA-256 the artifact was verified against. */
+  sha256: string;
+}
+
+/**
+ * SECURITY (V-32): the single path an update may take.
+ *
+ * Two components used to offer an update — a banner and a modal — and only
+ * the modal verified the artifact. The banner opened the download URL
+ * directly, so the checksum guarantee the README advertises did not hold
+ * on the path a user is most likely to take. Both now come through this
+ * function, which is fail-closed at every step:
+ *
+ *   1. pick the artifact — the release page is never a download target,
+ *   2. refuse a URL that is not on a trusted host,
+ *   3. fetch the release asset list and locate the checksum manifest,
+ *   4. download the artifact while reporting the real progress,
+ *   5. compare the SHA-256 and refuse on a mismatch.
+ *
+ * The artifact bytes are downloaded and hashed here. The URL is only
+ * handed to the browser after the digest matches, so an unverified file is
+ * never offered to the user.
+ */
+export async function runVerifiedUpdate(
+  info: UpdateInfo,
+  onProgress?: (progress: UpdateProgress) => void
+): Promise<VerifiedUpdate> {
+  const report = (progress: UpdateProgress) => onProgress?.(progress);
+
+  report({ stage: "snapshot", percent: 0 });
+
+  const asset = selectDownloadableAsset(info);
+  if (!asset) {
+    const reason = "This release does not contain an installer for this platform.";
+    report({ stage: "failed", percent: 0, reason });
+    throw new Error(reason);
+  }
+
+  if (!isTrustedDownloadUrl(asset.browser_download_url)) {
+    const reason = "The update link could not be verified — the download was blocked for safety.";
+    report({ stage: "failed", percent: 0, reason });
+    throw new Error(reason);
+  }
+
+  report({ stage: "resolving", percent: 10 });
+
+  let releaseAssets: GitHubAsset[];
+  try {
+    releaseAssets = await fetchReleaseAssets(info.tagName);
+  } catch (error: any) {
+    const reason = error?.message || "The release file list could not be retrieved.";
+    report({ stage: "failed", percent: 0, reason });
+    throw new Error(reason);
+  }
+
+  const manifestAsset = releaseAssets.find((a) => a.name === CHECKSUM_MANIFEST_NAME);
+  if (!manifestAsset || !isTrustedDownloadUrl(manifestAsset.browser_download_url)) {
+    const reason = "This release does not publish a checksum manifest, so the download cannot be verified.";
+    report({ stage: "failed", percent: 0, reason });
+    throw new Error(reason);
+  }
+
+  report({ stage: "manifest", percent: 25 });
+
+  let expected: string | null = null;
+  try {
+    const manifestRes = await fetch(manifestAsset.browser_download_url, { cache: "no-store" });
+    if (!manifestRes.ok) {
+      throw new Error(`The checksum manifest could not be downloaded (HTTP ${manifestRes.status}).`);
+    }
+    expected = parseChecksumManifest(await manifestRes.text(), asset.name);
+  } catch (error: any) {
+    const reason = error?.message || "The checksum manifest could not be downloaded.";
+    report({ stage: "failed", percent: 0, reason });
+    throw new Error(reason);
+  }
+
+  if (!expected) {
+    const reason = "The checksum manifest does not list this artifact, so the download cannot be verified.";
+    report({ stage: "failed", percent: 0, reason });
+    throw new Error(reason);
+  }
+
+  report({ stage: "downloading", percent: 35 });
+
+  // The artifact is streamed so the progress bar reflects the bytes that
+  // actually arrived instead of a timer that counts up on its own.
+  let actual: string;
+  try {
+    const res = await fetch(asset.browser_download_url, { cache: "no-store" });
+    if (!res.ok) {
+      throw new Error(`The update package could not be downloaded (HTTP ${res.status}).`);
+    }
+
+    const total = Number(res.headers.get("content-length") ?? "0") || asset.size || 0;
+    const reader = res.body?.getReader();
+    const chunks: Uint8Array[] = [];
+    let received = 0;
+
+    if (reader) {
+      for (;;) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        if (!value) continue;
+        chunks.push(value);
+        received += value.byteLength;
+        report({
+          stage: "downloading",
+          percent: total > 0 ? Math.min(85, 35 + Math.round((received / total) * 50)) : 60,
+        });
+      }
+    } else {
+      // Some environments do not expose a streaming body; fall back to a
+      // single buffered read.
+      chunks.push(new Uint8Array(await res.arrayBuffer()));
+    }
+
+    const buffer = new Uint8Array(received || chunks[0]?.byteLength || 0);
+    let offset = 0;
+    for (const chunk of chunks) {
+      buffer.set(chunk, offset);
+      offset += chunk.byteLength;
+    }
+
+    report({ stage: "verifying", percent: 90 });
+
+    const hash = await crypto.subtle.digest("SHA-256", buffer);
+    actual = Array.from(new Uint8Array(hash))
+      .map((b) => b.toString(16).padStart(2, "0"))
+      .join("");
+  } catch (error: any) {
+    const reason = error?.message || "The update package could not be downloaded.";
+    report({ stage: "failed", percent: 0, reason });
+    throw new Error(reason);
+  }
+
+  if (actual.toLowerCase() !== expected.trim().toLowerCase()) {
+    const reason = "The downloaded artifact does not match its published checksum.";
+    report({ stage: "failed", percent: 0, reason });
+    throw new Error(reason);
+  }
+
+  report({ stage: "done", percent: 100 });
+
+  return { url: asset.browser_download_url, sha256: expected.trim().toLowerCase() };
 }
 

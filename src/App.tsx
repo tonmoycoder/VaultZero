@@ -41,6 +41,7 @@ const CsvImportModal = lazy(() => import("./components/CsvImportModal").then((m)
 const UserProfileModal = lazy(() => import("./components/UserProfileModal"));
 const UpdateModal = lazy(() => import("./components/UpdateModal"));
 import { APP_VERSION, compareSemver } from "./lib/version";
+import { clearPreUpdateBackup } from "./lib/updater";
 import {
   checkGitHubUpdate,
   clearActiveSession,
@@ -235,6 +236,15 @@ export default function App() {
       invokeTauri("set_screen_protection", { enabled: true });
     }
   }, [notify]);
+
+  // SECURITY / STORAGE (V-39): the pre-update snapshot exists to make an
+  // update recoverable. Once the new build is running it has no purpose,
+  // and keeping it leaves a full copy of the encrypted vault in storage.
+  // It is dropped on the next start, so a failed update is still
+  // recoverable for exactly one session.
+  useEffect(() => {
+    clearPreUpdateBackup();
+  }, []);
 
   useEffect(() => {
     document.documentElement.setAttribute("data-theme", theme);

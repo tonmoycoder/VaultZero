@@ -3,14 +3,19 @@ import {
   DownloadSimple,
   ShieldCheck,
   Sparkle,
+  WarningCircle,
   X,
 } from "@phosphor-icons/react";
 import { useEffect, useState } from "react";
 import {
   checkForUpdates,
   createPreUpdateBackup,
+  runVerifiedUpdate,
   type UpdateInfo,
+  type UpdateProgress,
+  type UpdateStage,
 } from "../lib/updater";
+import { stageLabel } from "../lib/updateStage";
 import { Modal } from "./ui";
 import type { Language } from "../lib/vault";
 
@@ -26,6 +31,8 @@ export default function UpdateBanner({
   const [modalOpen, setModalOpen] = useState(false);
   const [downloading, setDownloading] = useState(false);
   const [progress, setProgress] = useState(0);
+  const [stage, setStage] = useState<UpdateStage>("idle");
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     // Check for updates 5 seconds after startup
@@ -40,48 +47,63 @@ export default function UpdateBanner({
     return () => clearTimeout(timer);
   }, []);
 
-  const handleStartUpdate = () => {
-    // 1. Create emergency pre-update snapshot
-    const backupKey = createPreUpdateBackup();
-    onNotify?.(
-      lang === "bn"
-        ? `ডেটা সেফটি ব্যাকআপ সংরক্ষিত: ${backupKey}`
-        : `Pre-update safety snapshot saved: ${backupKey}`
-    );
+  /**
+   * SECURITY (V-32): the banner used to open the download URL directly.
+   *
+   * It validated nothing, so a tampered artifact on the release host would
+   * still have been offered to the user, and the progress bar counted up on
+   * a timer while nothing was downloaded. The banner now goes through the
+   * same verified flow as the modal: the artifact is downloaded, hashed and
+   * compared against the release's checksum manifest before the installer
+   * is opened.
+   */
+  const handleStartUpdate = async () => {
+    if (!updateInfo) return;
 
     setDownloading(true);
-    setProgress(15);
+    setProgress(0);
+    setError(null);
+    setStage("snapshot");
 
-    // Simulate reliable staged download
-    const int = setInterval(() => {
-      setProgress((prev) => {
-        if (prev >= 95) {
-          clearInterval(int);
-          return 95;
-        }
-        return prev + 20;
+    try {
+      const verified = await runVerifiedUpdate(updateInfo, (update: UpdateProgress) => {
+        setStage(update.stage);
+        setProgress(update.percent);
       });
-    }, 250);
 
-    setTimeout(() => {
-      clearInterval(int);
+      const backupKey = createPreUpdateBackup();
+      if (backupKey) {
+        onNotify?.(
+          lang === "bn"
+            ? `ডেটা সেফটি ব্যাকআপ সংরক্ষিত: ${backupKey}`
+            : `Pre-update safety snapshot saved: ${backupKey}`
+        );
+      }
+
       setProgress(100);
-      setDownloading(false);
-
-      const downloadUrl =
-        updateInfo?.installerAsset?.browser_download_url ||
-        updateInfo?.portableAsset?.browser_download_url ||
-        updateInfo?.htmlUrl ||
-        "https://github.com/tonmoycoder/VaultZero/releases/latest";
-
-      window.open(downloadUrl, "_blank", "noopener,noreferrer");
+      setStage("done");
+      window.open(verified.url, "_blank", "noopener,noreferrer");
 
       onNotify?.(
         lang === "bn"
-          ? "আপডেট প্যাকেজ ডাউনলোড হচ্ছে। ইনস্টল শেষে পুনরায় চালু করুন।"
-          : "Update package downloaded. Relaunch after installation completes."
+          ? "আপডেট প্যাকেজ যাচাই করা হয়েছে। ইনস্টল শেষে পুনরায় চালু করুন।"
+          : "Update package verified against its published checksum. Relaunch after installation completes."
       );
-    }, 1500);
+    } catch (err: any) {
+      setProgress(0);
+      setStage("failed");
+      const reason = err?.message || "The update could not be verified.";
+      setError(
+        lang === "bn" ? `আপডেট যাচাই করা যায়নি: ${reason}` : `The update could not be verified: ${reason}`
+      );
+      onNotify?.(
+        lang === "bn"
+          ? "আপডেট চেকসাম যাচাই ব্যর্থ — ডাউনলোড বন্ধ করা হয়েছে।"
+          : "Update checksum verification failed — the download was blocked."
+      );
+    } finally {
+      setDownloading(false);
+    }
   };
 
   if (!visible || !updateInfo) return null;
@@ -133,9 +155,7 @@ export default function UpdateBanner({
             {downloading && (
               <div className="mt-2 space-y-1">
                 <div className="flex justify-between text-[7.5px] font-medium text-faint">
-                  <span>
-                    {lang === "bn" ? "ডাউনলোড হচ্ছে…" : "Downloading update…"}
-                  </span>
+                  <span>{stageLabel(stage, lang)}</span>
                   <span>{progress}%</span>
                 </div>
                 <div className="h-1.5 w-full overflow-hidden rounded-full bg-[var(--border-ink)]">
@@ -147,10 +167,17 @@ export default function UpdateBanner({
               </div>
             )}
 
+            {error && !downloading && (
+              <p className="mt-2 flex items-start gap-1 text-[8px] leading-relaxed text-danger">
+                <WarningCircle size={11} weight="fill" className="mt-px shrink-0" />
+                <span>{error}</span>
+              </p>
+            )}
+
             <div className="mt-2.5 flex items-center gap-1.5">
               <button
                 type="button"
-                onClick={handleStartUpdate}
+                onClick={() => void handleStartUpdate()}
                 disabled={downloading}
                 className="primary-button flex h-[28px] items-center gap-1 rounded-full px-3 text-[9px] font-semibold"
               >
@@ -211,7 +238,7 @@ export default function UpdateBanner({
                 type="button"
                 onClick={() => {
                   setModalOpen(false);
-                  handleStartUpdate();
+                  void handleStartUpdate();
                 }}
                 className="primary-button flex h-9 flex-1 items-center justify-center gap-1.5 rounded-full text-[10px] font-semibold"
               >

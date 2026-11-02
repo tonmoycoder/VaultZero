@@ -14,13 +14,14 @@ import {
   checkReleaseStatus,
   createPreUpdateBackup,
   CURRENT_APP_VERSION,
-  isTrustedDownloadUrl,
-  verifyReleaseArtifact,
+  runVerifiedUpdate,
   type CheckReleaseStatus,
-  type GitHubAsset,
   type UpdateInfo,
+  type UpdateProgress,
+  type UpdateStage,
 } from "../lib/updater";
 import { Modal } from "./ui";
+import { stageLabel } from "../lib/updateStage";
 import type { Language } from "../lib/vault";
 
 export default function UpdateModal({
@@ -52,6 +53,9 @@ export default function UpdateModal({
   const [loading, setLoading] = useState(false);
   const [downloading, setDownloading] = useState(false);
   const [progress, setProgress] = useState(0);
+  // The stage of the verified update, so the progress bar tells the truth
+  // about what is happening instead of animating on a timer.
+  const [stage, setStage] = useState<UpdateStage>("idle");
   const [verificationError, setVerificationError] = useState<string | null>(null);
   // SECURITY (V-32): the digest the artifact was actually verified
   // against. Shown to the user so the check is visible, not implicit.
@@ -60,7 +64,9 @@ export default function UpdateModal({
   const performCheck = async () => {
     setLoading(true);
     try {
-      const res = await checkReleaseStatus();
+      // The button always asks for a fresh answer, so the shared cache is
+      // bypassed here.
+      const res = await checkReleaseStatus(true);
       setStatusState(res);
       if (res.status === "up_to_date") {
         onNotify?.(
@@ -91,118 +97,63 @@ export default function UpdateModal({
    * artifact's SHA-256 has been verified against the checksum manifest of
    * the same release.
    *
-   * The previous flow opened the download URL directly. It validated the
-   * *host* (good) but never checked the *bytes*, so a tampered artifact on a
-   * trusted host would still have been offered to the user while the README
-   * claimed the downloads were checksum-verified.
-   *
-   * The whole chain is now fail-closed: a missing manifest, a manifest
-   * without an entry for this artifact, a download failure or a digest
-   * mismatch all abort the update with an explanation.
+   * The banner and this modal used to be two separate flows, and only this
+   * one verified the artifact. The banner opened the download URL directly,
+   * so the checksum guarantee the README advertises did not hold on the
+   * path a user is most likely to take. Both now go through
+   * `runVerifiedUpdate`, which is fail-closed at every step and reports the
+   * real download progress.
    */
   const handleStartUpdate = async () => {
-    const backupKey = createPreUpdateBackup();
-    onNotify?.(
-      lang === "bn"
-        ? `প্রি-আপডেট নিরাপত্তা ব্যাকআপ সংরক্ষিত: ${backupKey}`
-        : `Pre-update safety snapshot saved: ${backupKey}`
-    );
+    const info = statusState.updateInfo;
+    if (!info) return;
 
     setDownloading(true);
-    setProgress(15);
+    setProgress(0);
     setVerificationError(null);
     setVerifiedDigest(null);
+    setStage("snapshot");
 
-    const info = statusState.updateInfo;
-    const chosen: GitHubAsset | undefined =
-      info?.installerAsset || info?.portableAsset || info?.androidAsset;
+    try {
+      const verified = await runVerifiedUpdate(info, (update: UpdateProgress) => {
+        setStage(update.stage);
+        setProgress(update.percent);
+      });
 
-    // The download URL is still validated against the hard-coded allowlist
-    // before anything is fetched: a compromised or spoofed API response can
-    // no longer redirect the app to an arbitrary host.
-    const downloadUrl = chosen?.browser_download_url || info?.htmlUrl;
-    if (!downloadUrl || !isTrustedDownloadUrl(downloadUrl)) {
-      setProgress(0);
-      setDownloading(false);
-      setVerificationError(
-        lang === "bn"
-          ? "আপডেট লিঙ্কটি যাচাই করা যায়নি — নিরাপত্তার জন্য ডাউনলোড বন্ধ করা হয়েছে।"
-          : "The update link could not be verified — the download was blocked for safety."
-      );
+      const backupKey = createPreUpdateBackup();
+      if (backupKey) {
+        onNotify?.(
+          lang === "bn"
+            ? `প্রি-আপডেট নিরাপত্তা ব্যাকআপ সংরক্ষিত: ${backupKey}`
+            : `Pre-update safety snapshot saved: ${backupKey}`
+        );
+      }
+
+      setProgress(100);
+      setStage("done");
+      setVerifiedDigest(verified.sha256);
+      window.open(verified.url, "_blank", "noopener,noreferrer");
+
       onNotify?.(
         lang === "bn"
-          ? "অবিশ্বস্ত আপডেট লিঙ্ক — ডাউনলোড বন্ধ করা হয়েছে।"
-          : "Untrusted update link — the download was blocked."
+          ? "আপডেট প্যাকেজ যাচাই করা হয়েছে। ইনস্টল শেষে পুনরায় চালু করুন।"
+          : "Update package verified against its published checksum. Complete the installer to apply changes."
       );
-      return;
-    }
-
-    setProgress(45);
-
-    // Fetch the release's asset list so the checksum manifest can be found.
-    // The API response is the only source of the asset URLs.
-    let releaseAssets: GitHubAsset[] = [];
-    try {
-      const res = await fetch(
-        `https://api.github.com/repos/${"tonmoycoder/VaultZero"}/releases/tags/${encodeURIComponent(
-          info?.tagName ?? ""
-        )}`,
-        { headers: { Accept: "application/vnd.github+json" }, cache: "no-store" }
-      );
-      if (res.ok) {
-        const data = await res.json();
-        releaseAssets = Array.isArray(data.assets)
-          ? data.assets.map((a: any) => ({
-              name: a.name,
-              browser_download_url: a.browser_download_url,
-              size: a.size,
-            }))
-          : [];
-      }
-    } catch {
-      releaseAssets = [];
-    }
-
-    if (!chosen || releaseAssets.length === 0) {
+    } catch (error: any) {
       setProgress(0);
-      setDownloading(false);
+      setStage("failed");
+      const reason = error?.message || "The update could not be verified.";
       setVerificationError(
-        lang === "bn"
-          ? "রিলিজের ফাইল তালিকা পাওয়া যায়নি — ডাউনলোড বন্ধ করা হয়েছে।"
-          : "The release file list could not be retrieved — the download was blocked."
-      );
-      return;
-    }
-
-    setProgress(65);
-
-    const verification = await verifyReleaseArtifact(releaseAssets, chosen);
-    if (!verification.ok) {
-      setProgress(0);
-      setDownloading(false);
-      setVerificationError(
-        lang === "bn"
-          ? `আপডেট যাচাই করা যায়নি: ${verification.reason ?? "চেকসাম মিলেনি।"}`
-          : `The update could not be verified: ${verification.reason ?? "the checksum did not match."}`
+        lang === "bn" ? `আপডেট যাচাই করা যায়নি: ${reason}` : `The update could not be verified: ${reason}`
       );
       onNotify?.(
         lang === "bn"
           ? "আপডেট চেকসাম যাচাই ব্যর্থ — ডাউনলোড বন্ধ করা হয়েছে।"
           : "Update checksum verification failed — the download was blocked."
       );
-      return;
+    } finally {
+      setDownloading(false);
     }
-
-    setProgress(100);
-    setDownloading(false);
-    setVerifiedDigest(verification.expectedSha256 ?? null);
-    window.open(downloadUrl, "_blank", "noopener,noreferrer");
-
-    onNotify?.(
-      lang === "bn"
-        ? "আপডেট প্যাকেজ যাচাই করা হয়েছে। ইনস্টল শেষে পুনরায় চালু করুন।"
-        : "Update package verified against its published checksum. Complete the installer to apply changes."
-    );
   };
 
   return (
@@ -358,7 +309,7 @@ export default function UpdateModal({
             {downloading && (
               <div className="mt-3.5 space-y-1.5">
                 <div className="flex justify-between text-[8px] font-semibold text-muted">
-                  <span>{lang === "bn" ? "ডাউনলোড ও প্রস্তুতি..." : "Downloading update..."}</span>
+                  <span>{stageLabel(stage, lang)}</span>
                   <span>{progress}%</span>
                 </div>
                 <div className="h-2 w-full overflow-hidden rounded-full bg-[var(--border-soft)]">
