@@ -19,11 +19,47 @@ pub struct RecoveryCode {
     pub note: Option<String>,
 }
 
+/// SECURITY (V-28): a recovery code is a one-time fallback that bypasses
+/// 2FA. It is wiped when the struct is dropped, not only when it is
+/// dropped as part of an `Entry`.
+impl Zeroize for RecoveryCode {
+    fn zeroize(&mut self) {
+        self.code.zeroize();
+        if let Some(ref mut note) = self.note {
+            note.zeroize();
+        }
+    }
+}
+
+impl Drop for RecoveryCode {
+    fn drop(&mut self) {
+        self.zeroize();
+    }
+}
+
+impl ZeroizeOnDrop for RecoveryCode {}
+
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct PasswordHistoryEntry {
     pub password: String,
     pub changed_at: u64,
 }
+
+/// SECURITY (V-28): a previous password is still a credential. It is wiped
+/// on drop so it cannot outlive the entry it belongs to.
+impl Zeroize for PasswordHistoryEntry {
+    fn zeroize(&mut self) {
+        self.password.zeroize();
+    }
+}
+
+impl Drop for PasswordHistoryEntry {
+    fn drop(&mut self) {
+        self.zeroize();
+    }
+}
+
+impl ZeroizeOnDrop for PasswordHistoryEntry {}
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct TotpConfig {
@@ -32,6 +68,23 @@ pub struct TotpConfig {
     pub digits: u32,       // 6 or 8
     pub period: u64,       // typically 30s
 }
+
+/// SECURITY (V-28): the TOTP seed is the authenticator's master secret. It
+/// never rotates, so leaking it is a permanent 2FA bypass. It is wiped when
+/// the config is dropped.
+impl Zeroize for TotpConfig {
+    fn zeroize(&mut self) {
+        self.secret.zeroize();
+    }
+}
+
+impl Drop for TotpConfig {
+    fn drop(&mut self) {
+        self.zeroize();
+    }
+}
+
+impl ZeroizeOnDrop for TotpConfig {}
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct Entry {

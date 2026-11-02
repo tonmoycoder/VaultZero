@@ -61,7 +61,19 @@ pub struct TotpResponse {
 
 pub mod commands {
     use super::*;
-    use tauri::State;
+    use tauri::{Manager, State};
+
+/// SECURITY (V-26): converts a core error into a **user-safe** message.
+///
+/// The detailed error text (`e.to_string()`) used to be returned to the
+/// renderer verbatim, which leaked internal detail such as the file format,
+/// the expected magic bytes, and the platform's memory-protection mechanism
+/// to anyone who could trigger an error. The full text is still logged on
+/// the Rust side; only a fixed, safe message crosses the IPC boundary.
+fn safe_error(error: &vault_core::errors::VaultError) -> String {
+    eprintln!("[vaultzero] storage error: {}", error);
+    error.user_message().to_string()
+}
 
     #[tauri::command]
     pub fn is_vault_unlocked(state: State<AppState>) -> bool {
@@ -89,6 +101,43 @@ pub mod commands {
         }
     }
 
+    /// Returns the canonical, absolute path of the vault file.
+    ///
+    /// SECURITY (V-33): the frontend used to pass the **relative** path
+    /// `"local-vault.pmv"` to `create_vault` / `unlock_vault`. A relative path
+    /// resolves against the current working directory, which differs between
+    /// an Explorer launch, a shortcut, a Task Scheduler job and a service.
+    /// The vault could therefore be written somewhere unexpected and
+    /// possibly world-readable, and a second launch from a different working
+    /// directory would not find it at all.
+    ///
+    /// The path is now resolved once, in the Rust core, into the platform's
+    /// application-data directory and created with restrictive permissions.
+    #[tauri::command]
+    pub fn vault_file_path(app: tauri::AppHandle) -> Result<String, String> {
+        let dir = app
+            .path()
+            .app_data_dir()
+            .map_err(|e| format!("Could not resolve the application data directory: {}", e))?;
+
+        std::fs::create_dir_all(&dir)
+            .map_err(|e| format!("Could not create the application data directory: {}", e))?;
+
+        // Restrict the directory to the current user where the platform
+        // supports it (no-op on Windows, where the ACL is inherited).
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            if let Ok(metadata) = std::fs::metadata(&dir) {
+                let mut permissions = metadata.permissions();
+                permissions.set_mode(0o700);
+                let _ = std::fs::set_permissions(&dir, permissions);
+            }
+        }
+
+        Ok(dir.join("local-vault.pmv").to_string_lossy().to_string())
+    }
+
     #[tauri::command]
     pub fn lock_vault(state: State<AppState>) -> Result<(), String> {
         let mut session_guard = state.session.lock().unwrap();
@@ -114,10 +163,10 @@ pub mod commands {
         let d_pwd = duress_password.as_deref().filter(|s| !s.is_empty());
 
         StorageEngine::create_vault(&p, &vault, &master_password, kf_bytes, d_pwd, None)
-            .map_err(|e| e.to_string())?;
+            .map_err(|e| safe_error(&e))?;
 
         let session = StorageEngine::unlock_vault(&p, &master_password, kf_bytes)
-            .map_err(|e| e.to_string())?;
+            .map_err(|e| safe_error(&e))?;
 
         *state.session.lock().unwrap() = Some(session);
         *state.vault_path.lock().unwrap() = Some(p);
@@ -351,7 +400,7 @@ pub mod commands {
         }
 
         if let Some(ref path) = *state.vault_path.lock().unwrap() {
-            StorageEngine::save_vault(path, session).map_err(|e| e.to_string())?;
+            StorageEngine::save_vault(path, session).map_err(|e| safe_error(&e))?;
         }
 
         Ok(entry.to_summary())
@@ -375,7 +424,7 @@ pub mod commands {
         }
 
         if let Some(ref path) = *state.vault_path.lock().unwrap() {
-            StorageEngine::save_vault(path, session).map_err(|e| e.to_string())?;
+            StorageEngine::save_vault(path, session).map_err(|e| safe_error(&e))?;
         }
 
         Ok(())
@@ -430,7 +479,7 @@ pub mod commands {
         }
 
         if let Some(ref path) = *state.vault_path.lock().unwrap() {
-            StorageEngine::save_vault(path, session).map_err(|e| e.to_string())?;
+            StorageEngine::save_vault(path, session).map_err(|e| safe_error(&e))?;
         }
 
         Ok(preview)
@@ -475,13 +524,35 @@ pub mod commands {
         Ok(())
     }
 
+    /// Starts the LAN P2P host and serves the vault to a paired peer.
+    ///
+    /// SECURITY (V-25): the command previously took an arbitrary
+    /// `payload: String` from the renderer. The renderer therefore chose the
+    /// exact bytes that were encrypted and shipped to any peer that knew the
+    /// PIN — a confused-deputy, since a compromised renderer could serve
+    /// arbitrary content under the user's identity. Worse, the frontend
+    /// passed `payload: ""`, so the "Send vault" feature transferred nothing
+    /// at all.
+    ///
+    /// The payload is now derived **inside the Rust core** from the unlocked
+    /// session. The renderer never handles the snapshot bytes.
     #[tauri::command]
     pub async fn start_p2p_host(
         pin: String,
-        payload: String,
         device_name: Option<String>,
         state: State<'_, AppState>,
     ) -> Result<p2p_lan::P2PHostInfo, String> {
+        // Serialise the vault from the session while it is still locked
+        // behind the mutex, then drop the borrow before awaiting.
+        let payload = {
+            let session_guard = state.session.lock().unwrap();
+            let session = session_guard
+                .as_ref()
+                .ok_or_else(|| "Vault is locked".to_string())?;
+            serde_json::to_string(&session.vault)
+                .map_err(|e| format!("Failed to serialise the vault for transfer: {}", e))?
+        };
+
         let name = device_name.unwrap_or_else(|| "VaultZero-Peer".into());
         let mut mgr = state.p2p.lock().await;
         mgr.start_host(pin, payload, name).await
@@ -526,6 +597,7 @@ pub fn run() {
             commands::is_vault_unlocked,
             commands::get_vault_status,
             commands::lock_vault,
+            commands::vault_file_path,
             commands::create_vault,
             commands::unlock_vault,
             commands::list_entries,

@@ -1,0 +1,95 @@
+// V-29: no plaintext secret may survive in the frontend session object.
+//
+// The `UnlockedSession` used to carry the master password, the keyfile
+// bytes and the derived key. Everything secret now lives in module-scoped
+// memory that is cleared on lock, and the session carries only non-
+// sensitive flags.
+import { webcrypto } from "node:crypto";
+if (!globalThis.crypto) globalThis.crypto = webcrypto;
+
+const store = new Map();
+globalThis.window = {
+  localStorage: {
+    getItem: (k) => (store.has(k) ? store.get(k) : null),
+    setItem: (k, v) => store.set(k, String(v)),
+    removeItem: (k) => store.delete(k),
+    key: (i) => Array.from(store.keys())[i] ?? null,
+    get length() {
+      return store.size;
+    },
+  },
+  sessionStorage: {
+    getItem: () => null,
+    setItem: () => {},
+    removeItem: () => {},
+  },
+};
+
+const m = await import("/tmp/vz-tests/storage-built.mjs");
+
+let failures = 0;
+const t = (name, ok, extra = "") => {
+  console.log(`${ok ? "PASS" : "FAIL"}  ${name}${extra ? " — " + extra : ""}`);
+  if (!ok) failures++;
+};
+
+const SECRET_FIELDS = [
+  "password",
+  "masterPassword",
+  "keyfileBytes",
+  "keyfile",
+  "dataKey",
+  "cryptoKey",
+  "key",
+  "secret",
+];
+
+console.log("=== the session object carries no secrets ===");
+
+const session = await m.createNewVault(
+  "session-secret-check",
+  [],
+  undefined,
+  undefined,
+  undefined
+);
+
+for (const field of SECRET_FIELDS) {
+  t(`the session has no "${field}" field`, !(field in session));
+}
+
+const serialized = JSON.stringify(session);
+t("the serialized session contains no password", !serialized.includes("session-secret-check"));
+
+console.log("=== sessionStorage carries no secrets ===");
+
+const sessionRaw = store.get(m.VAULT_STORAGE_KEY);
+t("the vault container is stored (encrypted)", !!sessionRaw);
+t(
+  "the container does not contain the master password in the clear",
+  !String(sessionRaw).includes("session-secret-check")
+);
+
+console.log("=== locking clears the in-memory session ===");
+
+m.clearActiveSession();
+t("getActiveSession returns null after a lock", m.getActiveSession() === null);
+
+console.log("=== the wrong password is rejected ===");
+
+let wrongRejected = false;
+try {
+  await m.unlockVault("definitely-wrong");
+} catch {
+  wrongRejected = true;
+}
+t("the wrong password is rejected", wrongRejected);
+
+console.log("=== the right password still unlocks ===");
+
+const reopened = await m.unlockVault("session-secret-check");
+t("the vault opens", !!reopened);
+t("getActiveSession returns the session", m.getActiveSession() !== null);
+
+console.log(`\nRESULT: ${failures === 0 ? "all passed" : failures + " failed"}`);
+process.exit(failures === 0 ? 0 : 1);

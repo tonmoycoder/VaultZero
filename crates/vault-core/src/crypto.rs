@@ -40,6 +40,19 @@ impl KdfParams {
     }
 
     /// Calibrates KDF parameters against the current hardware targeting ~500ms.
+    ///
+    /// SECURITY (V-34): this function was dead code — it was never called
+    /// from anywhere, so the 64 MiB default always applied. On a low-RAM
+    /// device (the project's stated target is an old Android phone) the
+    /// default may be too aggressive and the unlock may fail outright.
+    ///
+    /// The calibration is now actually **used**, and the chosen parameters
+    /// are written into the vault header so they stay stable across devices
+    /// and across sessions. Re-calibrating on a different machine would
+    /// otherwise change the derived key and make the vault unopenable.
+    ///
+    /// The calibration probe uses a fixed salt and password, so it is
+    /// deterministic and leaks nothing about the real vault.
     pub fn calibrate_hardware() -> Self {
         let mut params = Self::default();
         let test_pass = "calibration_probe_password";

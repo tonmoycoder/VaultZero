@@ -35,6 +35,9 @@ yarn-error.log*
 # Stealth agent exclusions
 .agent/
 .agents/
+# Skill tooling installs its payload under `agent/` — same policy.
+agent/
+skills-lock.json
 .claude/
 .cursor/
 .gemini/

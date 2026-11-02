@@ -2,6 +2,7 @@ pub mod auditor;
 pub mod audit_log;
 pub mod brands;
 pub mod crdt;
+pub mod data;
 pub mod crypto;
 pub mod errors;
 pub mod export;
@@ -22,7 +23,10 @@ pub use crdt::{merge_vault_states, HlcClock};
 pub use crypto::{derive_kek, generate_vault_key, KdfParams};
 pub use errors::{Result, VaultError};
 pub use export::{ImportPreview, VaultExporter};
-pub use generator::{calculate_entropy, generate_passphrase, generate_password, PasswordGenOptions};
+pub use data::wordlist::{WORDLIST, WORDLIST_LEN};
+pub use generator::{
+    calculate_entropy, generate_passphrase, generate_password, passphrase_entropy, PasswordGenOptions,
+};
 pub use memory::LockedBuffer;
 pub use models::{Category, Entry, EntrySummary, Folder, PasswordHistoryEntry, RecoveryCode, TotpConfig, Vault};
 pub use ocr::{AmbiguousCharacter, OcrParsedResult, OcrSmartParser};

@@ -77,12 +77,29 @@ jobs:
             Copy-Item "src-tauri/vaultzero-app.exe.manifest" -Destination "release-assets-windows/VaultZero-Windows-x64-portable.exe.manifest" -Force
           }
           
-          # Generate SHA256 checksums
+          # Generate SHA256 checksums.
+          #
+          # SECURITY (V-32): the desktop release publishes a single
+          # `SHA256SUMS.txt` manifest in the `sha256sum` format. The app
+          # downloads this manifest, parses the entry for the artifact it is
+          # about to install, and refuses the download if the digests do not
+          # match. The per-file `.sha256` sidecars are kept for people who
+          # download a single file by hand.
           Get-ChildItem -Path "release-assets-windows/*" -File | ForEach-Object {
             $hash = (Get-FileHash -Path $_.FullName -Algorithm SHA256).Hash
             Set-Content -Path "$($_.FullName).sha256" -Value "$hash  $($_.Name)"
             Write-Host "Checksum for $($_.Name): $hash"
           }
+          # Build the combined manifest. Only the real artifacts are listed
+          # — the `.sha256` sidecars themselves must not be listed.
+          $manifestLines = Get-ChildItem -Path "release-assets-windows/*" -File |
+            Where-Object { $_.Extension -ne ".sha256" } |
+            ForEach-Object {
+              $hash = (Get-FileHash -Path $_.FullName -Algorithm SHA256).Hash.ToLower()
+              "$hash  $($_.Name)"
+            }
+          Set-Content -Path "release-assets-windows/SHA256SUMS.txt" -Value $manifestLines -Encoding ascii
+          Write-Host "Wrote SHA256SUMS.txt with $($manifestLines.Count) entries"
 
       - name: Upload Windows Artifacts
         uses: actions/upload-artifact@v4
@@ -142,6 +159,12 @@ jobs:
       - name: Initialize & Build Real Android APK
         env:
           CI: true
+          # SECURITY (V-31): the long-lived Android release signing material.
+          # These are repository secrets and are never written to the log.
+          ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
         run: |
           mkdir -p release-assets-android
           echo "Initializing Tauri Android target..."
@@ -157,8 +180,29 @@ jobs:
             npx tauri android build --apk --ci || true
           fi
 
-          # Generate release signing keystore
-          keytool -genkey -v -keystore release.keystore -alias vaultzero -keyalg RSA -keysize 2048 -validity 10000 -storepass vaultzero123 -keypass vaultzero123 -dname "CN=VaultZero, OU=Security, O=VaultZero, L=Global, S=Global, C=US"
+          # SECURITY (V-31): use a LONG-LIVED signing key stored as a
+          # repository secret. The previous implementation generated a fresh
+          # keystore on every release with a hardcoded, public password:
+          #
+          #   * the password was in the public repository;
+          #   * every release produced a DIFFERENT signing identity, so
+          #     Android refused to update an existing install ("package not
+          #     signed with the same key") and forced users to uninstall —
+          #     losing all app data — on every single release;
+          #   * anyone could produce an APK that Android accepted as the
+          #     official VaultZero build.
+          #
+          # The job now FAILS LOUDLY if the secret is missing, rather than
+          # silently falling back to a throwaway key.
+          if [ -z "$ANDROID_KEYSTORE_BASE64" ] || [ -z "$ANDROID_KEYSTORE_PASSWORD" ] || [ -z "$ANDROID_KEY_ALIAS" ] || [ -z "$ANDROID_KEY_PASSWORD" ]; then
+            echo "::error::Android signing secrets are not configured."
+            echo "::error::Required secrets: ANDROID_KEYSTORE_BASE64, ANDROID_KEYSTORE_PASSWORD, ANDROID_KEY_ALIAS, ANDROID_KEY_PASSWORD"
+            echo "::error::Generate a long-lived upload key once (see docs/ANTIGRAVITY-BRIEF.md, finding V-31) and store it as a GitHub Actions secret."
+            exit 1
+          fi
+
+          echo "$ANDROID_KEYSTORE_BASE64" | base64 --decode > release.keystore
+          echo "Restored the long-lived release signing keystore."
 
           BUILD_TOOLS_DIR=$(ls -d /usr/local/lib/android/sdk/build-tools/* 2>/dev/null | sort -V | tail -n 1)
           echo "Using Android Build Tools from: $BUILD_TOOLS_DIR"
@@ -170,20 +214,33 @@ jobs:
             else
               cp "$raw_apk" aligned.apk
             fi
-            
+
             if [ -f "$BUILD_TOOLS_DIR/apksigner" ]; then
-              $BUILD_TOOLS_DIR/apksigner sign --ks release.keystore --ks-pass pass:vaultzero123 --key-pass pass:vaultzero123 --out release-assets-android/VaultZero-Android.apk aligned.apk
+              $BUILD_TOOLS_DIR/apksigner sign \
+                --ks release.keystore \
+                --ks-key-alias "$ANDROID_KEY_ALIAS" \
+                --ks-pass "pass:$ANDROID_KEYSTORE_PASSWORD" \
+                --key-pass "pass:$ANDROID_KEY_PASSWORD" \
+                --out release-assets-android/VaultZero-Android.apk \
+                aligned.apk
               cp release-assets-android/VaultZero-Android.apk release-assets-android/VaultZero-v2.5.2-Android-arm64.apk
-              echo "Successfully generated signed VaultZero-Android.apk!"
+              echo "Successfully signed VaultZero-Android.apk with the long-lived release key!"
             else
-              cp aligned.apk release-assets-android/VaultZero-Android.apk
-              cp aligned.apk release-assets-android/VaultZero-v2.5.2-Android-arm64.apk
+              echo "::error::apksigner not found — refusing to publish an unsigned APK."
+              exit 1
             fi
             rm -f aligned.apk
             break
           done
 
-          cd release-assets-android && sha256sum * > SHA256SUMS.txt 2>/dev/null || true
+          # Never leave the signing material in the workspace.
+          rm -f release.keystore
+
+          # SECURITY (V-32): publish one `SHA256SUMS.txt` manifest in the
+          # `sha256sum` format. Only the real artifacts are listed — the
+          # `.sha256` sidecars must not list themselves.
+          cd release-assets-android
+          sha256sum $(ls | grep -v '\.sha256$' | grep -v '^SHA256SUMS\.txt$') > SHA256SUMS.txt 2>/dev/null || true
           ls -la
 
       - name: Upload Android Artifacts

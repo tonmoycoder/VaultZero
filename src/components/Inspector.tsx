@@ -24,6 +24,7 @@ import { memo, useEffect, useId, useState, type PointerEvent, type ReactNode } f
 import { AnimatePresence, LayoutGroup, motion } from "framer-motion";
 import { brands, buildFormattedQuickCopy, strengthMeta, t, type Language, type VaultItem } from "../lib/vault";
 import { cn } from "../utils/cn";
+import { sanitizeVaultUrl } from "../lib/url";
 import { BrandMark, CopyButton, SectionLabel, StrengthDots, Tooltip, TotpRing, useCountdown } from "./ui";
 import GlassSelection from "./GlassSelection";
 import ItemSecurity from "./ItemSecurity";
@@ -140,7 +141,10 @@ function InspectorBody({
   const brand = brands[item.brand];
   const strength = strengthMeta[item.strength];
   const masked = "•".repeat(Math.min(Math.max(item.password.length, 10), 16));
-  const siteUrl = item.url ? (item.url.startsWith("http") ? item.url : `https://${item.url}`) : null;
+  // SECURITY: a stored URL is user data. It is sanitised before it can
+  // reach an `href`, so a `javascript:` or `data:` URL from an imported CSV
+  // can never execute in the app's origin.
+  const siteUrl = sanitizeVaultUrl(item.url);
 
   return (
     <div className="inspector-body thin-scrollbar min-h-0 flex-1 overflow-y-auto overflow-x-hidden px-3 pb-4 pt-1 max-w-full box-border">

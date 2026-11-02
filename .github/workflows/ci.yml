@@ -31,6 +31,16 @@ jobs:
       - name: Verify TypeScript & Frontend Build
         run: npm run build
 
+      # The browserless harnesses exercise the security-critical logic
+      # (storage, KDF, updater, breach scanner, URL sanitiser) without a
+      # browser, so they run on every CI machine — including ones where
+      # the Playwright browser download is blocked.
+      - name: Build Test Bundles
+        run: npm run build:test-bundles
+
+      - name: Run Browserless Verification Harnesses
+        run: npm run test:harness
+
       - name: Setup Rust Stable
         uses: dtolnay/rust-toolchain@stable
         with:

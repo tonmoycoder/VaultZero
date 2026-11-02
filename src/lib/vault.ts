@@ -1,3 +1,4 @@
+import { isSafeVaultUrl } from "./url";
 import {
   siApple,
   siDropbox,
@@ -132,15 +133,38 @@ export type VaultItem = {
   passwordHistory?: PasswordHistoryEntry[];
 };
 
+/**
+ * Builds the text produced by the "Copy all" quick-copy action.
+ *
+ * SECURITY (V-30): this bundle deliberately **omits the TOTP setup secret**
+ * and the **recovery codes**.
+ *
+ * The setup secret is the seed the authenticator app is built from. It never
+ * rotates, so leaking it hands an attacker a permanent 2FA bypass for that
+ * account — strictly worse than leaking the password, because changing the
+ * password does not help. Pasting a "copy all" bundle into a support chat,
+ * a password manager, or a spreadsheet is exactly the kind of routine action
+ * that leaks secrets, and a TOTP seed must never ride along with it.
+ *
+ * The recovery codes have the same problem in reverse: they are the user's
+ * fallback when the authenticator is lost, and a bundle containing them
+ * defeats that fallback.
+ *
+ * Both are available through their own explicit, individually-confirmed
+ * actions in the inspector.
+ */
 export const buildFormattedQuickCopy = (item: VaultItem, currentTotpCode?: string): string => {
+  // SECURITY: a `javascript:` or `data:` URL must never reach the
+  // clipboard — the user would paste it into a browser and run it. The URL
+  // is dropped rather than rewritten, so a legitimate `github.com` is
+  // still copied exactly as stored.
+  const safeUrl = isSafeVaultUrl(item.url) ? item.url : "";
   const lines: string[] = [
     `Account: ${item.title}`,
-    item.url ? `Website: ${item.url}` : "",
+    safeUrl ? `Website: ${safeUrl}` : "",
     item.username ? `Username / Email: ${item.username}` : "",
     item.password ? `Password: ${item.password}` : "",
     currentTotpCode || item.totp ? `2FA Code (TOTP): ${currentTotpCode || item.totp}` : "",
-    (item as any).totpSecret ? `2FA Setup Key: ${(item as any).totpSecret}` : "",
-    item.recoveryCodes?.length ? `Recovery Codes: ${item.recoveryCodes.join(", ")}` : "",
     item.note || (item as any).notes ? `Notes: ${item.note || (item as any).notes}` : "",
     item.folder ? `Folder: ${item.folder}` : "",
   ].filter(Boolean);

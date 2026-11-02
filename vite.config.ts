@@ -40,6 +40,10 @@ export default defineConfig({
     port: 1420,
     strictPort: true,
     host: "0.0.0.0",
+    // The Arena preview is served from a per-session host; without an
+    // explicit allowlist Vite rejects it with HTTP 403 and the preview
+    // never loads.
+    allowedHosts: true,
     watch: {
       ignored: ["**/src-tauri/**", "**/public/tessdata/**"],
     },

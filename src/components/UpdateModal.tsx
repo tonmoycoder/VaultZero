@@ -6,6 +6,7 @@ import {
   LockSimple,
   ShieldCheck,
   Sparkle,
+  Warning,
   WarningCircle,
 } from "@phosphor-icons/react";
 import { useState, useEffect } from "react";
@@ -13,7 +14,10 @@ import {
   checkReleaseStatus,
   createPreUpdateBackup,
   CURRENT_APP_VERSION,
+  isTrustedDownloadUrl,
+  verifyReleaseArtifact,
   type CheckReleaseStatus,
+  type GitHubAsset,
   type UpdateInfo,
 } from "../lib/updater";
 import { Modal } from "./ui";
@@ -48,6 +52,10 @@ export default function UpdateModal({
   const [loading, setLoading] = useState(false);
   const [downloading, setDownloading] = useState(false);
   const [progress, setProgress] = useState(0);
+  const [verificationError, setVerificationError] = useState<string | null>(null);
+  // SECURITY (V-32): the digest the artifact was actually verified
+  // against. Shown to the user so the check is visible, not implicit.
+  const [verifiedDigest, setVerifiedDigest] = useState<string | null>(null);
 
   const performCheck = async () => {
     setLoading(true);
@@ -78,7 +86,21 @@ export default function UpdateModal({
     }
   }, []);
 
-  const handleStartUpdate = () => {
+  /**
+   * SECURITY (V-32): the update is only handed to the user after the
+   * artifact's SHA-256 has been verified against the checksum manifest of
+   * the same release.
+   *
+   * The previous flow opened the download URL directly. It validated the
+   * *host* (good) but never checked the *bytes*, so a tampered artifact on a
+   * trusted host would still have been offered to the user while the README
+   * claimed the downloads were checksum-verified.
+   *
+   * The whole chain is now fail-closed: a missing manifest, a manifest
+   * without an entry for this artifact, a download failure or a digest
+   * mismatch all abort the update with an explanation.
+   */
+  const handleStartUpdate = async () => {
     const backupKey = createPreUpdateBackup();
     onNotify?.(
       lang === "bn"
@@ -88,37 +110,99 @@ export default function UpdateModal({
 
     setDownloading(true);
     setProgress(15);
+    setVerificationError(null);
+    setVerifiedDigest(null);
 
-    const int = setInterval(() => {
-      setProgress((prev) => {
-        if (prev >= 95) {
-          clearInterval(int);
-          return 95;
-        }
-        return prev + 25;
-      });
-    }, 250);
+    const info = statusState.updateInfo;
+    const chosen: GitHubAsset | undefined =
+      info?.installerAsset || info?.portableAsset || info?.androidAsset;
 
-    setTimeout(() => {
-      clearInterval(int);
-      setProgress(100);
+    // The download URL is still validated against the hard-coded allowlist
+    // before anything is fetched: a compromised or spoofed API response can
+    // no longer redirect the app to an arbitrary host.
+    const downloadUrl = chosen?.browser_download_url || info?.htmlUrl;
+    if (!downloadUrl || !isTrustedDownloadUrl(downloadUrl)) {
+      setProgress(0);
       setDownloading(false);
-
-      const downloadUrl =
-        statusState.updateInfo?.installerAsset?.browser_download_url ||
-        statusState.updateInfo?.portableAsset?.browser_download_url ||
-        statusState.updateInfo?.androidAsset?.browser_download_url ||
-        statusState.updateInfo?.htmlUrl ||
-        "https://github.com/tonmoycoder/VaultZero/releases/latest";
-
-      window.open(downloadUrl, "_blank", "noopener,noreferrer");
-
+      setVerificationError(
+        lang === "bn"
+          ? "আপডেট লিঙ্কটি যাচাই করা যায়নি — নিরাপত্তার জন্য ডাউনলোড বন্ধ করা হয়েছে।"
+          : "The update link could not be verified — the download was blocked for safety."
+      );
       onNotify?.(
         lang === "bn"
-          ? "আপডেট প্যাকেজ ডাউনলোড হচ্ছে। ইনস্টল শেষে পুনরায় চালু করুন।"
-          : "Update package downloaded. Complete installer to apply changes."
+          ? "অবিশ্বস্ত আপডেট লিঙ্ক — ডাউনলোড বন্ধ করা হয়েছে।"
+          : "Untrusted update link — the download was blocked."
       );
-    }, 1400);
+      return;
+    }
+
+    setProgress(45);
+
+    // Fetch the release's asset list so the checksum manifest can be found.
+    // The API response is the only source of the asset URLs.
+    let releaseAssets: GitHubAsset[] = [];
+    try {
+      const res = await fetch(
+        `https://api.github.com/repos/${"tonmoycoder/VaultZero"}/releases/tags/${encodeURIComponent(
+          info?.tagName ?? ""
+        )}`,
+        { headers: { Accept: "application/vnd.github+json" }, cache: "no-store" }
+      );
+      if (res.ok) {
+        const data = await res.json();
+        releaseAssets = Array.isArray(data.assets)
+          ? data.assets.map((a: any) => ({
+              name: a.name,
+              browser_download_url: a.browser_download_url,
+              size: a.size,
+            }))
+          : [];
+      }
+    } catch {
+      releaseAssets = [];
+    }
+
+    if (!chosen || releaseAssets.length === 0) {
+      setProgress(0);
+      setDownloading(false);
+      setVerificationError(
+        lang === "bn"
+          ? "রিলিজের ফাইল তালিকা পাওয়া যায়নি — ডাউনলোড বন্ধ করা হয়েছে।"
+          : "The release file list could not be retrieved — the download was blocked."
+      );
+      return;
+    }
+
+    setProgress(65);
+
+    const verification = await verifyReleaseArtifact(releaseAssets, chosen);
+    if (!verification.ok) {
+      setProgress(0);
+      setDownloading(false);
+      setVerificationError(
+        lang === "bn"
+          ? `আপডেট যাচাই করা যায়নি: ${verification.reason ?? "চেকসাম মিলেনি।"}`
+          : `The update could not be verified: ${verification.reason ?? "the checksum did not match."}`
+      );
+      onNotify?.(
+        lang === "bn"
+          ? "আপডেট চেকসাম যাচাই ব্যর্থ — ডাউনলোড বন্ধ করা হয়েছে।"
+          : "Update checksum verification failed — the download was blocked."
+      );
+      return;
+    }
+
+    setProgress(100);
+    setDownloading(false);
+    setVerifiedDigest(verification.expectedSha256 ?? null);
+    window.open(downloadUrl, "_blank", "noopener,noreferrer");
+
+    onNotify?.(
+      lang === "bn"
+        ? "আপডেট প্যাকেজ যাচাই করা হয়েছে। ইনস্টল শেষে পুনরায় চালু করুন।"
+        : "Update package verified against its published checksum. Complete the installer to apply changes."
+    );
   };
 
   return (
@@ -212,6 +296,36 @@ export default function UpdateModal({
           </div>
         )}
 
+        {verificationError && (
+          <div
+            role="alert"
+            className="mb-3 rounded-[14px] border border-[var(--danger)] bg-[var(--danger-soft)] px-3 py-2.5 text-left text-[10.5px] font-medium text-danger"
+          >
+            <div className="flex items-start gap-2">
+              <Warning size={15} weight="fill" className="mt-px shrink-0" />
+              <span>{verificationError}</span>
+            </div>
+          </div>
+        )}
+
+        {/* SECURITY (V-32): show the digest the artifact was verified
+            against, so the check is visible rather than implied. */}
+        {verifiedDigest && (
+          <div
+            className="mb-3 flex items-start gap-2 rounded-[14px] border border-[var(--success)] bg-[var(--success-soft)] px-3 py-2.5 text-left"
+          >
+            <ShieldCheck size={15} weight="fill" className="mt-px shrink-0 text-success" />
+            <div className="min-w-0">
+              <p className="text-[10.5px] font-semibold text-success">
+                {lang === "bn" ? "চেকসাম যাচাই সম্পন্ন" : "Checksum verified"}
+              </p>
+              <p className="mt-0.5 break-all font-mono text-[8.5px] leading-[1.4] text-muted">
+                SHA-256 {verifiedDigest}
+              </p>
+            </div>
+          </div>
+        )}
+
         {/* State 2: Update Available Card */}
         {statusState.status === "update_available" && statusState.updateInfo && (
           <div className="rounded-[18px] border border-[var(--accent)] bg-[var(--accent-soft)] p-4 text-left animate-rise">
@@ -267,7 +381,7 @@ export default function UpdateModal({
 
               <button
                 type="button"
-                onClick={handleStartUpdate}
+                onClick={() => void handleStartUpdate()}
                 disabled={downloading}
                 className="primary-button flex h-9 items-center gap-1.5 rounded-full px-5 text-[11px] font-semibold shadow-md shadow-[var(--accent-glow)]"
               >
