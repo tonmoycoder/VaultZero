@@ -50,12 +50,23 @@ const wordlistChunk = assets.find((f) =>
 const argonPreloaded = argonChunk ? preloaded.includes(argonChunk) : false;
 const wordlistPreloaded = wordlistChunk ? preloaded.includes(wordlistChunk) : false;
 
+console.log("chunks scanned:", assets.length);
 console.log("argon2id symbol present:", hasArgon);
 console.log("base64 wasm payload present:", hasWasm);
 console.log("wordlist present:", hasWordlist);
 console.log("argon2 chunk:", argonChunk ?? "(none)", "preloaded:", argonPreloaded);
 console.log("wordlist chunk:", wordlistChunk ?? "(none)", "preloaded:", wordlistPreloaded);
+console.log("preloaded chunks:", preloaded.length ? preloaded.join(", ") : "(none)");
 
 const ok = hasArgon && hasWasm && hasWordlist && !argonPreloaded && !wordlistPreloaded;
+if (!ok) {
+  // Report exactly which condition failed. On a CI runner a bare "FAIL"
+  // is impossible to act on.
+  if (!hasArgon) console.error("FAIL: the Argon2id symbol is not in any built chunk.");
+  if (!hasWasm) console.error("FAIL: the Argon2id WASM payload is not in any built chunk.");
+  if (!hasWordlist) console.error("FAIL: the passphrase wordlist is not in any built chunk.");
+  if (argonPreloaded) console.error("FAIL: the Argon2id chunk is preloaded, so it is on the critical path.");
+  if (wordlistPreloaded) console.error("FAIL: the wordlist chunk is preloaded, so it is on the critical path.");
+}
 console.log(ok ? "PASS" : "FAIL");
 process.exit(ok ? 0 : 1);
