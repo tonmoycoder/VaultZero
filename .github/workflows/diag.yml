@@ -13,18 +13,42 @@ jobs:
           node-version: 20
           cache: 'npm'
       - run: npm ci
-      - name: Show the environment
-        run: |
-          node --version
-          node -e "console.log(process.platform, process.cwd())"
-          node -e "console.log(require('path').join('a','b'))"
-      - name: Build the test bundles
-        run: npm run build:test-bundles
-      - name: Show what was built
-        run: |
-          dir .harness-build
-          node -e "const fs=require('fs');console.log(fs.readdirSync('.harness-build'))"
-      - name: Run one harness directly
+      - run: npm run build:test-bundles
+      # Every harness gets its own step, so a failure names the harness
+      # instead of only reporting "the suite failed".
+      - name: harness url-sanitizer
         run: node tests/harness/url-sanitizer.test.mjs
-      - name: Run the whole suite
-        run: npm run test:harness
+      - name: harness storage-security
+        run: node tests/harness/storage-security.test.mjs
+      - name: harness autolock
+        run: node tests/harness/autolock.test.mjs
+      - name: harness breach
+        run: node tests/harness/breach.test.mjs
+      - name: harness round2
+        run: node tests/harness/round2.test.mjs
+      - name: harness copyall
+        run: node tests/harness/copyall.test.mjs
+      - name: harness argon-perf
+        run: node tests/harness/argon-perf.test.mjs
+      - name: harness argon-recovery
+        run: node tests/harness/argon-recovery.test.mjs
+      - name: harness lock-flush
+        run: node tests/harness/lock-flush.test.mjs
+      - name: harness legacy-migration
+        run: node tests/harness/legacy-migration.test.mjs
+      - name: harness checksum-e2e
+        run: node tests/harness/checksum-e2e.test.mjs
+      - name: harness kdf-parity
+        run: node tests/harness/kdf-parity.test.mjs
+      - name: harness rust-kdf-mirror
+        run: node tests/harness/rust-kdf-mirror.test.mjs
+      - name: harness keyfile-edge
+        run: node tests/harness/keyfile-edge.test.mjs
+      - name: harness storage-growth
+        run: node tests/harness/storage-growth.test.mjs
+      - name: harness brand-mirror
+        run: node tests/harness/brand-mirror.test.mjs
+      - name: harness prod-bundle
+        run: node tests/harness/prod-bundle.test.mjs
+      - name: harness lock-flush-proof
+        run: node tests/harness/lock-flush-regression-proof.mjs
