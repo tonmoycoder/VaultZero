@@ -90,7 +90,8 @@ impl SearchEngine {
             .collect()
     }
 
-    /// Groups entries by domain for Bento Grid and service overview (computing "2 accounts", "5 accounts", etc.).
+    /// Groups entries by domain for Bento Grid and service overview
+    /// (computing "2 accounts", "5 accounts", etc.).
     pub fn group_by_domain(entries: &[EntrySummary]) -> Vec<DomainGroup> {
         let mut map: HashMap<String, Vec<EntrySummary>> = HashMap::new();
 
@@ -136,4 +137,3 @@ impl SearchEngine {
         groups
     }
 }
-

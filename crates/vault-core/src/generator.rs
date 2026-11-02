@@ -265,5 +265,3 @@ const COMMON_WORDS: &[&str] = &[
     "iloveyou", "starwars", "whatever", "qwerty", "abc123", "changeme", "secret",
     "computer", "internet", "service", "google", "facebook", "instagram", "linkedin",
 ];
-
-

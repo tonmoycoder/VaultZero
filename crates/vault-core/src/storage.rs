@@ -439,7 +439,8 @@ impl StorageEngine {
                     d_nonce.copy_from_slice(&data[d_start..d_start + NONCE_LEN]);
                     let d_ciphertext = &data[d_start + NONCE_LEN..d_end];
 
-                    let decrypted = decrypt_payload(d_ciphertext, &d_nonce, &duress_vk, &aad_bytes)?;
+                    let decrypted =
+                    decrypt_payload(d_ciphertext, &d_nonce, &duress_vk, &aad_bytes)?;
                     let vault: Vault = rmp_serde::from_slice(&decrypted)
                         .map_err(|e| VaultError::SerializationError(e.to_string()))?;
 
@@ -480,7 +481,9 @@ impl StorageEngine {
         } else {
             // If currently in duress mode, preserve real primary vault without touching it
             let p_start = header_size;
-            let p_end = p_start.checked_add(header.primary_body_len as usize).ok_or(VaultError::TamperedData)?;
+            let p_end = p_start
+                .checked_add(header.primary_body_len as usize)
+                .ok_or(VaultError::TamperedData)?;
             if data.len() < p_end || header.primary_body_len < NONCE_LEN as u64 {
                 return Err(VaultError::TamperedData);
             }
@@ -502,8 +505,12 @@ impl StorageEngine {
             }
         } else if header.has_duress {
             // Preserve existing duress body
-            let d_start = header_size.checked_add(header.primary_body_len as usize).ok_or(VaultError::TamperedData)?;
-            let d_end = d_start.checked_add(header.duress_body_len as usize).ok_or(VaultError::TamperedData)?;
+            let d_start = header_size
+                .checked_add(header.primary_body_len as usize)
+                .ok_or(VaultError::TamperedData)?;
+            let d_end = d_start
+                .checked_add(header.duress_body_len as usize)
+                .ok_or(VaultError::TamperedData)?;
             if data.len() >= d_end && header.duress_body_len >= NONCE_LEN as u64 {
                 let mut n = [0u8; NONCE_LEN];
                 n.copy_from_slice(&data[d_start..d_start + NONCE_LEN]);

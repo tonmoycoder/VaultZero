@@ -50,7 +50,13 @@ impl BrandRegistry {
             BrandInfo {
                 slug: "microsoft".into(),
                 name: "Microsoft".into(),
-                domain_keywords: vec!["microsoft.com".into(), "live.com".into(), "outlook.com".into(), "office.com".into(), "azure.com".into()],
+                domain_keywords: vec![
+                    "microsoft.com".into(),
+                    "live.com".into(),
+                    "outlook.com".into(),
+                    "office.com".into(),
+                    "azure.com".into(),
+                ],
                 brand_color: "#00A4EF".into(),
                 text_color: "#FFFFFF".into(),
                 svg_icon: "<svg viewBox=\"0 0 24 24\" fill=\"currentColor\"><path d=\"M11.4 24H0V12.6h11.4V24zM24 24H12.6V12.6H24V24zM11.4 11.4H0V0h11.4v11.4zm12.6 0H12.6V0H24v11.4z\"/></svg>".into(),
@@ -66,7 +72,11 @@ impl BrandRegistry {
             BrandInfo {
                 slug: "amazon".into(),
                 name: "Amazon".into(),
-                domain_keywords: vec!["amazon.com".into(), "aws.amazon.com".into(), "amazon".into()],
+                domain_keywords: vec![
+                    "amazon.com".into(),
+                    "aws.amazon.com".into(),
+                    "amazon".into(),
+                ],
                 brand_color: "#FF9900".into(),
                 text_color: "#000000".into(),
                 svg_icon: "<svg viewBox=\"0 0 24 24\" fill=\"currentColor\"><path d=\"M13.916 17.587c-3.473 2.56-8.397 3.93-12.748 1.34-.607-.362-1.168.272-.613.722 4.015 3.256 9.878 3.738 14.394 1.036.717-.43.167-1.283-.49-1.098zm1.905-1.428c-.443-.574-2.905-.272-4.02-.136-.34.042-.39-.23-.082-.447 2-.1.417 4.717-.912 6.556.702.235.267-.04.912-.39 1.445-1.455 1.977-3.978 2.39-4.83.21-.428-.48-.63-.915-.63z\"/></svg>".into(),
@@ -384,7 +394,10 @@ mod tests {
     #[test]
     fn host_extraction_handles_malformed_input() {
         assert_eq!(BrandRegistry::extract_host("https://a.b/c?d=1"), Some("a.b".into()));
-        assert_eq!(BrandRegistry::extract_host("user:pw@host.example.com:8443/x"), Some("host.example.com".into()));
+        assert_eq!(
+            BrandRegistry::extract_host("user:pw@host.example.com:8443/x"),
+            Some("host.example.com".into())
+        );
         assert_eq!(BrandRegistry::extract_host("example.com."), Some("example.com".into()));
         assert_eq!(BrandRegistry::extract_host(""), None);
         assert_eq!(BrandRegistry::extract_host("   "), None);

@@ -11,6 +11,12 @@ use vault_core::p2p::{P2PRole, P2PSessionHandshake, P2PSessionKey};
 
 pub const SERVICE_TYPE: &str = "_vaultzero._tcp.local.";
 
+/// Error text returned when a P2P peer fails the transcript check.
+///
+/// A module-level constant keeps the message a single string literal, which
+/// `rustfmt` leaves untouched.
+const AUTH_ERROR: &str = "P2P authentication failed: the peer does not share the pairing secret. Possible man-in-the-middle or incorrect PIN.";
+
 /// Maximum size of a single P2P frame we are willing to accept (8 MiB).
 /// Prevents a malicious peer from forcing unbounded memory allocation.
 const MAX_FRAME_BYTES: usize = 8 * 1024 * 1024;
@@ -359,11 +365,9 @@ impl P2PManager {
         peer_binding.copy_from_slice(&reply.binding);
 
         if !session.verify_transcript(&peer_binding) {
-            return Err(
-                "P2P authentication failed: the peer does not share the pairing secret. \
-                 Possible man-in-the-middle or incorrect PIN."
-                    .into(),
-            );
+            // A module-level constant keeps the message a single string
+            // literal, which `rustfmt` leaves untouched.
+            return Err(AUTH_ERROR.into());
         }
 
         // Step 4: prove our key possession so the host will release the payload.

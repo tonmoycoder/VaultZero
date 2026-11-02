@@ -25,10 +25,13 @@ pub use errors::{Result, VaultError};
 pub use export::{ImportPreview, VaultExporter};
 pub use data::wordlist::{WORDLIST, WORDLIST_LEN};
 pub use generator::{
-    calculate_entropy, generate_passphrase, generate_password, passphrase_entropy, PasswordGenOptions,
+    calculate_entropy, generate_passphrase, generate_password, passphrase_entropy,
+    PasswordGenOptions,
 };
 pub use memory::LockedBuffer;
-pub use models::{Category, Entry, EntrySummary, Folder, PasswordHistoryEntry, RecoveryCode, TotpConfig, Vault};
+pub use models::{
+    Category, Entry, EntrySummary, Folder, PasswordHistoryEntry, RecoveryCode, TotpConfig, Vault,
+};
 pub use ocr::{AmbiguousCharacter, OcrParsedResult, OcrSmartParser};
 pub use p2p::{OpticalQrChunk, P2PBeaconPacket, P2PSessionHandshake, P2PSessionKey};
 pub use search::{DomainGroup, SearchEngine, SearchFilter};
@@ -275,7 +278,15 @@ mod tests {
         let master_pwd = "VaultMasterKeyfilePass#2026";
         let keyfile_data = b"ArbitraryRandomKeyfileBytes32874129";
 
-        StorageEngine::create_vault(path, &vault, master_pwd, Some(keyfile_data), None, Some(kdf)).unwrap();
+        StorageEngine::create_vault(
+            path,
+            &vault,
+            master_pwd,
+            Some(keyfile_data),
+            None,
+            Some(kdf),
+        )
+        .unwrap();
 
         let session = StorageEngine::unlock_vault(path, master_pwd, Some(keyfile_data)).unwrap();
         assert_eq!(session.vault.entries.len(), 0);
@@ -283,7 +294,8 @@ mod tests {
         let res_no_kf = StorageEngine::unlock_vault(path, master_pwd, None);
         assert!(res_no_kf.is_err());
 
-        let res_wrong_kf = StorageEngine::unlock_vault(path, master_pwd, Some(b"WrongKeyfileContent"));
+        let res_wrong_kf =
+            StorageEngine::unlock_vault(path, master_pwd, Some(b"WrongKeyfileContent"));
         assert!(res_wrong_kf.is_err());
     }
 
@@ -309,7 +321,8 @@ mod tests {
         assert_eq!(remaining, 1);
 
         // Test URI parsing
-        let uri = "otpauth://totp/GitHub:octocat?secret=JBSWY3DPEHPK3PXP&issuer=GitHub&algorithm=SHA1&digits=6&period=30";
+        let uri = "otpauth://totp/GitHub:octocat?secret=JBSWY3DPEHPK3PXP&issuer=GitHub\
+                   &algorithm=SHA1&digits=6&period=30";
         let config = parse_otpauth_uri(uri).unwrap();
         assert_eq!(config.secret, "JBSWY3DPEHPK3PXP");
         assert_eq!(config.algorithm, "SHA1");
@@ -563,7 +576,10 @@ mod tests {
         assert!(brand1.is_some());
         assert_eq!(brand1.unwrap().slug, "github");
 
-        let brand2 = BrandRegistry::match_brand("Vacation Home Rental", "https://www.airbnb.com/rooms/123");
+        let brand2 = BrandRegistry::match_brand(
+            "Vacation Home Rental",
+            "https://www.airbnb.com/rooms/123",
+        );
         assert!(brand2.is_some());
         assert_eq!(brand2.unwrap().slug, "airbnb");
     }

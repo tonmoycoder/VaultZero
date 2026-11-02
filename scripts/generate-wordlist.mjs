@@ -18,6 +18,7 @@ import { dirname, join } from "node:path";
 const root = join(dirname(fileURLToPath(import.meta.url)), "..");
 const rustPath = join(root, "crates/vault-core/src/data/wordlist.rs");
 const tsPath = join(root, "src/lib/wordlist.ts");
+const metaPath = join(root, "src/lib/wordlistMeta.ts");
 
 /** Extracts the quoted words from the Rust `WORDLIST` array. */
 function parseRustWords(source) {
@@ -38,7 +39,7 @@ function parseRustWords(source) {
   return words;
 }
 
-function render(words) {
+function renderList(words) {
   const rows = [];
   for (let i = 0; i < words.length; i += 8) {
     const chunk = words
@@ -64,36 +65,74 @@ export const WORDLIST: readonly string[] = [
 ${rows.join("\n")}
 ];
 
-/** Number of words in {@link WORDLIST}. */
+// The list metadata lives in \`wordlistMeta.ts\` so that importing the
+// constants never pulls this 88 KB module into the initial bundle.
+`;
+}
+
+/**
+ * Renders the metadata module.
+ *
+ * The metadata is deliberately kept in a separate file: the generator UI
+ * needs `WORDLIST_LEN` and `BITS_PER_WORD` before a passphrase is ever
+ * generated, and importing them from `wordlist.ts` would pull the whole
+ * 88 KB list into the initial bundle and defeat the lazy loading.
+ */
+function renderMeta(words) {
+  return `/**
+ * Metadata about the shared passphrase wordlist.
+ *
+ * These constants are needed by the generator's entropy display even before
+ * a passphrase is generated, so they must stay in a module that does not
+ * pull in the 7,772-word list itself.
+ *
+ * The list itself lives in \`wordlist.ts\` and is loaded on demand.
+ *
+ * GENERATED FILE — DO NOT EDIT BY HAND.
+ * Source of truth: \`crates/vault-core/src/data/wordlist.rs\`
+ * Regenerate with:  node scripts/generate-wordlist.mjs
+ */
+
+/** Number of words in the shared wordlist. */
 export const WORDLIST_LEN = ${words.length};
 
-/** Bits of entropy contributed by a single word drawn from {@link WORDLIST}. */
+/** Bits of entropy contributed by a single word drawn from the wordlist. */
 export const BITS_PER_WORD = ${Math.log2(words.length).toFixed(6)};
 `;
 }
 
 const words = parseRustWords(readFileSync(rustPath, "utf8"));
-const output = render(words);
+const listOutput = renderList(words);
+const metaOutput = renderMeta(words);
 
 if (process.argv.includes("--check")) {
-  let current = "";
-  try {
-    current = readFileSync(tsPath, "utf8");
-  } catch {
-    /* fall through to the mismatch error below */
+  const targets = [
+    [tsPath, listOutput, "src/lib/wordlist.ts"],
+    [metaPath, metaOutput, "src/lib/wordlistMeta.ts"],
+  ];
+  let drifted = false;
+  for (const [path, expected, label] of targets) {
+    let current = "";
+    try {
+      current = readFileSync(path, "utf8");
+    } catch {
+      /* fall through to the mismatch error below */
+    }
+    if (current !== expected) {
+      drifted = true;
+      console.error(`${label} is out of sync with the Rust wordlist.`);
+    }
   }
-  if (current !== output) {
-    console.error(
-      "src/lib/wordlist.ts is out of sync with the Rust wordlist.\n" +
-        "Run: node scripts/generate-wordlist.mjs",
-    );
+  if (drifted) {
+    console.error("Run: node scripts/generate-wordlist.mjs");
     process.exit(1);
   }
-  console.log(`wordlist.ts is in sync (${words.length} words)`);
+  console.log(`wordlist.ts and wordlistMeta.ts are in sync (${words.length} words)`);
 } else {
-  writeFileSync(tsPath, output);
+  writeFileSync(tsPath, listOutput);
+  writeFileSync(metaPath, metaOutput);
   console.log(
-    `Wrote src/lib/wordlist.ts (${words.length} words, ` +
-      `${Math.log2(words.length).toFixed(3)} bits/word)`,
+    `Wrote src/lib/wordlist.ts and src/lib/wordlistMeta.ts ` +
+      `(${words.length} words, ${Math.log2(words.length).toFixed(3)} bits/word)`,
   );
 }

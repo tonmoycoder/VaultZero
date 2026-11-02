@@ -1,8 +1,8 @@
 use std::path::PathBuf;
 use std::sync::Mutex;
 use uuid::Uuid;
-use vault_core::auditor::{SecurityAuditReport, SecurityAuditor};
 use vault_core::audit_log::{AuditSeverity, SecurityAuditLog};
+use vault_core::auditor::{SecurityAuditReport, SecurityAuditor};
 use vault_core::brands::{BrandInfo, BrandRegistry};
 use vault_core::export::{ImportPreview, VaultExporter};
 use vault_core::generator::{generate_passphrase, generate_password, PasswordGenOptions};
@@ -584,7 +584,8 @@ fn safe_error(error: &vault_core::errors::VaultError) -> String {
             return Err("Secret key must be at least 16 characters for RFC 6238 compliance".into());
         }
         let now_epoch = chrono::Utc::now().timestamp() as u64;
-        let (code, remaining) = generate_totp(&clean, now_epoch, 30, 6, "SHA1").map_err(|e| e.to_string())?;
+        let (code, remaining) =
+            generate_totp(&clean, now_epoch, 30, 6, "SHA1").map_err(|e| e.to_string())?;
         Ok(TotpResponse { code, remaining_seconds: remaining })
     }
 }

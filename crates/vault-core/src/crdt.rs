@@ -61,7 +61,8 @@ impl HlcClock {
 
 /// Deterministically merges two Vault states (local and remote) without losing history.
 /// Follows CRDT Last-Write-Wins (LWW) semantics per entry based on HLC timestamps.
-/// When passwords are overwritten, old passwords are systematically preserved into `password_history`.
+/// When passwords are overwritten, old passwords are systematically preserved into
+/// `password_history`.
 pub fn merge_vault_states(local: &Vault, remote: &Vault) -> Vault {
     let mut merged = local.clone();
 
@@ -105,7 +106,9 @@ pub fn merge_vault_states(local: &Vault, remote: &Vault) -> Vault {
                 } else {
                     // Local won or tied (tie-breaker deterministic by device_id)
                     // If local won, ensure remote's distinct historical passwords are kept
-                    if local_entry.password != remote_entry.password && !remote_entry.password.is_empty() {
+                    if local_entry.password != remote_entry.password
+                        && !remote_entry.password.is_empty()
+                    {
                         let already_has = local_entry
                             .password_history
                             .iter()
@@ -119,7 +122,11 @@ pub fn merge_vault_states(local: &Vault, remote: &Vault) -> Vault {
                     }
 
                     for hist in &remote_entry.password_history {
-                        if !local_entry.password_history.iter().any(|h| h.password == hist.password) {
+                        if !local_entry
+                            .password_history
+                            .iter()
+                            .any(|h| h.password == hist.password)
+                        {
                             local_entry.password_history.push(hist.clone());
                         }
                     }
@@ -163,7 +170,8 @@ pub fn merge_vault_states(local: &Vault, remote: &Vault) -> Vault {
     merged.folders = merged_folders;
 
     // 3. Update metadata timestamps
-    merged.metadata.updated_at = std::cmp::max(local.metadata.updated_at, remote.metadata.updated_at);
+    merged.metadata.updated_at =
+        std::cmp::max(local.metadata.updated_at, remote.metadata.updated_at);
 
     merged
 }
