@@ -1,0 +1,30 @@
+name: Harness Diagnostic
+on:
+  workflow_dispatch:
+  push:
+    branches: [ arena/79f3d1ba-vaultzero ]
+jobs:
+  diag:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: 'npm'
+      - run: npm ci
+      - name: Show the environment
+        run: |
+          node --version
+          node -e "console.log(process.platform, process.cwd())"
+          node -e "console.log(require('path').join('a','b'))"
+      - name: Build the test bundles
+        run: npm run build:test-bundles
+      - name: Show what was built
+        run: |
+          dir .harness-build
+          node -e "const fs=require('fs');console.log(fs.readdirSync('.harness-build'))"
+      - name: Run one harness directly
+        run: node tests/harness/url-sanitizer.test.mjs
+      - name: Run the whole suite
+        run: npm run test:harness
