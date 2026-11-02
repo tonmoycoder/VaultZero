@@ -6,14 +6,11 @@
 [1m[92m    Checking[0m wry v0.57.1
 [1m[92m    Checking[0m tauri-runtime-wry v2.12.3
 [1m[92m    Checking[0m tauri v2.12.5
-src-tauri\src\p2p_lan.rs:10:53: [1m[91merror[0m: unused import: `P2PSessionKey`
-src-tauri\src\p2p_lan.rs:227:10: [1m[91merror[E0277][0m: `?` couldn't convert the error to `std::string::String`: the trait `std::convert::From<vault_core::VaultError>` is not implemented for `std::string::String`
-src-tauri\src\p2p_lan.rs:264:91: [1m[91merror[E0277][0m: `?` couldn't convert the error to `std::string::String`: the trait `std::convert::From<vault_core::VaultError>` is not implemented for `std::string::String`
-src-tauri\src\p2p_lan.rs:171:21: [1m[91merror[0m: variable does not need to be mutable
-src-tauri\src\p2p_lan.rs:347:90: [1m[91merror[E0277][0m: `?` couldn't convert the error to `std::string::String`: the trait `std::convert::From<vault_core::VaultError>` is not implemented for `std::string::String`
-[1m[91merror[0m: could not compile `vaultzero-app` (lib) due to 5 previous errors
+src-tauri\src\p2p_lan.rs:31:7: [1m[91merror[0m: constant `DIR_CLIENT_TO_HOST` is never used
+src-tauri\src\lib.rs:261:32: [1m[91merror[0m: manual implementation of `.is_multiple_of()`: help: replace with: `!bytes.len().is_multiple_of(4)`
+[1m[91merror[0m: could not compile `vaultzero-app` (lib) due to 2 previous errors
 [1m[93mwarning[0m: build failed, waiting for other jobs to finish...
-[1m[91merror[0m: could not compile `vaultzero-app` (lib test) due to 5 previous errors
+[1m[91merror[0m: could not compile `vaultzero-app` (lib test) due to 2 previous errors
 === clippy exit: 101 ===
 [1m[92m       Fresh[0m unicode-ident v1.0.27
 [1m[92m       Fresh[0m cfg-if v1.0.5
@@ -24,29 +21,29 @@ src-tauri\src\p2p_lan.rs:347:90: [1m[91merror[E0277][0m: `?` couldn't convert
 [1m[92m       Fresh[0m rand_core v0.6.4
 [1m[92m       Fresh[0m typenum v1.20.1
 [1m[92m       Fresh[0m syn v3.0.9
-[1m[92m       Fresh[0m subtle v2.6.1
 [1m[92m       Fresh[0m stable_deref_trait v1.2.1
-[1m[92m       Fresh[0m synstructure v0.14.0
+[1m[92m       Fresh[0m subtle v2.6.1
 [1m[92m       Fresh[0m generic-array v0.14.7
+[1m[92m       Fresh[0m synstructure v0.14.0
 [1m[92m       Fresh[0m zerovec-derive v0.11.7
 [1m[92m       Fresh[0m displaydoc v0.2.7
 [1m[92m       Fresh[0m zerofrom-derive v0.1.8
-[1m[92m       Fresh[0m yoke-derive v0.8.4
 [1m[92m       Fresh[0m crypto-common v0.1.7
+[1m[92m       Fresh[0m yoke-derive v0.8.4
 [1m[92m       Fresh[0m syn v2.0.119
 [1m[92m       Fresh[0m zerofrom v0.1.8
 [1m[92m       Fresh[0m cpufeatures v0.2.17
 [1m[92m       Fresh[0m block-buffer v0.10.4
 [1m[92m       Fresh[0m yoke v0.8.4
 [1m[92m       Fresh[0m writeable v0.6.4
-[1m[92m       Fresh[0m litemap v0.8.3
-[1m[92m       Fresh[0m zerovec v0.11.9
 [1m[92m       Fresh[0m utf_types v1.0.0
-[1m[92m       Fresh[0m zerotrie v0.2.5
+[1m[92m       Fresh[0m zerovec v0.11.9
+[1m[92m       Fresh[0m litemap v0.8.3
+[1m[92m       Fresh[0m utf8_iter v1.1.0
 [1m[92m       Fresh[0m serde_core v1.0.229
 [1m[92m       Fresh[0m tinystr v0.8.5
 [1m[92m       Fresh[0m potential_utf v0.1.6
-[1m[92m       Fresh[0m utf8_iter v1.1.0
+[1m[92m       Fresh[0m zerotrie v0.2.5
 [1m[92m       Fresh[0m digest v0.10.7
 [1m[92m       Fresh[0m icu_locale_core v2.4.0
 [1m[92m       Fresh[0m autocfg v1.5.1
@@ -54,8 +51,8 @@ src-tauri\src\p2p_lan.rs:347:90: [1m[91merror[E0277][0m: `?` couldn't convert
 [1m[92m       Fresh[0m icu_collections v2.4.0
 [1m[92m       Fresh[0m zeroize_derive v1.5.0
 [1m[92m       Fresh[0m semver v1.0.28
-[1m[92m       Fresh[0m zeroize v1.9.1
 [1m[92m       Fresh[0m rustc_version v0.4.1
+[1m[92m       Fresh[0m zeroize v1.9.1
 [1m[92m       Fresh[0m icu_properties_data v2.4.0
 [1m[92m       Fresh[0m icu_normalizer_data v2.4.0
 [1m[92m       Fresh[0m serde_derive v1.0.229
@@ -63,63 +60,63 @@ src-tauri\src\p2p_lan.rs:347:90: [1m[91merror[E0277][0m: `?` couldn't convert
 [1m[92m       Fresh[0m smallvec v1.16.4
 [1m[92m       Fresh[0m serde v1.0.229
 [1m[92m       Fresh[0m icu_normalizer v2.4.0
-[1m[92m       Fresh[0m icu_properties v2.4.0
 [1m[92m       Fresh[0m num-traits v0.2.19
+[1m[92m       Fresh[0m icu_properties v2.4.0
 [1m[92m       Fresh[0m zerocopy v0.8.63
 [1m[92m       Fresh[0m inout v0.1.4
 [1m[92m       Fresh[0m windows-link v0.2.1
 [1m[92m       Fresh[0m ppv-lite86 v0.2.21
 [1m[92m       Fresh[0m cipher v0.4.4
-[1m[92m       Fresh[0m getrandom v0.4.3
 [1m[92m       Fresh[0m idna_adapter v1.2.2
+[1m[92m       Fresh[0m getrandom v0.4.3
 [1m[92m       Fresh[0m windows_x86_64_msvc v0.52.6
 [1m[92m       Fresh[0m aho-corasick v1.1.5
-[1m[92m       Fresh[0m universal-hash v0.5.1
 [1m[92m       Fresh[0m curve25519-dalek-derive v0.1.1
-[1m[92m       Fresh[0m regex-syntax v0.8.11
-[1m[92m       Fresh[0m opaque-debug v0.3.1
-[1m[92m       Fresh[0m percent-encoding v2.3.2
+[1m[92m       Fresh[0m universal-hash v0.5.1
 [1m[92m       Fresh[0m base64ct v1.8.3
-[1m[92m       Fresh[0m form_urlencoded v1.2.2
-[1m[92m       Fresh[0m password-hash v0.5.0
+[1m[92m       Fresh[0m regex-syntax v0.8.11
+[1m[92m       Fresh[0m percent-encoding v2.3.2
+[1m[92m       Fresh[0m opaque-debug v0.3.1
 [1m[92m       Fresh[0m poly1305 v0.8.0
+[1m[92m       Fresh[0m form_urlencoded v1.2.2
 [1m[92m       Fresh[0m regex-automata v0.4.18
 [1m[92m       Fresh[0m curve25519-dalek v4.1.3
+[1m[92m       Fresh[0m password-hash v0.5.0
 [1m[92m       Fresh[0m windows-targets v0.52.6
 [1m[92m       Fresh[0m idna v1.1.0
-[1m[92m       Fresh[0m rand_chacha v0.3.1
 [1m[92m       Fresh[0m chacha20 v0.9.1
+[1m[92m       Fresh[0m rand_chacha v0.3.1
 [1m[92m       Fresh[0m zmij v1.0.23
 [1m[92m       Fresh[0m rmp v0.8.15
-[1m[92m       Fresh[0m blake2 v0.10.6
 [1m[92m       Fresh[0m hmac v0.12.1
+[1m[92m       Fresh[0m blake2 v0.10.6
 [1m[92m       Fresh[0m aead v0.5.2
 [1m[92m       Fresh[0m thiserror-impl v2.0.21
 [1m[92m       Fresh[0m itoa v1.0.18
+[1m[92m       Fresh[0m rmp-serde v1.3.1
 [1m[92m       Fresh[0m argon2 v0.5.3
-[1m[92m       Fresh[0m chacha20poly1305 v0.10.1
 [1m[92m       Fresh[0m serde_json v1.0.154
 [1m[92m       Fresh[0m thiserror v2.0.21
-[1m[92m       Fresh[0m rmp-serde v1.3.1
 [1m[92m       Fresh[0m hkdf v0.12.4
+[1m[92m       Fresh[0m chacha20poly1305 v0.10.1
 [1m[92m       Fresh[0m rand v0.8.8
 [1m[92m       Fresh[0m url v2.5.8
 [1m[92m       Fresh[0m x25519-dalek v2.0.1
 [1m[92m       Fresh[0m windows-sys v0.59.0
 [1m[92m       Fresh[0m regex v1.13.1
 [1m[92m       Fresh[0m uuid v1.29.0
-[1m[92m       Fresh[0m windows-sys v0.61.2
 [1m[92m       Fresh[0m chrono v0.4.45
+[1m[92m       Fresh[0m windows-sys v0.61.2
 [1m[92m       Fresh[0m secrecy v0.8.0
-[1m[92m       Fresh[0m sha2 v0.10.9
 [1m[92m       Fresh[0m sha1 v0.10.7
+[1m[92m       Fresh[0m sha2 v0.10.9
 [1m[92m       Fresh[0m once_cell v1.21.4
 [1m[92m       Fresh[0m fastrand v2.5.0
 [1m[92m   Compiling[0m vault-core v0.1.0 (D:\a\VaultZero\VaultZero\crates\vault-core)
 [1m[92m       Fresh[0m tempfile v3.27.0
-[1m[92m     Running[0m `C:\Users\runneradmin\.rustup\toolchains\stable-x86_64-pc-windows-msvc\bin\rustc.exe --crate-name vault_core --edition=2021 'crates\vault-core\src\lib.rs' --error-format=json --json=diagnostic-rendered-ansi,artifacts,future-incompat --crate-type lib --emit=dep-info,metadata,link -C embed-bitcode=no -C debuginfo=2 --check-cfg 'cfg(docsrs,test)' --check-cfg 'cfg(feature, values())' -C metadata=37e193d2d111ab6f -C extra-filename=-ff8033d2eecdba90 --out-dir 'D:\a\VaultZero\VaultZero\target\debug\deps' -L 'dependency=D:\a\VaultZero\VaultZero\target\debug\deps' --extern 'argon2=D:\a\VaultZero\VaultZero\target\debug\deps\libargon2-111cb30a9879bd32.rmeta' --extern 'chacha20poly1305=D:\a\VaultZero\VaultZero\target\debug\deps\libchacha20poly1305-d57bbe8b9e4c0fef.rmeta' --extern 'chrono=D:\a\VaultZero\VaultZero\target\debug\deps\libchrono-00f49b72f44ae4a7.rmeta' --extern 'hkdf=D:\a\VaultZero\VaultZero\target\debug\deps\libhkdf-166c069fa99cc2ce.rmeta' --extern 'hmac=D:\a\VaultZero\VaultZero\target\debug\deps\libhmac-cd05a2d53e6c462e.rmeta' --extern 'rand=D:\a\VaultZero\VaultZero\target\debug\deps\librand-4a5b3e1eea0ebf03.rmeta' --extern 'regex=D:\a\VaultZero\VaultZero\target\debug\deps\libregex-9922cae400e8fe98.rmeta' --extern 'rmp_serde=D:\a\VaultZero\VaultZero\target\debug\deps\librmp_serde-e60f9c2bf4aa927b.rmeta' --extern 'secrecy=D:\a\VaultZero\VaultZero\target\debug\deps\libsecrecy-53ad9b5e51ec1418.rmeta' --extern 'serde=D:\a\VaultZero\VaultZero\target\debug\deps\libserde-538f965187e0c8ef.rmeta' --extern 'serde_json=D:\a\VaultZero\VaultZero\target\debug\deps\libserde_json-1d490b03320b4cc3.rmeta' --extern 'sha1=D:\a\VaultZero\VaultZero\target\debug\deps\libsha1-ebc029da8dc992ce.rmeta' --extern 'sha2=D:\a\VaultZero\VaultZero\target\debug\deps\libsha2-4e168b8c4534fe64.rmeta' --extern 'subtle=D:\a\VaultZero\VaultZero\target\debug\deps\libsubtle-f46b4080d58b1864.rmeta' --extern 'thiserror=D:\a\VaultZero\VaultZero\target\debug\deps\libthiserror-df491a4dc110a7ab.rmeta' --extern 'url=D:\a\VaultZero\VaultZero\target\debug\deps\liburl-494ab1a6b035dca5.rmeta' --extern 'uuid=D:\a\VaultZero\VaultZero\target\debug\deps\libuuid-0c319b0904a969c6.rmeta' --extern 'windows_sys=D:\a\VaultZero\VaultZero\target\debug\deps\libwindows_sys-0e2c331d27e15806.rmeta' --extern 'x25519_dalek=D:\a\VaultZero\VaultZero\target\debug\deps\libx25519_dalek-0516e7f7ed9cf1ad.rmeta' --extern 'zeroize=D:\a\VaultZero\VaultZero\target\debug\deps\libzeroize-2589d42ed8102422.rmeta' -L 'native=C:\Users\runneradmin\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\windows_x86_64_msvc-0.52.6\lib'`
 [1m[92m     Running[0m `C:\Users\runneradmin\.rustup\toolchains\stable-x86_64-pc-windows-msvc\bin\rustc.exe --crate-name vault_core --edition=2021 'crates\vault-core\src\lib.rs' --error-format=json --json=diagnostic-rendered-ansi,artifacts,future-incompat --emit=dep-info,link -C embed-bitcode=no -C debuginfo=2 --test --check-cfg 'cfg(docsrs,test)' --check-cfg 'cfg(feature, values())' -C metadata=a68cd14583055473 -C extra-filename=-18200e2f24ddf8a1 --out-dir 'D:\a\VaultZero\VaultZero\target\debug\deps' -L 'dependency=D:\a\VaultZero\VaultZero\target\debug\deps' --extern 'argon2=D:\a\VaultZero\VaultZero\target\debug\deps\libargon2-111cb30a9879bd32.rlib' --extern 'chacha20poly1305=D:\a\VaultZero\VaultZero\target\debug\deps\libchacha20poly1305-d57bbe8b9e4c0fef.rlib' --extern 'chrono=D:\a\VaultZero\VaultZero\target\debug\deps\libchrono-00f49b72f44ae4a7.rlib' --extern 'hkdf=D:\a\VaultZero\VaultZero\target\debug\deps\libhkdf-166c069fa99cc2ce.rlib' --extern 'hmac=D:\a\VaultZero\VaultZero\target\debug\deps\libhmac-cd05a2d53e6c462e.rlib' --extern 'rand=D:\a\VaultZero\VaultZero\target\debug\deps\librand-4a5b3e1eea0ebf03.rlib' --extern 'regex=D:\a\VaultZero\VaultZero\target\debug\deps\libregex-9922cae400e8fe98.rlib' --extern 'rmp_serde=D:\a\VaultZero\VaultZero\target\debug\deps\librmp_serde-e60f9c2bf4aa927b.rlib' --extern 'secrecy=D:\a\VaultZero\VaultZero\target\debug\deps\libsecrecy-53ad9b5e51ec1418.rlib' --extern 'serde=D:\a\VaultZero\VaultZero\target\debug\deps\libserde-538f965187e0c8ef.rlib' --extern 'serde_json=D:\a\VaultZero\VaultZero\target\debug\deps\libserde_json-1d490b03320b4cc3.rlib' --extern 'sha1=D:\a\VaultZero\VaultZero\target\debug\deps\libsha1-ebc029da8dc992ce.rlib' --extern 'sha2=D:\a\VaultZero\VaultZero\target\debug\deps\libsha2-4e168b8c4534fe64.rlib' --extern 'subtle=D:\a\VaultZero\VaultZero\target\debug\deps\libsubtle-f46b4080d58b1864.rlib' --extern 'tempfile=D:\a\VaultZero\VaultZero\target\debug\deps\libtempfile-2e8c8155e71ea0b2.rlib' --extern 'thiserror=D:\a\VaultZero\VaultZero\target\debug\deps\libthiserror-df491a4dc110a7ab.rlib' --extern 'url=D:\a\VaultZero\VaultZero\target\debug\deps\liburl-494ab1a6b035dca5.rlib' --extern 'uuid=D:\a\VaultZero\VaultZero\target\debug\deps\libuuid-0c319b0904a969c6.rlib' --extern 'windows_sys=D:\a\VaultZero\VaultZero\target\debug\deps\libwindows_sys-0e2c331d27e15806.rlib' --extern 'x25519_dalek=D:\a\VaultZero\VaultZero\target\debug\deps\libx25519_dalek-0516e7f7ed9cf1ad.rlib' --extern 'zeroize=D:\a\VaultZero\VaultZero\target\debug\deps\libzeroize-2589d42ed8102422.rlib' -L 'native=C:\Users\runneradmin\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\windows_x86_64_msvc-0.52.6\lib'`
-[1m[92m    Finished[0m `test` profile [unoptimized + debuginfo] target(s) in 5.46s
+[1m[92m     Running[0m `C:\Users\runneradmin\.rustup\toolchains\stable-x86_64-pc-windows-msvc\bin\rustc.exe --crate-name vault_core --edition=2021 'crates\vault-core\src\lib.rs' --error-format=json --json=diagnostic-rendered-ansi,artifacts,future-incompat --crate-type lib --emit=dep-info,metadata,link -C embed-bitcode=no -C debuginfo=2 --check-cfg 'cfg(docsrs,test)' --check-cfg 'cfg(feature, values())' -C metadata=37e193d2d111ab6f -C extra-filename=-ff8033d2eecdba90 --out-dir 'D:\a\VaultZero\VaultZero\target\debug\deps' -L 'dependency=D:\a\VaultZero\VaultZero\target\debug\deps' --extern 'argon2=D:\a\VaultZero\VaultZero\target\debug\deps\libargon2-111cb30a9879bd32.rmeta' --extern 'chacha20poly1305=D:\a\VaultZero\VaultZero\target\debug\deps\libchacha20poly1305-d57bbe8b9e4c0fef.rmeta' --extern 'chrono=D:\a\VaultZero\VaultZero\target\debug\deps\libchrono-00f49b72f44ae4a7.rmeta' --extern 'hkdf=D:\a\VaultZero\VaultZero\target\debug\deps\libhkdf-166c069fa99cc2ce.rmeta' --extern 'hmac=D:\a\VaultZero\VaultZero\target\debug\deps\libhmac-cd05a2d53e6c462e.rmeta' --extern 'rand=D:\a\VaultZero\VaultZero\target\debug\deps\librand-4a5b3e1eea0ebf03.rmeta' --extern 'regex=D:\a\VaultZero\VaultZero\target\debug\deps\libregex-9922cae400e8fe98.rmeta' --extern 'rmp_serde=D:\a\VaultZero\VaultZero\target\debug\deps\librmp_serde-e60f9c2bf4aa927b.rmeta' --extern 'secrecy=D:\a\VaultZero\VaultZero\target\debug\deps\libsecrecy-53ad9b5e51ec1418.rmeta' --extern 'serde=D:\a\VaultZero\VaultZero\target\debug\deps\libserde-538f965187e0c8ef.rmeta' --extern 'serde_json=D:\a\VaultZero\VaultZero\target\debug\deps\libserde_json-1d490b03320b4cc3.rmeta' --extern 'sha1=D:\a\VaultZero\VaultZero\target\debug\deps\libsha1-ebc029da8dc992ce.rmeta' --extern 'sha2=D:\a\VaultZero\VaultZero\target\debug\deps\libsha2-4e168b8c4534fe64.rmeta' --extern 'subtle=D:\a\VaultZero\VaultZero\target\debug\deps\libsubtle-f46b4080d58b1864.rmeta' --extern 'thiserror=D:\a\VaultZero\VaultZero\target\debug\deps\libthiserror-df491a4dc110a7ab.rmeta' --extern 'url=D:\a\VaultZero\VaultZero\target\debug\deps\liburl-494ab1a6b035dca5.rmeta' --extern 'uuid=D:\a\VaultZero\VaultZero\target\debug\deps\libuuid-0c319b0904a969c6.rmeta' --extern 'windows_sys=D:\a\VaultZero\VaultZero\target\debug\deps\libwindows_sys-0e2c331d27e15806.rmeta' --extern 'x25519_dalek=D:\a\VaultZero\VaultZero\target\debug\deps\libx25519_dalek-0516e7f7ed9cf1ad.rmeta' --extern 'zeroize=D:\a\VaultZero\VaultZero\target\debug\deps\libzeroize-2589d42ed8102422.rmeta' -L 'native=C:\Users\runneradmin\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\windows_x86_64_msvc-0.52.6\lib'`
+[1m[92m    Finished[0m `test` profile [unoptimized + debuginfo] target(s) in 6.20s
 [1m[92m     Running[0m `D:\a\VaultZero\VaultZero\target\debug\deps\vault_core-18200e2f24ddf8a1.exe`
 
 running 34 tests
@@ -148,17 +145,17 @@ test tests::test_optical_qr_chunking_and_reassembly ... ok
 test tests::test_duress_vault_contains_decoy_entries_after_unlock ... ok
 test tests::test_p2p_direction_separation_prevents_reflection ... ok
 test tests::test_keyfile_mix_and_rejection ... ok
-test tests::test_p2p_pairing_mutual_auth_and_mitm_rejection ... ok
+test tests::test_p2p_wrong_pin_cannot_decrypt_payload ... ok
 test tests::test_rfc_6238_totp_vectors ... ok
 test tests::test_search_blob_is_rebuilt_for_legacy_summaries ... ok
 test tests::test_search_blob_precomputation_matches_field_search ... ok
-test tests::test_security_auditor_counts ... ok
-test tests::test_p2p_wrong_pin_cannot_decrypt_payload ... ok
 test tests::test_password_generator_has_no_modulo_bias ... ok
+test tests::test_security_auditor_counts ... ok
+test tests::test_p2p_pairing_mutual_auth_and_mitm_rejection ... ok
 test tests::test_create_and_unlock_vault ... ok
 test tests::test_tamper_detection_on_header_and_body ... ok
 
-test result: ok. 34 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.18s
+test result: ok. 34 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.20s
 
 [1m[92m   Doc-tests[0m vault_core
 [1m[92m     Running[0m `C:\Users\runneradmin\.rustup\toolchains\stable-x86_64-pc-windows-msvc\bin\rustdoc.exe --edition=2021 --crate-type lib --color always --crate-name vault_core --test 'crates\vault-core\src\lib.rs' --test-run-directory 'D:\a\VaultZero\VaultZero\crates\vault-core' -L 'native=C:\Users\runneradmin\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\windows_x86_64_msvc-0.52.6\lib' --extern 'argon2=D:\a\VaultZero\VaultZero\target\debug\deps\libargon2-111cb30a9879bd32.rlib' --extern 'chacha20poly1305=D:\a\VaultZero\VaultZero\target\debug\deps\libchacha20poly1305-d57bbe8b9e4c0fef.rlib' --extern 'chrono=D:\a\VaultZero\VaultZero\target\debug\deps\libchrono-00f49b72f44ae4a7.rlib' --extern 'hkdf=D:\a\VaultZero\VaultZero\target\debug\deps\libhkdf-166c069fa99cc2ce.rlib' --extern 'hmac=D:\a\VaultZero\VaultZero\target\debug\deps\libhmac-cd05a2d53e6c462e.rlib' --extern 'rand=D:\a\VaultZero\VaultZero\target\debug\deps\librand-4a5b3e1eea0ebf03.rlib' --extern 'regex=D:\a\VaultZero\VaultZero\target\debug\deps\libregex-9922cae400e8fe98.rlib' --extern 'rmp_serde=D:\a\VaultZero\VaultZero\target\debug\deps\librmp_serde-e60f9c2bf4aa927b.rlib' --extern 'secrecy=D:\a\VaultZero\VaultZero\target\debug\deps\libsecrecy-53ad9b5e51ec1418.rlib' --extern 'serde=D:\a\VaultZero\VaultZero\target\debug\deps\libserde-538f965187e0c8ef.rlib' --extern 'serde_json=D:\a\VaultZero\VaultZero\target\debug\deps\libserde_json-1d490b03320b4cc3.rlib' --extern 'sha1=D:\a\VaultZero\VaultZero\target\debug\deps\libsha1-ebc029da8dc992ce.rlib' --extern 'sha2=D:\a\VaultZero\VaultZero\target\debug\deps\libsha2-4e168b8c4534fe64.rlib' --extern 'subtle=D:\a\VaultZero\VaultZero\target\debug\deps\libsubtle-f46b4080d58b1864.rlib' --extern 'tempfile=D:\a\VaultZero\VaultZero\target\debug\deps\libtempfile-2e8c8155e71ea0b2.rlib' --extern 'thiserror=D:\a\VaultZero\VaultZero\target\debug\deps\libthiserror-df491a4dc110a7ab.rlib' --extern 'url=D:\a\VaultZero\VaultZero\target\debug\deps\liburl-494ab1a6b035dca5.rlib' --extern 'uuid=D:\a\VaultZero\VaultZero\target\debug\deps\libuuid-0c319b0904a969c6.rlib' --extern 'vault_core=D:\a\VaultZero\VaultZero\target\debug\deps\libvault_core-ff8033d2eecdba90.rlib' --extern 'windows_sys=D:\a\VaultZero\VaultZero\target\debug\deps\libwindows_sys-0e2c331d27e15806.rlib' --extern 'x25519_dalek=D:\a\VaultZero\VaultZero\target\debug\deps\libx25519_dalek-0516e7f7ed9cf1ad.rlib' --extern 'zeroize=D:\a\VaultZero\VaultZero\target\debug\deps\libzeroize-2589d42ed8102422.rlib' -L 'dependency=D:\a\VaultZero\VaultZero\target\debug\deps' -C embed-bitcode=no --check-cfg 'cfg(docsrs,test)' --check-cfg 'cfg(feature, values())' --error-format human`
