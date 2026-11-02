@@ -7,7 +7,7 @@ use std::time::Duration;
 use tokio::net::TcpListener;
 use tokio_tungstenite::tungstenite::protocol::Message;
 use tokio_tungstenite::{accept_async, connect_async};
-use vault_core::p2p::{P2PRole, P2PSessionHandshake, P2PSessionKey};
+use vault_core::p2p::{P2PRole, P2PSessionHandshake};
 
 pub const SERVICE_TYPE: &str = "_vaultzero._tcp.local.";
 
@@ -168,7 +168,7 @@ impl P2PManager {
                     Err(_) => break,
                 };
 
-                let mut ws_stream = match accept_async(stream).await {
+                let ws_stream = match accept_async(stream).await {
                     Ok(s) => s,
                     Err(_) => continue,
                 };
@@ -219,12 +219,9 @@ impl P2PManager {
         let expected_pin = pin_clone.lock().unwrap().clone().unwrap_or_default();
         let host_hs = P2PSessionHandshake::new();
         let host_pub_raw = host_hs.public_key.as_bytes().to_vec();
-        let session = host_hs.complete_handshake(
-            &client_pub,
-            &expected_pin,
-            P2PRole::Host,
-            P2PRole::Client,
-        )?;
+        let session = host_hs
+            .complete_handshake(&client_pub, &expected_pin, P2PRole::Host, P2PRole::Client)
+            .map_err(|e| format!("P2P handshake failed: {}", e))?;
 
         // Step 3: send our public key + auth tag + binding hash.
         let reply = HandshakeReply {
@@ -260,8 +257,9 @@ impl P2PManager {
 
         // Step 5: only NOW do we release the vault payload — encrypted.
         let payload = payload_clone.lock().unwrap().clone().unwrap_or_default();
-        let encrypted =
-            session.encrypt_payload_with_direction(payload.as_bytes(), DIR_HOST_TO_CLIENT)?;
+        let encrypted = session
+            .encrypt_payload_with_direction(payload.as_bytes(), DIR_HOST_TO_CLIENT)
+            .map_err(|e| format!("Failed to encrypt P2P payload: {}", e))?;
 
         ws_stream
             .send(Message::Binary(encrypted.into()))
@@ -342,9 +340,21 @@ impl P2PManager {
         }
         let host_pub = to_public_key(&reply.public_key)?;
 
-        // Step 3: derive our side of the session and verify the binding hash.
-        let session =
-            client_hs.complete_handshake(&host_pub, &pin, P2PRole::Client, P2PRole::Host)?;
+        // Step 3: derive our side of the session and verify the host's tag.
+        let session = client_hs
+            .complete_handshake(&host_pub, &pin, P2PRole::Client, P2PRole::Host)
+            .map_err(|e| format!("P2P handshake failed: {}", e))?;
+
+        // V-47: the host's authentication tag is direction-specific, so
+        // verify it for the Host role rather than comparing it to ours.
+        let mut peer_tag = [0u8; 32];
+        if reply.auth_tag.len() != 32 {
+            return Err("Invalid authentication tag length".into());
+        }
+        peer_tag.copy_from_slice(&reply.auth_tag);
+        if !session.verify_auth_tag(&peer_tag) {
+            return Err(AUTH_ERROR.into());
+        }
 
         let mut peer_binding = [0u8; 32];
         if reply.binding.len() != 32 {
