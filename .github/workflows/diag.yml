@@ -12,6 +12,9 @@ jobs:
         with:
           node-version: 20
           cache: 'npm'
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt
       - run: npm ci
       - run: npm run build:test-bundles
       - name: Capture the environment
@@ -77,11 +80,25 @@ jobs:
         run: node tests/harness/lock-flush-regression-proof.mjs
       # Keep the output even when a step fails, so the cause is readable
       # from the artifact instead of from a truncated log.
+      # The `cargo fmt --check` step in the main workflow does not print a
+      # diff on this runner, so capture one explicitly.
+      - name: Capture the rustfmt diff
+        if: always()
+        run: |
+          {
+            echo "--- rustfmt version ---"
+            rustfmt --version
+            echo "--- rustfmt check ---"
+            cargo fmt --all -- --check 2>&1
+          } > rustfmt-diag.txt 2>&1
+          exit 0
       - name: Upload the diagnostic output
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: harness-diagnostic
-          path: harness-diag.txt
+          path: |
+            harness-diag.txt
+            rustfmt-diag.txt
           retention-days: 7
           if-no-files-found: ignore

@@ -100,4 +100,3 @@ impl SecureShredder {
         Ok(())
     }
 }
-

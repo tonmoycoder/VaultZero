@@ -142,4 +142,3 @@ pub fn parse_otpauth_uri(uri: &str) -> Result<TotpConfig> {
         period,
     })
 }
-

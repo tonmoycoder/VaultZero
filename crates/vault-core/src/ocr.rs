@@ -82,7 +82,10 @@ impl OcrSmartParser {
 
             // Check common key-value prefixes
             let lower = line.to_lowercase();
-            if lower.starts_with("user:") || lower.starts_with("username:") || lower.starts_with("login:") {
+            if lower.starts_with("user:")
+                || lower.starts_with("username:")
+                || lower.starts_with("login:")
+            {
                 let parts: Vec<&str> = line.splitn(2, ':').collect();
                 if parts.len() == 2 {
                     username = Some(parts[1].trim().to_string());
@@ -90,7 +93,10 @@ impl OcrSmartParser {
                 }
             }
 
-            if lower.starts_with("pass:") || lower.starts_with("password:") || lower.starts_with("pwd:") {
+            if lower.starts_with("pass:")
+                || lower.starts_with("password:")
+                || lower.starts_with("pwd:")
+            {
                 let parts: Vec<&str> = line.splitn(2, ':').collect();
                 if parts.len() == 2 {
                     password = Some(parts[1].trim().to_string());
@@ -161,4 +167,3 @@ impl OcrSmartParser {
         chars.into_iter().collect()
     }
 }
-
