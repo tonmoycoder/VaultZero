@@ -58,7 +58,11 @@ export function GeneratorModal({ onClose, onNotify }: { onClose: () => void; onN
   const [password, setPassword] = useState(() => generatePassword(defaultGeneratorOptions));
   const [words, setWords] = useState(5);
   const [separator, setSeparator] = useState("-");
-  const [phrase, setPhrase] = useState(() => generatePassphrase(5, "-", true));
+  // PERFORMANCE (V-38): the wordlist is loaded on demand, so the very first
+  // passphrase is produced asynchronously. The generator shows a short
+  // "loading" state until it resolves.
+  const [phrase, setPhrase] = useState("");
+  const [phraseLoading, setPhraseLoading] = useState(true);
   const [visible, setVisible] = useState(true);
   const result = mode === "password" ? password : phrase;
   const strength = passwordStrength(result);
@@ -70,12 +74,28 @@ export function GeneratorModal({ onClose, onNotify }: { onClose: () => void; onN
   };
 
   const regenerate = () => {
-    if (mode === "password") setPassword(generatePassword(options));
-    else setPhrase(generatePassphrase(words, separator, true));
+    if (mode === "password") {
+      setPassword(generatePassword(options));
+      return;
+    }
+    setPhraseLoading(true);
+    void generatePassphrase(words, separator, true).then((next) => {
+      setPhrase(next);
+      setPhraseLoading(false);
+    });
   };
 
   useEffect(() => {
-    setPhrase(generatePassphrase(words, separator, true));
+    let cancelled = false;
+    setPhraseLoading(true);
+    void generatePassphrase(words, separator, true).then((next) => {
+      if (cancelled) return;
+      setPhrase(next);
+      setPhraseLoading(false);
+    });
+    return () => {
+      cancelled = true;
+    };
   }, [words, separator]);
 
   const toggles: { key: keyof GeneratorOptions; label: string; hint: string }[] = [
@@ -177,7 +197,11 @@ export function GeneratorModal({ onClose, onNotify }: { onClose: () => void; onN
             !visible && "select-none blur-[7px]",
           )}
         >
-          {result}
+          {phraseLoading && mode === "passphrase" ? (
+            <span className="text-[11px] font-sans font-medium text-faint">Loading wordlist…</span>
+          ) : (
+            result
+          )}
         </p>
         <div className="relative mt-3 flex items-center justify-between gap-2 border-t border-[var(--border-soft)] pt-2.5">
           <span className="flex items-center gap-1.5 text-[8.5px] font-semibold" style={{ color: strength.color }}>

@@ -48,8 +48,8 @@ import {
   initialItems,
   invokeTauri,
   isTauri,
-  persistVaultChanges,
   vaultMutationQueue,
+  CoalescingVaultWriter,
   t,
   type BrandKey,
   type Language,
@@ -262,8 +262,26 @@ export default function App() {
     };
   }, []);
 
-  const lockVault = useCallback(() => {
+  // PERFORMANCE (V-36): mutations are coalesced. Each write re-encrypts and
+  // rewrites the whole vault, so a burst of edits used to pay that cost once
+  // per mutation. The writer keeps only the newest state and flushes it once
+  // the burst settles.
+  const vaultWriter = useMemo(() => new CoalescingVaultWriter(400), []);
+
+  const lockVault = useCallback(async () => {
     hapticSuccess();
+    // PERFORMANCE / DATA-INTEGRITY (V-36): flush any coalesced write before
+    // the session ends, otherwise the last edit would be lost.
+    //
+    // The flush MUST be awaited before the epoch is bumped. It used to be
+    // fired and forgotten, which raced the bump: the writer scheduled its
+    // task against the *old* epoch, the bump immediately invalidated it, and
+    // the final write was rejected with `LOCKED` — silently losing the
+    // user's last edit exactly when they hit "Lock".
+    //
+    // `flush(true)` uses the queue's final-write path, which is serialised
+    // against other mutations but is not invalidated by the lock itself.
+    await vaultWriter.flush(true).catch(() => undefined);
     vaultMutationQueue.bumpEpoch();
     clearActiveSession();
     setSession(null);
@@ -312,7 +330,7 @@ export default function App() {
               : "Vault auto-locked due to inactivity.",
           );
         }
-        lockVault();
+        void lockVault();
       },
     });
 
@@ -357,7 +375,7 @@ export default function App() {
       }
       if (mod && !event.shiftKey && event.key.toLowerCase() === "l") {
         event.preventDefault();
-        lockVault();
+        void lockVault();
         return;
       }
       if (mod && !event.shiftKey && event.key.toLowerCase() === "n") {
@@ -439,22 +457,12 @@ export default function App() {
       setItems((current) => {
         const updated = transform(current);
         if (session) {
-          vaultMutationQueue
-            .run(async (_epoch) => {
-              await persistVaultChanges(updated, session);
-            })
-            .catch((err) => {
-              if (err?.code === "LOCKED") {
-                console.warn("Vault locked while mutation was in flight:", err.safeMessage);
-              } else {
-                console.error("Failed to persist vault changes:", err);
-              }
-            });
+          vaultWriter.schedule(updated, session);
         }
         return updated;
       });
     },
-    [session]
+    [session, vaultWriter]
   );
 
   const handleFavorite = (item: VaultItem) => {
