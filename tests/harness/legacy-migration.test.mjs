@@ -5,7 +5,14 @@
 // still be readable — otherwise every existing user's vault would be
 // bricked by the upgrade.
 import { webcrypto } from "node:crypto";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
 if (!globalThis.crypto) globalThis.crypto = webcrypto;
+
+// The harness bundles are built into the repository (see
+// `scripts/build-test-bundles.mjs`) and gitignored. The path is derived
+// from this file so it works on any platform and any working directory.
+const BUNDLE_DIR = join(dirname(fileURLToPath(import.meta.url)), "..", "..", ".harness-build") + "/";
 
 const store = new Map();
 globalThis.window = {
@@ -25,7 +32,7 @@ globalThis.window = {
   },
 };
 
-const m = await import("/tmp/vz-tests/storage-built.mjs");
+const m = await import(BUNDLE_DIR + "storage-built.mjs");
 
 let failures = 0;
 const t = (name, ok, extra = "") => {

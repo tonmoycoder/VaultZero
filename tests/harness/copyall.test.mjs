@@ -1,8 +1,15 @@
 // V-24: Copy All must never carry a TOTP setup secret or recovery codes.
 import { webcrypto } from "node:crypto";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
 if (!globalThis.crypto) globalThis.crypto = webcrypto;
 
-const v = await import("/tmp/vz-tests/vault-built.mjs");
+// The harness bundles are built into the repository (see
+// `scripts/build-test-bundles.mjs`) and gitignored. The path is derived
+// from this file so it works on any platform and any working directory.
+const BUNDLE_DIR = join(dirname(fileURLToPath(import.meta.url)), "..", "..", ".harness-build") + "/";
+
+const v = await import(BUNDLE_DIR + "vault-built.mjs");
 
 let failures = 0;
 const t = (name, ok) => {

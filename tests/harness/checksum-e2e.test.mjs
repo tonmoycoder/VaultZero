@@ -5,9 +5,16 @@
 // enforced. These tests exercise the whole chain — manifest fetch, entry
 // lookup, download, digest comparison — with a stubbed `fetch`.
 import { webcrypto } from "node:crypto";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
 if (!globalThis.crypto) globalThis.crypto = webcrypto;
 
-const m = await import("/tmp/vz-tests/updater-built.mjs");
+// The harness bundles are built into the repository (see
+// `scripts/build-test-bundles.mjs`) and gitignored. The path is derived
+// from this file so it works on any platform and any working directory.
+const BUNDLE_DIR = join(dirname(fileURLToPath(import.meta.url)), "..", "..", ".harness-build") + "/";
+
+const m = await import(BUNDLE_DIR + "updater-built.mjs");
 
 let failures = 0;
 const t = (name, ok) => {

@@ -10,8 +10,16 @@
  */
 import { build } from "esbuild";
 import { mkdirSync } from "node:fs";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
 
-const OUT = "/tmp/vz-tests";
+/**
+ * The bundles are written inside the repository (and gitignored) rather
+ * than into `/tmp`, because the CI runner is `windows-latest`: a hard-coded
+ * POSIX path would resolve to `C:\\tmp` and every harness would fail to
+ * import its bundle.
+ */
+const OUT = join(dirname(fileURLToPath(import.meta.url)), "..", ".harness-build");
 mkdirSync(OUT, { recursive: true });
 
 const targets = [

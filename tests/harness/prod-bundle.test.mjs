@@ -8,14 +8,28 @@
 // It also asserts that the lazy chunks are NOT preloaded from index.html —
 // otherwise the "lazy" split buys nothing.
 import { webcrypto } from "node:crypto";
-import { readFileSync, readdirSync } from "node:fs";
+import { readFileSync, readdirSync, existsSync } from "node:fs";
+import { fileURLToPath } from "node:url";
+import { dirname, join, resolve } from "node:path";
 if (!globalThis.crypto) globalThis.crypto = webcrypto;
 
-const assets = readdirSync("dist/assets").filter((f) => f.endsWith(".js"));
-let all = "";
-for (const f of assets) all += readFileSync(`dist/assets/${f}`, "utf8");
+// Resolve the repository root from this file, not from the current working
+// directory. A CI runner may invoke the harness from anywhere, and a
+// relative `dist/` path would then fail for the wrong reason.
+const here = dirname(fileURLToPath(import.meta.url));
+const repoRoot = resolve(here, "..", "..");
+const distDir = join(repoRoot, "dist");
 
-const html = readFileSync("dist/index.html", "utf8");
+if (!existsSync(distDir)) {
+  console.error(`FAIL: ${distDir} does not exist. Run "npm run build" first.`);
+  process.exit(1);
+}
+
+const assets = readdirSync(join(distDir, "assets")).filter((f) => f.endsWith(".js"));
+let all = "";
+for (const f of assets) all += readFileSync(join(distDir, "assets", f), "utf8");
+
+const html = readFileSync(join(distDir, "index.html"), "utf8");
 const preloaded = [...html.matchAll(/modulepreload[^>]*href="\.\/assets\/([^"]+)"/g)].map(
   (m) => m[1],
 );
@@ -24,9 +38,11 @@ const hasArgon = /argon2id/i.test(all);
 const hasWasm = /AGFzbQ/.test(all);
 const hasWordlist = /abdominal/.test(all);
 
-const argonChunk = assets.find((f) => /AGFzbQ/.test(readFileSync(`dist/assets/${f}`, "utf8")));
+const argonChunk = assets.find((f) =>
+  /AGFzbQ/.test(readFileSync(join(distDir, "assets", f), "utf8"))
+);
 const wordlistChunk = assets.find((f) =>
-  /abdominal/.test(readFileSync(`dist/assets/${f}`, "utf8")),
+  /abdominal/.test(readFileSync(join(distDir, "assets", f), "utf8")),
 );
 
 // The lazy chunks must not be preloaded, otherwise they are on the

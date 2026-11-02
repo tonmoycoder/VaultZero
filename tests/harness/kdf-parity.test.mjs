@@ -17,11 +17,23 @@
 //     argon2.hash_password_into(&combined_password, salt, &mut kek)
 //
 import { webcrypto } from "node:crypto";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
 import { readFileSync } from "node:fs";
 if (!globalThis.crypto) globalThis.crypto = webcrypto;
 
+// `hash-wasm` is resolved from the repository's own `node_modules`, so the
+// harness works on any machine and any platform.
 const { argon2id } = await import(
-  "/home/user/VaultZero/node_modules/hash-wasm/dist/index.esm.js"
+  join(
+    dirname(fileURLToPath(import.meta.url)),
+    "..",
+    "..",
+    "node_modules",
+    "hash-wasm",
+    "dist",
+    "index.esm.js"
+  )
 );
 
 let failures = 0;
@@ -48,7 +60,10 @@ async function rustMix(password, keyfileBytes) {
  * never drift away from the implementation it is supposed to police.
  */
 async function browserMix(password, keyfileBytes) {
-  const src = readFileSync("/home/user/VaultZero/src/lib/storage.ts", "utf8");
+  const src = readFileSync(
+    join(dirname(fileURLToPath(import.meta.url)), "..", "..", "src", "lib", "storage.ts"),
+    "utf8"
+  );
   // The mixing block must be guarded by a plain `if (keyfileBytes)` — a
   // length check would silently diverge from the native core for an empty
   // keyfile file.

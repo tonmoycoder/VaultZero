@@ -14,11 +14,23 @@
 // The browser implementation must produce byte-identical output for the
 // same (password, keyfile, salt, params).
 import { webcrypto } from "node:crypto";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
 import { readFileSync } from "node:fs";
 if (!globalThis.crypto) globalThis.crypto = webcrypto;
 
+// `hash-wasm` is resolved from the repository's own `node_modules`, so the
+// harness works on any machine and any platform.
 const { argon2id } = await import(
-  "/home/user/VaultZero/node_modules/hash-wasm/dist/index.esm.js"
+  join(
+    dirname(fileURLToPath(import.meta.url)),
+    "..",
+    "..",
+    "node_modules",
+    "hash-wasm",
+    "dist",
+    "index.esm.js"
+  )
 );
 
 let failures = 0;
@@ -45,7 +57,10 @@ async function rustSecret(password, keyfileBytes) {
  * never drift away from the implementation it is supposed to police.
  */
 async function browserSecret(password, keyfileBytes) {
-  const src = readFileSync("/home/user/VaultZero/src/lib/storage.ts", "utf8");
+  const src = readFileSync(
+    join(dirname(fileURLToPath(import.meta.url)), "..", "..", "src", "lib", "storage.ts"),
+    "utf8"
+  );
   const argonBlock = src.slice(src.indexOf("async function argon2idKekBytes"));
   const guard = /if \((keyfileBytes[^)]*)\)/.exec(argonBlock.slice(0, 2500));
   const condition = guard ? guard[1] : "";
