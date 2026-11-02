@@ -93,6 +93,11 @@ jobs:
             echo "--- rustfmt check ---"
             cargo fmt --all -- --check 2>&1
           } > rustfmt-diag.txt 2>&1
+          # A workflow annotation is plain REST data, so the diff stays
+          # readable even when the job log is not reachable.
+          sed -n '1,60p' rustfmt-diag.txt | tr '\r' '\n' | while IFS= read -r line; do
+            echo "::error title=rustfmt::$line"
+          done
           {
             echo "## rustfmt diagnostic"
             echo '```'
@@ -125,7 +130,9 @@ jobs:
           else
             ISSUE_URL="${GITHUB_API_URL}/repos/${GITHUB_REPOSITORY}/issues/1/comments"
           fi
-          PAYLOAD=$(python -c "import json,sys; print(json.dumps({'body': open('rustfmt-summary.md', encoding='utf-8').read()}))")
+          # `jq` ships with the Windows runners; it avoids depending on a
+          # Python installation.
+          PAYLOAD=$(jq -Rs '{body: .}' < rustfmt-summary.md)
           curl -sS -X POST "$ISSUE_URL" \
             -H "Accept: application/vnd.github+json" \
             -H "Authorization: Bearer $GH_TOKEN" \
