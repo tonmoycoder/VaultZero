@@ -94,10 +94,10 @@ jobs:
             cargo fmt --all -- --check 2>&1
           } > rustfmt-diag.txt 2>&1
           # A workflow annotation is plain REST data, so the diff stays
-          # readable even when the job log is not reachable.
-          sed -n '1,60p' rustfmt-diag.txt | tr '\r' '\n' | while IFS= read -r line; do
-            echo "::error title=rustfmt::$line"
-          done
+          # readable even when the job log is not reachable. The message is
+          # escaped because a workflow command may not contain a newline.
+          DIFF_LINE=$(sed -n '1,80p' rustfmt-diag.txt | tr '\r\n' '  ' | cut -c1-900)
+          echo "::error title=rustfmt::$DIFF_LINE"
           {
             echo "## rustfmt diagnostic"
             echo '```'
