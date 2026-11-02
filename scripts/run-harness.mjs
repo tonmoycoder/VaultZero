@@ -27,25 +27,30 @@ let passed = 0;
 for (const file of files) {
   const name = file.replace(/\.test\.mjs$/, "");
   process.stdout.write(`\n=== ${name} ===\n`);
+
+  // Each harness is run in its own child process so that a crash in one
+  // cannot take the whole suite down, and so the exit code is meaningful.
   const result = spawnSync(process.execPath, [join(harnessDir, file)], {
     stdio: "inherit",
     cwd: root,
     shell: false,
-    env: { ...process.env, TZ: "UTC", NODE_OPTIONS: "" },
+    env: { ...process.env, NODE_OPTIONS: "" },
   });
+
   if (result.status === 0) {
     passed += 1;
-  } else {
-    failed += 1;
-    // Surface the reason. A CI runner that only prints "exit 1" is useless.
-    if (result.error) {
-      console.error(`  runner error: ${result.error.message}`);
-    }
-    if (result.signal) {
-      console.error(`  terminated by signal: ${result.signal}`);
-    }
-    console.error(`  exit code: ${result.status}`);
+    continue;
   }
+
+  failed += 1;
+  // Surface the reason. A CI runner that only prints "exit 1" is useless.
+  if (result.error) {
+    console.error(`  runner error: ${result.error.message}`);
+  }
+  if (result.signal) {
+    console.error(`  terminated by signal: ${result.signal}`);
+  }
+  console.error(`  exit code: ${result.status}`);
 }
 
 console.log(`\n${passed} harness files passed, ${failed} failed.`);

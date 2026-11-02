@@ -15,22 +15,27 @@
 // same (password, keyfile, salt, params).
 import { webcrypto } from "node:crypto";
 import { dirname, join } from "node:path";
-import { fileURLToPath } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
 import { readFileSync } from "node:fs";
 if (!globalThis.crypto) globalThis.crypto = webcrypto;
 
 // `hash-wasm` is resolved from the repository's own `node_modules`, so the
 // harness works on any machine and any platform.
+// `hash-wasm` is resolved from the repository's own `node_modules` and
+// imported through a `file://` URL, because a bare Windows path is not a
+// valid ESM specifier.
 const { argon2id } = await import(
-  join(
-    dirname(fileURLToPath(import.meta.url)),
-    "..",
-    "..",
-    "node_modules",
-    "hash-wasm",
-    "dist",
-    "index.esm.js"
-  )
+  pathToFileURL(
+    join(
+      dirname(fileURLToPath(import.meta.url)),
+      "..",
+      "..",
+      "node_modules",
+      "hash-wasm",
+      "dist",
+      "index.esm.js"
+    )
+  ).href
 );
 
 let failures = 0;

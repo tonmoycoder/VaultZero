@@ -6,13 +6,24 @@
 // bricked by the upgrade.
 import { webcrypto } from "node:crypto";
 import { dirname, join } from "node:path";
-import { fileURLToPath } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
 if (!globalThis.crypto) globalThis.crypto = webcrypto;
 
 // The harness bundles are built into the repository (see
 // `scripts/build-test-bundles.mjs`) and gitignored. The path is derived
 // from this file so it works on any platform and any working directory.
 const BUNDLE_DIR = join(dirname(fileURLToPath(import.meta.url)), "..", "..", ".harness-build") + "/";
+
+/**
+ * Builds a `file://` URL for a harness bundle.
+ *
+ * On Windows a bare `C:\\...\\.harness-build/storage-built.mjs` path is
+ * not a valid ESM specifier, so `import()` rejects it. Converting the path
+ * to a `file://` URL works on every platform.
+ */
+function bundleUrl(name) {
+  return pathToFileURL(join(BUNDLE_DIR, name)).href;
+}
 
 const store = new Map();
 globalThis.window = {
@@ -32,7 +43,7 @@ globalThis.window = {
   },
 };
 
-const m = await import(BUNDLE_DIR + "storage-built.mjs");
+const m = await import(bundleUrl("storage-built.mjs"));
 
 let failures = 0;
 const t = (name, ok, extra = "") => {
