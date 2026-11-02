@@ -41,6 +41,18 @@ jobs:
       - name: Run Browserless Verification Harnesses
         run: npm run test:harness
 
+      # Keep the harness output even when a step fails, so a red build can
+      # be diagnosed without re-running it locally.
+      - name: Upload Harness Log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: harness-log
+          path: |
+            .harness-build/
+          retention-days: 7
+          if-no-files-found: ignore
+
       - name: Setup Rust Stable
         uses: dtolnay/rust-toolchain@stable
         with:

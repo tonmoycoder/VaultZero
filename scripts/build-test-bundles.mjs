@@ -36,7 +36,7 @@ const targets = [
 for (const target of targets) {
   await build({
     entryPoints: [target.entry],
-    outfile: `${OUT}/${target.out}`,
+    outfile: join(OUT, target.out),
     bundle: true,
     format: "esm",
     platform: "neutral",

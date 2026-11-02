@@ -30,11 +30,21 @@ for (const file of files) {
   const result = spawnSync(process.execPath, [join(harnessDir, file)], {
     stdio: "inherit",
     cwd: root,
+    shell: false,
+    env: { ...process.env, TZ: "UTC", NODE_OPTIONS: "" },
   });
   if (result.status === 0) {
     passed += 1;
   } else {
     failed += 1;
+    // Surface the reason. A CI runner that only prints "exit 1" is useless.
+    if (result.error) {
+      console.error(`  runner error: ${result.error.message}`);
+    }
+    if (result.signal) {
+      console.error(`  terminated by signal: ${result.signal}`);
+    }
+    console.error(`  exit code: ${result.status}`);
   }
 }
 
