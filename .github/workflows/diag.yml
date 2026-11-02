@@ -100,17 +100,20 @@ jobs:
           exit 0
       # The job log and the artifact both live behind a signed blob URL that
       # is not reachable from every environment. Publishing the diagnostic as
-      # a check-run annotation keeps it readable through the REST API.
-      - name: Publish the rustfmt diagnostic as an annotation
+      # a workflow output keeps it readable through the REST API.
+      - name: Publish the rustfmt diagnostic as a workflow output
         if: always()
+        id: rustfmt
         run: |
           {
-            echo "::error title=rustfmt::$(sed -n '1,40p' rustfmt-diag.txt | tr '\n' ' ')"
             echo "### rustfmt diagnostic"
             echo '```'
-            sed -n '1,200p' rustfmt-diag.txt
+            sed -n '1,400p' rustfmt-diag.txt
             echo '```'
-          } >> "$GITHUB_STEP_SUMMARY"
+          } > rustfmt-summary.md
+          echo "summary<<EOF" >> "$GITHUB_OUTPUT"
+          cat rustfmt-summary.md >> "$GITHUB_OUTPUT"
+          echo "EOF" >> "$GITHUB_OUTPUT"
           exit 0
       - name: Upload the diagnostic output
         if: always()
