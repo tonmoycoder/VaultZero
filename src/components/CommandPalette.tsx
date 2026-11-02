@@ -27,7 +27,7 @@ import { motion, useIsPresent } from "framer-motion";
 import { brands, type Language, type Theme, type VaultItem } from "../lib/vault";
 import type { ToolName } from "./Sidebar";
 import { BrandMark, Kbd } from "./ui";
-import { exitTransition, softSpring, useDialogFocus } from "../lib/motion";
+import { livingFlowCollapse, livingFlowExpand, useDialogFocus } from "../lib/motion";
 import { useMotionSettings } from "./Tactile";
 
 type PaletteAction = {
@@ -177,8 +177,14 @@ export default function CommandPalette({
       <motion.div
         initial={{ y: reduceMotion ? 0 : -12, scale: reduceMotion ? 1 : 0.98 }}
         animate={{ y: 0, scale: 1 }}
-        exit={{ y: reduceMotion ? 0 : -8, scale: reduceMotion ? 1 : 0.98, transition: reduceMotion ? { duration: 0 } : exitTransition }}
-        transition={reduceMotion ? { duration: 0 } : softSpring}
+        exit={{ y: reduceMotion ? 0 : -8, scale: reduceMotion ? 1 : 0.98, transition: reduceMotion ? { duration: 0 } : livingFlowCollapse }}
+        /*
+         * UX / "Living Flow": the command palette is the fastest path into
+         * the app, so it has to feel like it arrives with the same motion
+         * as everything else. It used the soft spring, which never
+         * overshoots; the palette now settles with the Living Flow spring.
+         */
+        transition={reduceMotion ? { duration: 0 } : livingFlowExpand}
         className="glass-strong modal-surface flex max-h-[76dvh] w-full max-w-[600px] flex-col overflow-hidden rounded-[24px]"
         style={{ boxShadow: "0 44px 110px rgba(5,8,25,.42), var(--inset-hi)" }}
       >

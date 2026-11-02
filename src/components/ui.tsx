@@ -5,7 +5,7 @@ import { Check, Copy, Timer, X } from "@phosphor-icons/react";
 import { brands, type BrandKey, type Strength } from "../lib/vault";
 import { cn } from "../utils/cn";
 import { hapticSuccess, useMotionSettings } from "./Tactile";
-import { exitTransition, softSpring, spring, useDialogFocus } from "../lib/motion";
+import { livingFlowCollapse, livingFlowExpand, spring, useDialogFocus } from "../lib/motion";
 
 export function Logo({ size = 40, showGlow = true }: { size?: number; showGlow?: boolean }) {
   return (
@@ -538,8 +538,19 @@ export function Modal({
       <motion.div
         initial={{ y: reduceMotion ? 0 : 24, scale: reduceMotion ? 1 : 0.97 }}
         animate={{ y: 0, scale: 1 }}
-        exit={{ y: reduceMotion ? 0 : 16, scale: reduceMotion ? 1 : 0.97, transition: reduceMotion ? { duration: 0 } : exitTransition }}
-        transition={reduceMotion ? { duration: 0 } : softSpring}
+        exit={{ y: reduceMotion ? 0 : 16, scale: reduceMotion ? 1 : 0.97, transition: reduceMotion ? { duration: 0 } : livingFlowCollapse }}
+        /*
+         * UX / "Living Flow": the modal used to use the soft spring, whose
+         * damping is high enough that the surface never overshoots — it
+         * slid into place and stopped, which reads as a plain transition.
+         *
+         * The product's motion language is the ColorOS spring, and the
+         * constants for it already existed in `lib/motion.ts` but were
+         * never used here. The modal is the surface a user opens most
+         * often, so it is the one that has to carry the signature bounce:
+         * the sheet comes up, overshoots very slightly, and settles.
+         */
+        transition={reduceMotion ? { duration: 0 } : livingFlowExpand}
         className={cn(
           "glass-strong modal-surface flex max-h-[92dvh] w-full flex-col overflow-hidden rounded-t-[28px] sm:rounded-[26px]",
           width,

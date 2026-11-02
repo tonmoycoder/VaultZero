@@ -418,7 +418,7 @@ const ItemCard = memo(function ItemCard({
                 navigator.clipboard.writeText(item.username);
                 onNotify(lang === "bn" ? "ইউজারনেম কপি হয়েছে" : "Username copied");
               }}
-              className="flex h-6 w-6 items-center justify-center rounded-full text-faint transition-all opacity-70 sm:opacity-0 sm:group-hover:opacity-100 focus:opacity-100 hover:bg-[var(--hover-strong)] hover:text-main"
+              className="reveal-on-hover flex h-6 w-6 items-center justify-center rounded-full text-faint hover:bg-[var(--hover-strong)] hover:text-main"
               aria-label="Copy username"
             >
               <User size={13} weight="duotone" />
@@ -434,7 +434,7 @@ const ItemCard = memo(function ItemCard({
                   e.stopPropagation();
                   onEdit();
                 }}
-                className="flex h-6 w-6 items-center justify-center rounded-full text-faint transition-all opacity-70 sm:opacity-0 sm:group-hover:opacity-100 focus:opacity-100 hover:bg-[var(--hover-strong)] hover:text-main"
+                className="reveal-on-hover flex h-6 w-6 items-center justify-center rounded-full text-faint hover:bg-[var(--hover-strong)] hover:text-main"
                 aria-label="Edit item"
               >
                 <PencilSimple size={13} weight="duotone" />
@@ -451,7 +451,7 @@ const ItemCard = memo(function ItemCard({
                   e.stopPropagation();
                   onDelete();
                 }}
-                className="flex h-6 w-6 items-center justify-center rounded-full text-faint transition-all opacity-70 sm:opacity-0 sm:group-hover:opacity-100 focus:opacity-100 hover:bg-[var(--danger-soft)] hover:text-[var(--danger)]"
+                className="reveal-on-hover flex h-6 w-6 items-center justify-center rounded-full text-faint hover:bg-[var(--danger-soft)] hover:text-[var(--danger)]"
                 aria-label="Delete item"
               >
                 <Trash size={13} weight="duotone" />

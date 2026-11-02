@@ -27,10 +27,16 @@
    * the copy glyph) were therefore hard to read, which is what the user
    * reported as "the arrow is not visible".
    *
-   * `#667088` gives 4.71:1 on the light surface and keeps the same visual
-   * weight in the design.
+   * A second pass lowered it further to `#5e677d`. The page itself is
+   * `--app-base` (`#e9e6f4`), which is darker than the cards, and a card
+   * floats over the page — so a colour has to clear the threshold on the
+   * page as well, not only on the card. `#5e677d` gives 4.60:1 on the
+   * page and 5.35:1 on a card.
+   *
+   * `scripts/check-contrast.mjs` keeps every pair of every theme above
+   * the threshold, so this cannot silently regress again.
    */
-  --text-faint: #667088;
+  --text-faint: #5e677d;
   --glass: rgba(255, 255, 255, 0.46);
   --glass-strong: rgba(255, 255, 255, 0.68);
   --glass-soft: rgba(255, 255, 255, 0.3);
@@ -41,17 +47,17 @@
   --border: rgba(255, 255, 255, 0.64);
   --border-soft: rgba(255, 255, 255, 0.4);
   --border-ink: rgba(15, 23, 42, 0.08);
-  --accent: #6457ee;
+  --accent: #5a4ced;
   --accent-deep: #4f43d8;
-  --accent-soft: rgba(100, 87, 238, 0.12);
+  --accent-soft: rgba(90, 76, 237, 0.12);
   --accent-glow: rgba(116, 100, 255, 0.4);
   --accent-contrast: #ffffff;
-  --success: #078a67;
-  --success-soft: rgba(16, 185, 129, 0.12);
-  --warning: #b77900;
-  --warning-soft: rgba(245, 158, 11, 0.14);
-  --danger: #d6425b;
-  --danger-soft: rgba(225, 70, 96, 0.11);
+  --success: #067557;
+  --success-soft: rgba(6, 117, 87, 0.12);
+  --warning: #8d5d00;
+  --warning-soft: rgba(141, 93, 0, 0.14);
+  --danger: #c22a44;
+  --danger-soft: rgba(194, 42, 68, 0.11);
   --shadow: 0 24px 70px rgba(69, 55, 120, 0.13), 0 3px 12px rgba(69, 55, 120, 0.04);
   --shadow-soft: 0 12px 30px rgba(69, 55, 120, 0.08);
   --shadow-card: 0 16px 36px rgba(62, 48, 112, 0.07);
@@ -91,7 +97,7 @@
   --border-soft: rgba(255, 255, 255, 0.11);
   --border-ink: rgba(255, 255, 255, 0.14);
   --accent: #b1a4ff;
-  --accent-deep: #7a68f4;
+  --accent-deep: #8878f5;
   --accent-soft: rgba(151, 137, 255, 0.15);
   --accent-glow: rgba(130, 110, 255, 0.35);
   --accent-contrast: #ffffff;
@@ -135,7 +141,7 @@
   --border-soft: rgba(255, 225, 179, 0.12);
   --border-ink: rgba(255, 219, 186, 0.1);
   --accent: #edb27d;
-  --accent-deep: #d98b68;
+  --accent-deep: #db906f;
   --accent-soft: rgba(244, 178, 120, 0.14);
   --accent-glow: rgba(244, 178, 120, 0.24);
   --accent-contrast: #291b13;
@@ -602,6 +608,41 @@ input[type="range"]::-moz-range-thumb {
   box-shadow: 0 0 8px currentColor;
 }
 
+/*
+ * A control that is revealed on hover.
+ *
+ * UX / ACCESSIBILITY: the vault card action buttons stayed invisible until
+ * the card was hovered. The rule that hid them was `sm:opacity-0`, and the
+ * rule that revealed them on keyboard focus was `focus:opacity-100`.
+ *
+ * Both have the same specificity, and Tailwind emits the responsive variant
+ * inside a media query, which lands *after* the plain variant in the
+ * cascade. The media query therefore won, so on any screen wider than
+ * 640 px a keyboard user focused a button that stayed invisible — the
+ * control was reachable but unreadable.
+ *
+ * This class states the intent once, and it does not depend on the order in
+ * which Tailwind emits its variants: the control is hidden by default, the
+ * group reveals it, and a focused control is always visible.
+ */
+.reveal-on-hover {
+  opacity: 0;
+  transition-property: opacity, background-color, color;
+  transition-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
+  transition-duration: 150ms;
+}
+
+.group:hover .reveal-on-hover,
+.group:focus-within .reveal-on-hover {
+  opacity: 1;
+}
+
+/* A focused control is always visible, in every layout. */
+.reveal-on-hover:focus,
+.reveal-on-hover:focus-visible {
+  opacity: 1;
+}
+
 /* Tooltip */
 .tooltip-wrap {
   position: relative;
@@ -720,25 +761,115 @@ input[type="range"]::-moz-range-thumb {
   from { opacity: 0; }
   to { opacity: 1; }
 }
+
+/*
+ * The "Living Flow" entrance.
+ *
+ * UX: the entrance animations used to be monotonic — the element scaled
+ * from 0.95 up to exactly 1 and stopped. That reads as a plain fade with a
+ * zoom, not as a piece of the living interface the product is built
+ * around.
+ *
+ * The curve below is a damped spring. The element overshoots its target
+ * size, comes back slightly past it, and settles. It is the same motion
+ * the operating system uses when a sheet or a card appears, and it is what
+ * makes opening and closing feel like one continuous, physical gesture
+ * instead of a state change.
+ *
+ * The overshoot is deliberately small — 1.5 % — so the motion reads as
+ * alive rather than as bouncy, and the whole entrance stays under 320 ms
+ * so it never delays the content.
+ */
 @keyframes rise-in {
-  from { opacity: 0; transform: translateY(12px) scale(0.985); }
-  to { opacity: 1; transform: translateY(0) scale(1); }
+  0% { opacity: 0; transform: translateY(12px) scale(0.985); }
+  55% { opacity: 1; transform: translateY(-1px) scale(1.008); }
+  78% { transform: translateY(0.4px) scale(0.997); }
+  100% { opacity: 1; transform: translateY(0) scale(1); }
 }
+
+/*
+ * The "Living Flow" modal entrance.
+ *
+ * The same damped spring as the rise, with a slightly stronger overshoot
+ * because a dialog is a bigger surface than a list item, plus a blur that
+ * resolves as the dialog takes focus.
+ */
 @keyframes modal-in {
-  from { opacity: 0; transform: translateY(12px) scale(0.95); filter: blur(2px); }
-  to { opacity: 1; transform: translateY(0) scale(1); filter: blur(0px); }
+  0% { opacity: 0; transform: translateY(14px) scale(0.94); filter: blur(3px); }
+  52% { opacity: 1; transform: translateY(-2px) scale(1.014); filter: blur(0px); }
+  76% { transform: translateY(0.6px) scale(0.995); }
+  100% { opacity: 1; transform: translateY(0) scale(1); filter: blur(0px); }
 }
-@keyframes sheet-in {
-  from { transform: translateY(100%); }
-  to { transform: translateY(0); }
-}
-@keyframes slide-right {
-  from { opacity: 0; transform: translateX(28px); }
-  to { opacity: 1; transform: translateX(0); }
-}
+
+/*
+ * The "Living Flow" toast entrance.
+ *
+ * A toast arrives from the edge, so it slides in with the spring instead of
+ * a straight line, and it overshoots very slightly before settling.
+ */
 @keyframes toast-in {
-  from { opacity: 0; transform: translateY(12px) scale(0.97); }
-  to { opacity: 1; transform: translateY(0) scale(1); }
+  0% { opacity: 0; transform: translateY(14px) scale(0.96); }
+  55% { opacity: 1; transform: translateY(-1.5px) scale(1.006); }
+  80% { transform: translateY(0.3px) scale(0.998); }
+  100% { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+/*
+ * The "Living Flow" sheet entrance.
+ *
+ * A bottom sheet comes from off-screen. The spring overshoot is what makes
+ * it feel like it is being pulled into place rather than teleported.
+ */
+@keyframes sheet-in {
+  0% { transform: translateY(100%); }
+  62% { transform: translateY(-1.5%); }
+  84% { transform: translateY(0.5%); }
+  100% { transform: translateY(0); }
+}
+
+/*
+ * The "Living Flow" panel entrance.
+ *
+ * A side panel slides in from the edge and settles with the same spring.
+ */
+@keyframes slide-right {
+  0% { opacity: 0; transform: translateX(32px); }
+  55% { opacity: 1; transform: translateX(-2px); }
+  80% { transform: translateX(0.6px); }
+  100% { opacity: 1; transform: translateX(0); }
+}
+
+/*
+ * The "Living Flow" exit.
+ *
+ * Closing has to feel like the mirror of opening, otherwise a panel that
+ * springs in and then vanishes looks broken. The exit reverses the spring:
+ * the element compresses slightly and accelerates away.
+ */
+@keyframes rise-out {
+  0% { opacity: 1; transform: translateY(0) scale(1); }
+  40% { opacity: 1; transform: translateY(-1px) scale(0.994); }
+  100% { opacity: 0; transform: translateY(8px) scale(0.97); }
+}
+
+@keyframes modal-out {
+  0% { opacity: 1; transform: translateY(0) scale(1); filter: blur(0px); }
+  100% { opacity: 0; transform: translateY(10px) scale(0.95); filter: blur(2px); }
+}
+
+@keyframes toast-out {
+  0% { opacity: 1; transform: translateY(0) scale(1); }
+  100% { opacity: 0; transform: translateY(10px) scale(0.96); }
+}
+
+@keyframes sheet-out {
+  0% { transform: translateY(0); }
+  100% { transform: translateY(100%); }
+}
+
+@keyframes slide-right-out {
+  0% { opacity: 1; transform: translateX(0); }
+  100% { opacity: 0; transform: translateX(28px); }
 }
 @keyframes scanline {
   0% { transform: translateY(-4px); opacity: 0; }
@@ -772,6 +903,29 @@ input[type="range"]::-moz-range-thumb {
 }
 .animate-toast {
   animation: toast-in 220ms var(--ease-out-fluid) both;
+}
+
+/*
+ * The "Living Flow" exits.
+ *
+ * An entrance that springs in and a disappearance that does not spring out
+ * feel like two unrelated effects. These mirror the entrances, so closing a
+ * surface reads as the same physical gesture that opened it.
+ */
+.animate-rise-out {
+  animation: rise-out 180ms var(--ease-out-fluid) both;
+}
+.animate-modal-out {
+  animation: modal-out 180ms var(--ease-out-fluid) both;
+}
+.animate-toast-out {
+  animation: toast-out 180ms var(--ease-out-fluid) both;
+}
+.animate-sheet-out {
+  animation: sheet-out 240ms var(--ease-drawer-aquamorphic) both;
+}
+.animate-slide-right-out {
+  animation: slide-right-out 200ms var(--ease-out-fluid) both;
 }
 
 /* Button Press Feedback (Emil Kowalski / ColorOS 17) */

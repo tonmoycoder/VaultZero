@@ -31,6 +31,13 @@ jobs:
       - name: Verify TypeScript & Frontend Build
         run: npm run build
 
+      # UX: every colour token of every theme has to clear the WCAG 2.1 AA
+      # contrast threshold on every surface it is drawn on. Three status
+      # colours of the light theme were below the threshold, which is what
+      # made the status unreadable.
+      - name: Check Theme Contrast
+        run: node scripts/check-contrast.mjs
+
       # The browserless harnesses exercise the security-critical logic
       # (storage, KDF, updater, breach scanner, URL sanitiser) without a
       # browser, so they run on every CI machine — including ones where
