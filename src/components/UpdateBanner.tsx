@@ -10,6 +10,7 @@ import { useEffect, useState } from "react";
 import {
   checkForUpdates,
   createPreUpdateBackup,
+  openVerifiedUpdate,
   runVerifiedUpdate,
   type UpdateInfo,
   type UpdateProgress,
@@ -82,7 +83,13 @@ export default function UpdateBanner({
 
       setProgress(100);
       setStage("done");
-      window.open(verified.url, "_blank", "noopener,noreferrer");
+      /*
+       * The native build already handed the verified file to the
+       * operating system, so opening it again here would launch a
+       * second copy of the installer. The browser build has to open the
+       * object URL itself.
+       */
+      await openVerifiedUpdate(verified);
 
       onNotify?.(
         lang === "bn"

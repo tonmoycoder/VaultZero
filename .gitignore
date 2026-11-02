@@ -32,6 +32,11 @@ yarn-error.log*
 *.tmp
 *.lnk
 
+# Playwright run output (traces, screenshots, videos)
+.artifacts/
+playwright-report/
+test-results/
+
 # Stealth agent exclusions
 .agent/
 .agents/

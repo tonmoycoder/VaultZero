@@ -14,6 +14,7 @@ import {
   checkReleaseStatus,
   createPreUpdateBackup,
   CURRENT_APP_VERSION,
+  openVerifiedUpdate,
   runVerifiedUpdate,
   type CheckReleaseStatus,
   type UpdateInfo,
@@ -132,7 +133,13 @@ export default function UpdateModal({
       setProgress(100);
       setStage("done");
       setVerifiedDigest(verified.sha256);
-      window.open(verified.url, "_blank", "noopener,noreferrer");
+      /*
+       * The native build already handed the verified file to the
+       * operating system, so opening it again here would launch a
+       * second copy of the installer. The browser build has to open the
+       * object URL itself.
+       */
+      await openVerifiedUpdate(verified);
 
       onNotify?.(
         lang === "bn"

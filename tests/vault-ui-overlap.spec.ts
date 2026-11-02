@@ -27,27 +27,36 @@ test.describe("tooltip rendering", () => {
   test("U-02 the tooltip is rendered in a portal, outside its trigger", async ({ page }) => {
     await page.goto("/");
 
-    const result = await page.evaluate(() => {
-      // The tooltip bubble must never be a descendant of the trigger, or any
-      // ancestor's `overflow: hidden` can clip it.
-      const wrap = document.createElement("span");
-      wrap.className = "tooltip-wrap";
-      wrap.innerHTML = '<button type="button">trigger</button>';
-      document.body.appendChild(wrap);
-      wrap.dispatchEvent(new MouseEvent("mouseenter", { bubbles: true }));
+    /*
+     * The bubble must never be a descendant of the trigger, or any
+     * ancestor's `overflow: hidden` can clip it.
+     *
+     * The trigger has to be a real one. The tooltip is a React component,
+     * and React attaches its listeners at the root, so a synthetic
+     * `mouseenter` on a hand-built element never reaches the handler and
+     * the bubble never appears. Hovering the real control is the only
+     * thing that exercises the actual behaviour.
+     */
+    /*
+     * The lock screen is the first thing the app shows, so its reveal
+     * control is always on screen. The sidebar is behind the lock dialog
+     * and cannot be hovered.
+     */
+    const trigger = page
+      .locator('[aria-label="Show master password"], [aria-label="Hide master password"]')
+      .first();
+    await trigger.waitFor({ state: "visible" });
+    await trigger.hover();
 
-      return new Promise<{ inPortal: boolean }>((resolve) => {
-        requestAnimationFrame(() => {
-          const bubble = document.querySelector(".tooltip-bubble-portal");
-          resolve({
-            inPortal: !!bubble && bubble.parentElement === document.body,
-          });
-          wrap.remove();
-        });
-      });
+    const bubble = page.locator(".tooltip-bubble-portal");
+    await bubble.waitFor({ state: "attached", timeout: 5000 });
+
+    const inPortal = await page.evaluate(() => {
+      const element = document.querySelector(".tooltip-bubble-portal");
+      return !!element && element.parentElement === document.body;
     });
 
-    expect(result.inPortal).toBe(true);
+    expect(inPortal).toBe(true);
   });
 
   test("U-01 a long tooltip wraps instead of running off the panel", async ({ page }) => {

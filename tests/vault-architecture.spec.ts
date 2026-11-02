@@ -2,12 +2,22 @@ import { test, expect } from "@playwright/test";
 
 test.describe("VaultZero Architectural Hardening & Cryptographic Gate", () => {
   test.beforeEach(async ({ page }) => {
-    // Clear storage before each test for clean state
-    await page.goto("/?unlocked=false");
+    /*
+     * Clear the storage before each test so every test starts from the
+     * factory state.
+     *
+     * The clear has to happen on a page that is already loaded, and the
+     * page has to be reloaded afterwards. Clearing the storage and then
+     * staying on the same page leaves the running application with the
+     * vault it already had in memory, so the next assertion sees a vault
+     * that should not exist.
+     */
+    await page.goto("/");
     await page.evaluate(() => {
       window.localStorage.clear();
       window.sessionStorage.clear();
     });
+    await page.reload();
   });
 
   test("Cryptographic Vault Gate displays on initial launch with Setup Mode", async ({ page }) => {
@@ -120,8 +130,13 @@ test.describe("VaultZero Architectural Hardening & Cryptographic Gate", () => {
     const dialog = page.getByRole("dialog", { name: "Nearby P2P Sync" });
     await expect(dialog).toBeVisible();
 
-    // Real Handshake status defaults to Waiting
-    await expect(dialog.getByText("Waiting for peer connection…")).toBeVisible();
+    /*
+     * V-17: the status is "Waiting for peer **selection**", not
+     * "connection". A scanned QR selects a peer; the authenticated
+     * handshake only succeeds when the transfer actually runs, so the
+     * interface must not claim a connection that does not exist.
+     */
+    await expect(dialog.getByText("Waiting for peer selection…")).toBeVisible();
 
     // Verify Clean QR code without center logo
     const qrSvg = dialog.locator("svg").first();
@@ -129,12 +144,29 @@ test.describe("VaultZero Architectural Hardening & Cryptographic Gate", () => {
     // Center logo image is not present inside QR
     await expect(qrSvg.locator("image")).toHaveCount(0);
 
-    // Host info
-    await expect(dialog.getByText("PIN: 729 184")).toBeVisible();
+    /*
+     * Host info.
+     *
+     * The pairing PIN is generated with a CSPRNG on every launch and is
+     * never hard-coded, so the assertion is on the shape of the value
+     * rather than on one particular number.
+     *
+     * The PIN is rendered inside the copy button, so the text node also
+     * holds the copy glyph and cannot be matched on its own.
+     */
+    const pin = await dialog
+      .getByRole("button", { name: "Copy pairing PIN" })
+      .innerText();
+    expect(pin).toMatch(/PIN:\s*\d{3}\s*\d{3}/);
 
     // Switch to Scan tab
     await dialog.getByRole("button", { name: "Scan QR / Connect" }).click();
-    await expect(dialog.getByPlaceholder("e.g. 192.168.1.103:1420 or 729184")).toBeVisible();
+    /*
+     * The manual field accepts either the host address or the pairing PIN.
+     * The example PIN is a shape, not a value — the real code is random on
+     * every launch, so no particular number can be asserted.
+     */
+    await expect(dialog.getByPlaceholder(/192\.168\.1\.103:1420 or \d{6}/)).toBeVisible();
   });
 
   test("Panic auto-lock on Ctrl+L wipes session and returns to LockScreen", async ({ page }) => {

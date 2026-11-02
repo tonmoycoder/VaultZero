@@ -1,4 +1,5 @@
 import { test, expect, type Page } from "@playwright/test";
+import { seedVault } from "./helpers/seedVault";
 
 const inspector = (page: Page) => page.getByTestId("detail-inspector");
 const card = (page: Page, id: string) => page.locator(`[data-item-id="${id}"]`);
@@ -180,13 +181,7 @@ const TEST_ITEMS = [
 ];
 
 test.beforeEach(async ({ page }) => {
-  await page.addInitScript((items) => {
-    window.sessionStorage.setItem(
-      "vaultzero_active_session",
-      JSON.stringify({ isDuress: false, items })
-    );
-  }, TEST_ITEMS);
-  await page.goto("/?unlocked=true");
+  await seedVault(page, TEST_ITEMS);
   await expect(page.getByRole("heading", { name: /Good morning/i })).toBeVisible();
 });
 
@@ -304,10 +299,7 @@ test("native touch swiping moves the brand rail", async ({ browser }) => {
   const context = await browser.newContext({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true });
   const page = await context.newPage();
   await page.addInitScript((items) => {
-    window.sessionStorage.setItem(
-      "vaultzero_active_session",
-      JSON.stringify({ isDuress: false, items })
-    );
+    window.sessionStorage.setItem("vaultzero_test_seed", JSON.stringify(items));
   }, TEST_ITEMS);
   await page.goto("/?unlocked=true");
   const rail = page.getByTestId("brand-scroll");

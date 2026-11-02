@@ -42,6 +42,7 @@ const UserProfileModal = lazy(() => import("./components/UserProfileModal"));
 const UpdateModal = lazy(() => import("./components/UpdateModal"));
 import { APP_VERSION, compareSemver } from "./lib/version";
 import { clearPreUpdateBackup } from "./lib/updater";
+import { readTestSeed, testSeedEnabled } from "./lib/testSeed";
 import {
   checkGitHubUpdate,
   clearActiveSession,
@@ -101,8 +102,19 @@ function readStoredTextStep(): number {
 
 function shouldStartLocked(): boolean {
   if (typeof window === "undefined") return true;
-  const urlParams = new URLSearchParams(window.location.search);
-  if (urlParams.get("unlocked") === "true") return false;
+  /*
+   * SECURITY: `?unlocked=true` is a test convenience that skips the lock
+   * screen. It used to work in a production build as well, which meant
+   * that appending the parameter to the URL was enough to open the vault
+   * without the master password.
+   *
+   * The escape hatch is now available only in a development or test
+   * build. A production bundle always starts locked.
+   */
+  if (testSeedEnabled()) {
+    const urlParams = new URLSearchParams(window.location.search);
+    if (urlParams.get("unlocked") === "true") return false;
+  }
   return getActiveSession() === null;
 }
 
@@ -191,9 +203,19 @@ function MobileNav({
 export default function App() {
   const activeSession = useMemo(() => getActiveSession(), []);
   const [session, setSession] = useState<UnlockedSession | null>(activeSession);
-  const [items, setItems] = useState<VaultItem[]>(() =>
-    activeSession ? activeSession.items : initialItems
-  );
+  /*
+   * The end-to-end suite seeds the vault through `lib/testSeed.ts`.
+   *
+   * The application deliberately keeps the vault out of `sessionStorage`,
+   * so the browser tests can no longer put items there and expect them
+   * back. The seed is read once, only in a development or test build, and
+   * it never reaches storage.
+   */
+  const [items, setItems] = useState<VaultItem[]>(() => {
+    if (activeSession) return activeSession.items;
+    const seeded = readTestSeed();
+    return seeded.length > 0 ? seeded : initialItems;
+  });
   const [locked, setLocked] = useState<boolean>(shouldStartLocked);
   const [theme, setTheme] = useState<Theme>(readStoredTheme);
   const [language, setLanguage] = useState<Language>(readStoredLanguage);
@@ -203,6 +225,8 @@ export default function App() {
   const [query, setQuery] = useState("");
   const [selectedId, setSelectedId] = useState<string | null>(() => {
     if (activeSession && activeSession.items.length > 0) return activeSession.items[0].id;
+    const seeded = readTestSeed();
+    if (seeded.length > 0) return seeded[0].id;
     return initialItems[0]?.id ?? null;
   });
   const [detailOpen, setDetailOpen] = useState(() => window.matchMedia("(min-width: 1280px)").matches);

@@ -197,11 +197,15 @@ test.describe("V-23 passphrase wordlist", () => {
     await page.goto("/");
 
     const info = await page.evaluate(async () => {
-      const module = await import("/src/lib/wordlist.ts");
+      // The metadata lives in its own module on purpose: the list is 88 KB
+      // and is only loaded when a passphrase is generated, so the constants
+      // that the entropy display needs must not drag it along.
+      const meta = await import("/src/lib/wordlistMeta.ts");
+      const list = await import("/src/lib/wordlist.ts");
       return {
-        length: module.WORDLIST_LEN,
-        unique: new Set(module.WORDLIST).size,
-        bits: module.BITS_PER_WORD,
+        length: meta.WORDLIST_LEN,
+        unique: new Set(list.WORDLIST).size,
+        bits: meta.BITS_PER_WORD,
       };
     });
 
@@ -229,7 +233,9 @@ test.describe("V-23 passphrase wordlist", () => {
     const alwaysUnique = await page.evaluate(async () => {
       const module = await import("/src/lib/generate.ts");
       for (let i = 0; i < 50; i += 1) {
-        const phrase = module.generatePassphrase(5, "-", false);
+        // The generator is asynchronous because the 88 KB wordlist is
+        // loaded on demand the first time a passphrase is generated.
+        const phrase = await module.generatePassphrase(5, "-", false);
         const words = phrase.split("-");
         if (new Set(words).size !== 5) return false;
       }

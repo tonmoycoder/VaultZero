@@ -200,11 +200,24 @@ test.describe("Browser Vault v3 Envelope & Cryptographic Safety", () => {
       return {
         isDuress: duressSession.isDuress,
         decoyCount: duressSession.items.length,
+        decoyTitles: duressSession.items.map((item) => item.title),
+        leaksRealItem: duressSession.items.some((item) => item.id === "real-1"),
       };
     });
 
     expect(result.isDuress).toBe(true);
-    expect(result.decoyCount).toBe(0);
+
+    /*
+     * SECURITY (V-04): the decoy vault must not be empty. An empty vault
+     * is an immediate tell that the user is being coerced, so it is
+     * populated with plausible, obviously-low-value filler accounts.
+     *
+     * The assertion that matters is that the real entry is not in it, and
+     * that the decoy looks like a real — if boring — vault.
+     */
+    expect(result.decoyCount).toBeGreaterThan(0);
+    expect(result.leaksRealItem).toBe(false);
+    expect(result.decoyTitles).not.toContain("Swiss Bank");
   });
 });
 

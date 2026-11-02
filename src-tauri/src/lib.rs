@@ -138,6 +138,218 @@ pub mod commands {
         Ok(dir.join("local-vault.pmv").to_string_lossy().to_string())
     }
 
+    /// Writes an already-verified update artifact to disk and returns its
+    /// absolute path.
+    ///
+    /// SECURITY (V-32): the updater used to download the artifact, hash
+    /// it, and then hand the *original URL* to the browser — which
+    /// downloaded the same file a second time. The file the user ended up
+    /// running was therefore not the file that had been hashed: a
+    /// compromised release asset could be swapped between the two
+    /// requests, and the checksum guarantee did not hold for the bytes
+    /// that were actually installed.
+    ///
+    /// The bytes that were hashed are now written here, so the artifact
+    /// the user opens is byte-for-byte the artifact that was verified.
+    ///
+    /// The file is written to a temporary name first and then renamed, so
+    /// a crash mid-write cannot leave a half-written installer behind
+    /// under the final name. The name is derived from the caller-supplied
+    /// file name, but only the base name is used — a path separator in
+    /// the input cannot escape the download directory.
+    #[tauri::command]
+    pub fn save_update_artifact(
+        app: tauri::AppHandle,
+        file_name: String,
+        bytes_base64: String,
+    ) -> Result<String, String> {
+        // Only the base name is honoured. Anything that looks like a path
+        // is rejected outright rather than silently sanitised, so the
+        // caller cannot write outside the download directory.
+        if file_name.is_empty()
+            || file_name.contains('/')
+            || file_name.contains('\\')
+            || file_name.contains("..")
+            || file_name.contains('\0')
+        {
+            return Err("The update artifact name is not acceptable.".into());
+        }
+
+        // A release asset is a few tens of megabytes. The ceiling keeps a
+        // malformed request from allocating an unbounded buffer.
+        const MAX_ARTIFACT_BYTES: usize = 256 * 1024 * 1024;
+
+        let encoded_len = bytes_base64.len();
+        if encoded_len == 0 || encoded_len > MAX_ARTIFACT_BYTES / 3 * 4 + 4 {
+            return Err("The update artifact is not within the accepted size range.".into());
+        }
+
+        let raw = decode_base64(&bytes_base64)
+            .ok_or_else(|| "The update artifact could not be decoded.".to_string())?;
+
+        if raw.is_empty() || raw.len() > MAX_ARTIFACT_BYTES {
+            return Err("The update artifact is not within the accepted size range.".into());
+        }
+
+        let dir = app
+            .path()
+            .app_data_dir()
+            .map_err(|e| format!("Could not resolve the application data directory: {}", e))?;
+
+        let downloads = dir.join("updates");
+        std::fs::create_dir_all(&downloads)
+            .map_err(|e| format!("Could not create the update directory: {}", e))?;
+
+        // The directory holds an installer, so it is restricted to the
+        // current user on the platforms that support POSIX permissions.
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            if let Ok(metadata) = std::fs::metadata(&downloads) {
+                let mut permissions = metadata.permissions();
+                permissions.set_mode(0o700);
+                let _ = std::fs::set_permissions(&downloads, permissions);
+            }
+        }
+
+        let target = downloads.join(&file_name);
+        let temporary = downloads.join(format!(".{}.partial", file_name));
+
+        // Write to the temporary name first, then rename it into place.
+        // A crash between the two leaves a `.partial` file rather than a
+        // truncated installer that looks complete.
+        std::fs::write(&temporary, &raw)
+            .map_err(|e| format!("The update artifact could not be written: {}", e))?;
+        std::fs::rename(&temporary, &target).map_err(|e| {
+            let _ = std::fs::remove_file(&temporary);
+            format!("The update artifact could not be moved into place: {}", e)
+        })?;
+
+        // The file is opened here rather than by the frontend. The
+        // frontend cannot launch a local file, and handing it the path
+        // and letting it shell out would mean trusting a path that
+        // crossed the IPC boundary. The path was built in this
+        // function, so opening it here is both simpler and safer.
+        open_artifact(&target)?;
+
+        Ok(target.to_string_lossy().to_string())
+    }
+
+    /// Decodes standard base64 into bytes.
+    ///
+    /// The decoder is written out here rather than pulled in as a crate
+    /// so the update path does not grow a dependency for one function.
+    /// It follows RFC 4648: the alphabet is the standard one, padding is
+    /// required, whitespace is rejected, and the padding has to be
+    /// consistent with the length.
+    fn decode_base64(input: &str) -> Option<Vec<u8>> {
+        fn value(byte: u8) -> Option<u8> {
+            match byte {
+                b'A'..=b'Z' => Some(byte - b'A'),
+                b'a'..=b'z' => Some(byte - b'a' + 26),
+                b'0'..=b'9' => Some(byte - b'0' + 52),
+                b'+' => Some(62),
+                b'/' => Some(63),
+                _ => None,
+            }
+        }
+
+        let bytes = input.as_bytes();
+
+        // The encoded length has to be a multiple of four, and the input
+        // may carry at most two padding characters.
+        if bytes.is_empty() || bytes.len() % 4 != 0 {
+            return None;
+        }
+
+        let padding = bytes.iter().rev().take_while(|b| **b == b'=').count();
+        if padding > 2 {
+            return None;
+        }
+
+        let data = &bytes[..bytes.len() - padding];
+
+        let mut out = Vec::with_capacity(bytes.len() / 4 * 3);
+        let mut accumulator: u32 = 0;
+        let mut bits: u32 = 0;
+
+        for byte in data {
+            let six = value(*byte)?;
+            accumulator = (accumulator << 6) | six as u32;
+            bits += 6;
+            if bits >= 8 {
+                bits -= 8;
+                out.push(((accumulator >> bits) & 0xff) as u8);
+            }
+        }
+
+        // The bits that are left over must be zero, otherwise the input
+        // carries data that the encoding cannot represent.
+        if bits > 0 && (accumulator & ((1 << bits) - 1)) != 0 {
+            return None;
+        }
+
+        // One leftover character is not a valid encoding.
+        if data.len() % 4 == 1 {
+            return None;
+        }
+
+        Some(out)
+    }
+
+    /// Hands a file to the operating system's default handler.
+    ///
+    /// The path is always one this process has just written, so it never
+    /// carries an argument that could be interpreted as an option by the
+    /// launcher. The launcher is still invoked without a shell, so the
+    /// file name cannot be expanded into a command.
+    fn open_artifact(path: &std::path::Path) -> Result<(), String> {
+        use std::process::Command;
+
+        #[cfg(target_os = "windows")]
+        let mut command = {
+            let mut c = Command::new("cmd");
+            // `/c` with `start` is the documented way to open a file with
+            // the default handler on Windows. The empty string is the
+            // window title, which `start` would otherwise take from the
+            // first argument.
+            c.arg("/c").arg("start").arg("").arg(path);
+            c
+        };
+
+        #[cfg(target_os = "macos")]
+        let mut command = {
+            let mut c = Command::new("open");
+            c.arg(path);
+            c
+        };
+
+        #[cfg(all(unix, not(target_os = "macos")))]
+        let mut command = {
+            let mut c = Command::new("xdg-open");
+            c.arg(path);
+            c
+        };
+
+        #[cfg(not(any(target_os = "windows", target_os = "macos", unix)))]
+        {
+            let _ = path;
+            return Err("Opening the update artifact is not supported on this platform.".into());
+        }
+
+        // The launcher must not wait for the application the user is
+        // about to install, and it must not inherit the terminal.
+        command
+            .stdin(std::process::Stdio::null())
+            .stdout(std::process::Stdio::null())
+            .stderr(std::process::Stdio::null());
+
+        command
+            .spawn()
+            .map(|_| ())
+            .map_err(|e| format!("The update artifact could not be opened: {}", e))
+    }
+
     #[tauri::command]
     pub fn lock_vault(state: State<AppState>) -> Result<(), String> {
         let mut session_guard = state.session.lock().unwrap();
@@ -610,6 +822,7 @@ pub fn run() {
             commands::get_vault_status,
             commands::lock_vault,
             commands::vault_file_path,
+            commands::save_update_artifact,
             commands::create_vault,
             commands::unlock_vault,
             commands::list_entries,

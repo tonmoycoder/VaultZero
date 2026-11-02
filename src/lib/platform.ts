@@ -40,7 +40,7 @@ const SAFE_MESSAGES: Record<VaultErrorCode, string> = {
   AUTH_FAILED: 'Incorrect master password or keyfile. Nothing was changed.',
   IO: 'The vault file could not be read or written.',
   CONFLICT: 'Another operation is already in progress. Try again shortly.',
-  UNSUPPORTED: 'That operation is not available in this runtime.',
+  UNSUPPORTED: 'That operation needs the desktop or mobile app; it is not available in the browser.',
   TAMPERED: 'The vault failed its integrity check and was not modified.',
   INVALID_FORMAT: 'This file is not a VaultZero vault, or it is corrupted.',
   VAULT_MISSING: 'No vault was found at this location.',

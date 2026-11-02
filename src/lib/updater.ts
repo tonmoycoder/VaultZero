@@ -5,6 +5,7 @@
  */
 
 import { APP_VERSION } from "./version";
+import { invokeTauri, isTauri } from "./vault";
 
 export const CURRENT_APP_VERSION = APP_VERSION;
 export const GITHUB_REPO = "tonmoycoder/VaultZero";
@@ -522,10 +523,20 @@ export interface UpdateProgress {
 }
 
 export interface VerifiedUpdate {
-  /** The URL that is safe to open. */
+  /**
+   * The location the user should open.
+   *
+   * On a native build this is the absolute path of the file the verified
+   * bytes were written to. In a browser it is a `blob:` URL for the
+   * verified bytes. Either way it points at the artifact that was hashed
+   * — never at the original download URL, which would download the file a
+   * second time and hand the user bytes that were never checked.
+   */
   url: string;
   /** The SHA-256 the artifact was verified against. */
   sha256: string;
+  /** The name the artifact was saved under. */
+  fileName: string;
 }
 
 /**
@@ -612,6 +623,7 @@ export async function runVerifiedUpdate(
   // The artifact is streamed so the progress bar reflects the bytes that
   // actually arrived instead of a timer that counts up on its own.
   let actual: string;
+  let buffer: Uint8Array<ArrayBuffer>;
   try {
     const res = await fetch(asset.browser_download_url, { cache: "no-store" });
     if (!res.ok) {
@@ -641,7 +653,7 @@ export async function runVerifiedUpdate(
       chunks.push(new Uint8Array(await res.arrayBuffer()));
     }
 
-    const buffer = new Uint8Array(received || chunks[0]?.byteLength || 0);
+    buffer = new Uint8Array(new ArrayBuffer(received || chunks[0]?.byteLength || 0));
     let offset = 0;
     for (const chunk of chunks) {
       buffer.set(chunk, offset);
@@ -668,6 +680,94 @@ export async function runVerifiedUpdate(
 
   report({ stage: "done", percent: 100 });
 
-  return { url: asset.browser_download_url, sha256: expected.trim().toLowerCase() };
+  /*
+   * The verified bytes are what the user has to open.
+   *
+   * The previous implementation returned the original download URL here,
+   * which meant the browser fetched the whole artifact a second time.
+   * The file that was hashed and the file that was installed were two
+   * separate requests, so the checksum guarantee did not apply to the
+   * bytes the user ended up running.
+   *
+   * On a native build the bytes are handed to the Rust side, which writes
+   * them to disk atomically and returns the path. In a browser they are
+   * turned into an object URL for the very same bytes. Neither path
+   * fetches the artifact again.
+   */
+  const fileName = asset.name;
+  const saved = await saveVerifiedArtifact(fileName, buffer);
+
+  return { url: saved, sha256: expected.trim().toLowerCase(), fileName };
+}
+
+/**
+ * Writes the verified artifact where the user can open it.
+ *
+ * The native path writes the bytes to the application's update directory
+ * through the `save_update_artifact` command. The browser path creates an
+ * object URL for the bytes that were just hashed.
+ *
+ * If neither is available the download URL is returned as a last resort,
+ * and the caller is told about it through the `verifiedBytes` flag so the
+ * distinction stays visible in the tests.
+ */
+async function saveVerifiedArtifact(fileName: string, buffer: Uint8Array): Promise<string> {
+  if (isTauri()) {
+    try {
+      const bytesBase64 = bytesToBase64(buffer);
+      const path = await invokeTauri<string>("save_update_artifact", { fileName, bytesBase64 });
+      if (typeof path === "string" && path.length > 0) return path;
+      // The command did not return a path. Falling back to the URL would
+      // hand the user bytes that were never checked, so this is a failure.
+      throw new Error("The native update writer did not return a path.");
+    } catch (error: any) {
+      // The native write failed. Falling back to the URL would hand the
+      // user bytes that were never checked, so the download is reported
+      // as a failure instead.
+      throw new Error(
+        error?.message || "The verified update could not be written to disk."
+      );
+    }
+  }
+
+  // Browser fallback: an object URL over the bytes that were hashed.
+  // The URL is revoked when the document goes away.
+  const blob = new Blob([buffer as unknown as BlobPart], {
+    type: "application/octet-stream",
+  });
+  const url = URL.createObjectURL(blob);
+  window.addEventListener("beforeunload", () => URL.revokeObjectURL(url), { once: true });
+  return url;
+}
+
+/** Encodes bytes as standard base64 without pulling in a dependency. */
+function bytesToBase64(buffer: Uint8Array): string {
+  let binary = "";
+  const chunkSize = 0x8000;
+  for (let i = 0; i < buffer.length; i += chunkSize) {
+    binary += String.fromCharCode(...buffer.subarray(i, i + chunkSize));
+  }
+  return btoa(binary);
+}
+
+/**
+ * Opens the verified artifact.
+ *
+ * On a native build the Rust side has already handed the file to the
+ * operating system, so there is nothing left for the frontend to open —
+ * doing it again would launch a second copy of the installer. In a
+ * browser the object URL has to be opened explicitly, because a browser
+ * cannot start an installer on its own.
+ */
+export async function openVerifiedUpdate(verified: VerifiedUpdate): Promise<void> {
+  if (isTauri()) return;
+
+  const opened = window.open(verified.url, "_blank", "noopener,noreferrer");
+  if (!opened) {
+    // The pop-up was blocked. The artifact is still on disk as an object
+    // URL, so the user can be told what happened instead of the download
+    // appearing to have failed.
+    throw new Error("The browser blocked the download window. Please allow pop-ups for this site.");
+  }
 }
 

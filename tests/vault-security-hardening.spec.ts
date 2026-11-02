@@ -230,6 +230,14 @@ test.describe("V-06 — the vault must auto-lock", () => {
   });
 
   test("an idle timeout eventually locks the vault", async ({ page }) => {
+    /*
+     * The test waits out a real one-minute idle timeout, so it needs more
+     * than the default 35 second budget. The wait itself is the assertion:
+     * a shorter idle period would lock the vault earlier, and a broken
+     * timer would never lock it at all.
+     */
+    test.setTimeout(120_000);
+
     await page.goto("/");
     await page.waitForLoadState("networkidle");
 

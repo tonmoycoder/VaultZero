@@ -518,14 +518,36 @@ export function SyncModal({ onClose, onNotify }: { onClose: () => void; onNotify
   const streamRef = useRef<MediaStream | null>(null);
   const animFrameRef = useRef<number | null>(null);
 
-  // SECURITY: the PIN is generated locally with a CSPRNG. It is never
-  // hard-coded and never transmitted in the clear.
+  /*
+   * SECURITY: the PIN is generated locally with a CSPRNG. It is never
+   * hard-coded and never transmitted in the clear.
+   *
+   * It used to be three digits long. The host lockout allows five failed
+   * attempts, which is a sensible limit for a six-digit code — 10^6
+   * possibilities — but for a three-digit code the whole space is only
+   * 10^3, so the limit was worthless. The code has to match the length the
+   * lockout was designed for, and the display already formats it as
+   * "123 456".
+   *
+   * Each digit is drawn from its own uniform range rather than being
+   * `byte % 10`, which would bias every digit towards the lower end of
+   * the range and shrink the effective key space.
+   */
   const [localPin] = useState(() => {
-    const bytes = new Uint8Array(3);
-    crypto.getRandomValues(bytes);
-    return Array.from(bytes)
-      .map((b) => String(b % 10))
-      .join("");
+    const digits: number[] = [];
+    while (digits.length < 6) {
+      // `crypto.getRandomValues` rejects a request larger than 65536
+      // bytes, and the rejection sampler needs a few bytes per draw.
+      const bytes = new Uint8Array(6);
+      crypto.getRandomValues(bytes);
+      for (const byte of bytes) {
+        if (digits.length === 6) break;
+        // 250 is the largest multiple of 10 that fits in a byte, so the
+        // values 250..255 are rejected and the draw stays uniform.
+        if (byte < 250) digits.push(byte % 10);
+      }
+    }
+    return digits.join("");
   });
 
   const hostPayload = useMemo(() => {
@@ -996,7 +1018,7 @@ export function SyncModal({ onClose, onNotify }: { onClose: () => void; onNotify
               type="text"
               value={manualCode}
               onChange={(e) => setManualCode(e.target.value)}
-              placeholder="e.g. 192.168.1.103:1420"
+              placeholder="192.168.1.103:1420 or 123456"
               className="min-w-0 flex-1 rounded-[11px] border border-[var(--border-soft)] bg-[var(--glass-input)] px-3 py-1.5 font-mono text-[10px] text-main outline-none placeholder:text-faint"
             />
             <button

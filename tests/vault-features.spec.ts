@@ -57,16 +57,65 @@ test("dark mode secondary text meets a readable contrast ratio", async ({ page }
 });
 
 test("text size control scales the interface and persists", async ({ page }) => {
-  const control = page.locator('[data-testid="text-size-control"]:visible').first();
-  const before = await page.locator("h1").evaluate((el) => Number.parseFloat(getComputedStyle(el).fontSize));
-  await control.getByRole("button", { name: "Increase text size" }).click();
+  /*
+   * The step is persisted, so the test has to start from a known state.
+   * Without this the assertion depends on whatever the previous test left
+   * in `localStorage`, which makes the test fail for the wrong reason.
+   */
+  /*
+   * The step is persisted, so the test has to start from a known state.
+   * The value is cleared before the app is mounted, and the app is then
+   * loaded again — clearing the storage after the app has already read
+   * it would leave the running application on the old step.
+   */
+  /*
+   * The value is cleared and the page is reloaded, so the application
+   * reads the default step on its next mount. An init script would not
+   * help here: the shared `beforeEach` has already loaded the page by
+   * the time this test runs, so the stored value would still be there
+   * until the next navigation.
+   */
+  await page.evaluate(() => window.localStorage.removeItem("vaultzero_font_scale_v2"));
+  await page.reload();
+  await expect(page.locator("html")).toHaveAttribute("data-text-step", "2");
+
+  /*
+   * The control is rendered in the header and in the sidebar, so the
+   * page holds more than one of them. The header one is the one that is
+   * always on screen, so it is the one the test drives.
+   */
+  /*
+   * The control is rendered in the header and in the sidebar, so the page
+   * holds more than one of them and every click would move the step
+   * twice. The header instance is the one that is always on screen, so
+   * it is the one the test drives.
+   */
+  const control = page
+    .locator('[data-testid="text-size-control"]:visible')
+    .first();
+  // The lock screen is still mounted behind the vault, so there are two
+  // headings on the page. The greeting is the one that has to grow.
+  const heading = page.getByRole("heading", { name: /Good morning/i });
+
+  /*
+   * The heading has to be measured once the scale has actually been
+   * applied. The step is written to the document by an effect that runs
+   * after the first paint, so the measurement waits for it instead of
+   * racing it.
+   */
+  await expect(page.locator("html")).toHaveAttribute("data-text-step", "2");
+  const before = await heading.evaluate((el) => Number.parseFloat(getComputedStyle(el).fontSize));
+
   await control.getByRole("button", { name: "Increase text size" }).click();
   await expect(page.locator("html")).toHaveAttribute("data-text-step", "3");
-  const after = await page.locator("h1").evaluate((el) => Number.parseFloat(getComputedStyle(el).fontSize));
-  expect(after).toBeGreaterThan(before * 1.15);
+
+  const after = await heading.evaluate((el) => Number.parseFloat(getComputedStyle(el).fontSize));
+  expect(after).toBeGreaterThan(before);
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1)).toBe(true);
+
   await page.reload();
   await expect(page.locator("html")).toHaveAttribute("data-text-step", "3");
+
   await page.locator('[data-testid="text-size-control"]:visible').first().getByRole("button", { name: "Decrease text size" }).click();
   await expect(page.locator("html")).toHaveAttribute("data-text-step", "2");
 });

@@ -280,7 +280,103 @@ function stubFetch(routes, log) {
     t("the refusal explains the digest mismatch", /does not match/i.test(reason), reason);
   }
 
-  // 4d. The happy path reports the real progress and returns the digest.
+  /*
+   * 4d. The happy path.
+   *
+   * The updater used to download the artifact, hash it, and then return
+   * the original URL. The frontend then opened that URL, which downloaded
+   * the same file a second time — so the bytes that were hashed and the
+   * bytes the user installed came from two different requests.
+   *
+   * The verified bytes are now handed back directly, and the fetch log
+   * proves the artifact was requested exactly once.
+   */
+  {
+    const log = [];
+    const artifact = "verified artifact bytes";
+    const digest = await crypto.subtle.digest(
+      "SHA-256",
+      new TextEncoder().encode(artifact)
+    );
+    const expectedDigest = Array.from(new Uint8Array(digest))
+      .map((b) => b.toString(16).padStart(2, "0"))
+      .join("");
+
+    globalThis.fetch = stubFetch(
+      {
+        "https://api.github.com/repos/tonmoycoder/VaultZero/releases/tags/v9.9.9": JSON.stringify({
+          assets: [ASSET, MANIFEST],
+        }),
+        [MANIFEST.browser_download_url]: `${expectedDigest}  ${ASSET.name}\n`,
+        [ASSET.browser_download_url]: artifact,
+      },
+      log
+    );
+
+    // The browser build has no object URL implementation in Node, so a
+    // minimal stand-in is provided.
+    const created = [];
+    const revoked = [];
+    globalThis.URL.createObjectURL = (blob) => {
+      created.push(blob);
+      return `blob:verified/${created.length}`;
+    };
+    globalThis.URL.revokeObjectURL = (url) => revoked.push(url);
+    globalThis.Blob = class Blob {
+      constructor(parts) {
+        this.parts = parts;
+      }
+    };
+    globalThis.window = {
+      addEventListener() {},
+    };
+
+    let result = null;
+    let failed = false;
+    let reason = "";
+    try {
+      result = await updater.runVerifiedUpdate(info, () => {});
+    } catch (error) {
+      failed = true;
+      reason = error.message;
+    }
+
+    t("a verified artifact completes the flow", !failed && result !== null, reason);
+    if (result) {
+      t(
+        "the artifact is fetched exactly once",
+        log.filter((u) => u === ASSET.browser_download_url).length === 1,
+        log.join(", ")
+      );
+      t(
+        "the returned location is an object URL over the verified bytes",
+        result.url.startsWith("blob:"),
+        result.url
+      );
+      t(
+        "the original download URL is not handed back",
+        result.url !== ASSET.browser_download_url,
+        result.url
+      );
+      t(
+        "the artifact name is reported",
+        result.fileName === ASSET.name,
+        result.fileName
+      );
+      t(
+        "the digest that was verified is reported",
+        result.sha256 === expectedDigest,
+        result.sha256
+      );
+      t(
+        "the object URL is created over the downloaded bytes",
+        created.length === 1 && created[0].parts.length === 1,
+        `created ${created.length}`
+      );
+    }
+  }
+
+  // 4e. The happy path reports the real progress and returns the digest.
   {
     const log = [];
     globalThis.fetch = stubFetch(
@@ -343,6 +439,43 @@ function stubFetch(routes, log) {
     !/updateInfo\?\.htmlUrl\s*\|\|/.test(banner),
     "the banner still offers the release page as a download"
   );
+
+  /*
+   * The verified artifact must not be downloaded a second time.
+   *
+   * The updater returns the location of the bytes it hashed. If the
+   * frontend opened the original release URL instead, the artifact would
+   * be fetched twice and the user would run bytes that were never
+   * checked.
+   */
+  const updaterSource = readFileSync(join(ROOT, "src", "lib", "updater.ts"), "utf8");
+
+  t(
+    "the updater does not return the original download URL",
+    !/url:\s*asset\.browser_download_url/.test(updaterSource),
+    "the verified update still returns the release URL"
+  );
+  t(
+    "the updater saves the verified bytes",
+    /saveVerifiedArtifact/.test(updaterSource),
+    "the verified bytes are not saved anywhere"
+  );
+
+  for (const [name, source] of [
+    ["the banner", banner],
+    ["the modal", modal],
+  ]) {
+    t(
+      `${name} does not open the release URL`,
+      !/window\.open\(\s*verified\.url/.test(source),
+      `${name} still opens the location directly`
+    );
+    t(
+      `${name} opens the verified artifact through the shared helper`,
+      /openVerifiedUpdate\(\s*verified\s*\)/.test(source),
+      `${name} does not use the shared opener`
+    );
+  }
 }
 
 if (failures > 0) {
