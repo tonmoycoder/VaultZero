@@ -57,15 +57,20 @@ impl SearchEngine {
                     }
                 }
                 if has_q {
-                    // Fast path: precomputed blob.
+                    // Fast path: the precomputed blob.
                     if !e.search_blob.is_empty() {
-                        if e.search_blob.contains(&q) {
-                            return true;
-                        }
-                        // Fall through to the per-field checks only when the
-                        // blob is empty (e.g. summaries deserialised from an
-                        // older vault that predates the blob field).
-                    } else {
+                        // The blob holds every field the search looks at,
+                        // so a query that is not in the blob is not in any
+                        // of the fields either. The entry is rejected
+                        // here. It used to fall through, and a query that
+                        // matched nothing was still reported as a match.
+                        return e.search_blob.contains(&q);
+                    }
+
+                    // The per-field checks run only when the blob is empty,
+                    // which happens for summaries that were deserialised
+                    // from an older vault that predates the blob field.
+                    {
                         let matches_title = e.title.to_lowercase().contains(&q);
                         let matches_url = e.url.to_lowercase().contains(&q);
                         let matches_domain = e.domain.to_lowercase().contains(&q);

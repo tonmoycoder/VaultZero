@@ -50,7 +50,33 @@ impl HlcClock {
             (physical, 0u64)
         } else {
             let next_count = self.logical_counter.fetch_add(1, Ordering::SeqCst) + 1;
-            (last, next_count)
+            if next_count > Self::LOGICAL_MASK {
+                /*
+                 * The logical field is full.
+                 *
+                 * The counter has only eight bits, so a hundred and
+                 * fifty six timestamps taken inside the same
+                 * millisecond exhaust it. The counter used to keep
+                 * counting, and the packed value then wrapped, which
+                 * produced a timestamp that was *smaller* than the one
+                 * before it. A merge that compares timestamps would
+                 * then keep the wrong copy of an entry.
+                 *
+                 * The clock moves on to the next millisecond instead.
+                 * The physical time is one millisecond ahead of the
+                 * last one, so the value grows and the ordering is
+                 * kept. The clock waits for the wall clock to catch up
+                 * only if it has already passed that point.
+                 */
+                let next_physical = last + 1;
+                let wall = chrono::Utc::now().timestamp_millis().max(0) as u64;
+                let chosen = next_physical.max(wall);
+                self.last_physical_ms.store(chosen, Ordering::SeqCst);
+                self.logical_counter.store(0, Ordering::SeqCst);
+                (chosen, 0u64)
+            } else {
+                (last, next_count)
+            }
         };
 
         // Combine: (physical_ms & 0xFFFFFFFFFFFF) << 16 | (counter & 0xFF) << 8 | node_id

@@ -181,8 +181,18 @@ impl P2PSessionHandshake {
             .map_err(|_| crate::errors::VaultError::CryptoError("HKDF expansion failed".into()))?;
 
         // Step 4: Mutual authentication tag bound to the full transcript.
-        // The tag is *direction-specific* (it includes our own role), so each
-        // side verifies the tag it receives against the peer's tag.
+        //
+        // The tag covers the transcript and nothing else. The transcript
+        // already carries the role of each key, so the two peers compute
+        // the same tag for the same session, and each of them can check
+        // the tag the other one sends. The tag used to carry the local
+        // role as well, which made the two tags different from each
+        // other, so the check could never succeed and the protection it
+        // was written for was never actually in force.
+        //
+        // The direction is separated elsewhere. The payload key is
+        // derived per direction, so a payload cannot be reflected back
+        // at the peer that sent it.
         let mut mac = <HmacSha256 as hmac::Mac>::new_from_slice(&okm)
             .map_err(|e| crate::errors::VaultError::CryptoError(e.to_string()))?;
         // The domain separation label comes first, so the tag over the
@@ -190,7 +200,6 @@ impl P2PSessionHandshake {
         // else that the same key might be asked to cover.
         mac.update(P2P_AUTH_INFO);
         mac.update(&transcript);
-        mac.update(&[local_role.as_byte()]);
         let auth_tag: [u8; 32] = mac.finalize().into_bytes().into();
 
         // Step 5: Channel binding hash. Both peers derive this from the same
