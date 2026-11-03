@@ -27,7 +27,15 @@ const MAX_FRAME_BYTES: usize = 8 * 1024 * 1024;
 const MAX_PIN_ATTEMPTS: u32 = 5;
 
 /// Direction separation constants for the payload cipher.
+///
+/// The cipher key is derived per direction, so a payload that travels
+/// one way cannot be replayed the other way. The channel currently
+/// carries the payload from the host to the client only, so the
+/// constant for the other direction is not used yet. It is kept
+/// because the two directions have to be derived the same way, and
+/// having the pair together makes that visible.
 const DIR_HOST_TO_CLIENT: u8 = 0x01;
+#[allow(dead_code)]
 const DIR_CLIENT_TO_HOST: u8 = 0x02;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
