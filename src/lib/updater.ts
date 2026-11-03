@@ -211,7 +211,10 @@ export function detectUpdatePlatform(userAgent?: string): UpdatePlatform {
   const ua = userAgent ?? (typeof navigator !== "undefined" ? navigator.userAgent : "");
   if (/android/i.test(ua)) return "android";
   if (/windows/i.test(ua)) return "windows";
-  return typeof navigator === "undefined" ? "browser" : "desktop";
+  // Classify from the user agent itself, not from whether a `navigator`
+  // global happens to exist. Node 20 has no `navigator`, Node 21+ does,
+  // and a harness must get the same answer on both.
+  return ua ? "desktop" : "browser";
 }
 
 export function selectDownloadableAsset(
