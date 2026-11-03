@@ -66,7 +66,9 @@ Active branch: `arena/61b1561a-vaultzero` (never rename). PR #2 MERGED.
 - [x] `npx playwright test --workers=2` → **135 passed (6.8 m)**, 0 failed
 - [x] Commit `910a23b` + push; PR #3 opened (CI only triggers on PR/main push)
 - [x] Re-watch CI `41714765933` → `gh pr checks 3` BOTH green (6m14s / 3m21s)
-- [ ] Re-watch CI after the V-81 fix → `gh pr checks 3` BOTH green
+- [x] CI `41718185806` after V-81 → `gh pr checks 3` BOTH green
+      (Frontend 7m47s / Windows 3m11s, `gh run watch` exit 0)
+- [x] PR #3 left OPEN on purpose (no auto-merge without confirmation)
 - [ ] Publish `v2.6.0-beta.1` via `gh workflow run … --ref …` and verify the
       five live assets (the actual 404 fix)
 - [ ] Update this file + `checkpoint.md` with the published release result

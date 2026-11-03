@@ -8,8 +8,11 @@
 - Active branch (FIXED, never rename): `arena/61b1561a-vaultzero`
 - Base: `main` @ `df048f9d3276c4eaf7b2b0f3220c69ff4b56d800`
   (`docs(readme): update version badge to v2.5.2`, 2026-11-03 22:53 +0600)
-- PR #3 OPEN (`arena/61b1561a-vaultzero` → `main`), head `910a23b`.
-  CI `41713265261`: Frontend PASS 6m38s, Windows FAIL 42s (V-80, see below).
+- PR #3 OPEN (`arena/61b1561a-vaultzero` → `main`), head `66e6273`.
+  CI history: `41713265261` Frontend PASS 6m38s / Windows FAIL 42s (V-80);
+  `41714765933` BOTH PASS (6m14s / 3m21s);
+  `41718185806` BOTH PASS (Frontend 7m47s / Windows 3m11s) — CURRENT GREEN.
+  `gh pr checks 3` = pass + pass. PR #3 deliberately NOT auto-merged.
 - PR #2 (V-01…V-71) **MERGED** 2026-11-03T16:54:12Z. Its CI `41568757031`
   was green on both jobs. PR #1 (`arena/79f3d1ba-vaultzero`, `5c98a1f`) is
   still **OPEN** and superseded — deliberately NOT inspected, pushed, merged
@@ -128,6 +131,12 @@ is empirical: no guesses, no stubs, no fake fallbacks, no half-finished paths.
 Offline OCR browser proof (all external requests blocked): extracted
 `"USER: demo@vaultzero.local\nPASS: S3cret-42"` in **606 ms**, zero CDN
 calls. Manifest patch: 5 permissions + cleartext, idempotent on 2nd run.
+
+### Final CI (`41718185806`, head `66e6273`)
+Frontend End-to-End & Security Tests **pass 7m47s**
+(`126203632681`); Test & Build Verification **pass 3m11s**
+(`126203632053`). `gh run watch` exit 0. Rust clippy/test with the minimal
+tokio feature set is therefore verified on Windows CI, not just locally.
 
 ### Gate results (local, 2026-11-04)
 - `npx tsc --noEmit` → 0
