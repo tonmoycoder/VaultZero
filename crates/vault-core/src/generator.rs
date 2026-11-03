@@ -259,7 +259,7 @@ pub fn calculate_entropy(password: &str) -> f64 {
 
     // Penalty 3 — repeated blocks (e.g. "abcabcabc").
     for block in [2usize, 3, 4] {
-        if len >= block * 2 && len % block == 0 {
+        if len >= block * 2 && len.is_multiple_of(block) {
             let mut is_repeating = true;
             for i in 0..(len / block) {
                 for j in 0..block {

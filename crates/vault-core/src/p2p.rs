@@ -185,6 +185,10 @@ impl P2PSessionHandshake {
         // side verifies the tag it receives against the peer's tag.
         let mut mac = <HmacSha256 as hmac::Mac>::new_from_slice(&okm)
             .map_err(|e| crate::errors::VaultError::CryptoError(e.to_string()))?;
+        // The domain separation label comes first, so the tag over the
+        // transcript can never be confused with a tag over anything
+        // else that the same key might be asked to cover.
+        mac.update(P2P_AUTH_INFO);
         mac.update(&transcript);
         mac.update(&[local_role.as_byte()]);
         let auth_tag: [u8; 32] = mac.finalize().into_bytes().into();

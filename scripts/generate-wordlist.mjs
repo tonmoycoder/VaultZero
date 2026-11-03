@@ -22,7 +22,17 @@ const metaPath = join(root, "src/lib/wordlistMeta.ts");
 
 /** Extracts the quoted words from the Rust `WORDLIST` array. */
 function parseRustWords(source) {
-  const match = source.match(/pub const WORDLIST: \[&str; (\d+)\] = \[([\s\S]*?)\n\];/);
+  /*
+   * The list is accepted as a `const` or as a `static`.
+   *
+   * The list is large enough that it belongs in the binary once rather
+   * than once per use, so it is a `static` now. The reader accepts
+   * both forms so that the choice of keyword is not something that
+   * breaks the generator.
+   */
+  const match = source.match(
+    /pub (?:const|static) WORDLIST: \[&str; (\d+)\] = \[([\s\S]*?)\n\];/
+  );
   if (!match) {
     throw new Error(`Could not find WORDLIST array in ${rustPath}`);
   }

@@ -19,7 +19,13 @@
 pub const WORDLIST_LEN: usize = 7772;
 
 /// The EFF long wordlist (hyphenated entries removed).
-pub const WORDLIST: [&str; 7772] = [
+///
+/// The list is a `static` and not a `const` because it is large. A
+/// `const` array is inlined at every place that names it, which copies
+/// all seven thousand seven hundred and seventy two entries into the
+/// binary once per use. A `static` is placed in the binary once and
+/// referred to by address.
+pub static WORDLIST: [&str; 7772] = [
     "abacus",
     "abdomen",
     "abdominal",
