@@ -32,9 +32,21 @@ yarn-error.log*
 *.tmp
 *.lnk
 
+# Playwright run output (traces, screenshots, videos)
+.artifacts/
+playwright-report/
+test-results/
+
 # Stealth agent exclusions
 .agent/
 .agents/
+# Skill tooling installs its payload under `agent/` — same policy.
+agent/
+skills-lock.json
+
+# The browserless harness bundles are generated from `src/` by
+# `scripts/build-test-bundles.mjs` and are never committed.
+.harness-build/
 .claude/
 .cursor/
 .gemini/

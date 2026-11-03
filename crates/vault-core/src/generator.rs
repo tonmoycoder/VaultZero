@@ -1,6 +1,7 @@
+use crate::data::wordlist::{WORDLIST, WORDLIST_LEN};
 use rand::rngs::OsRng;
 use rand::seq::SliceRandom;
-use rand::RngCore;
+use rand::{Rng, RngCore};
 
 #[derive(Debug, Clone)]
 pub struct PasswordGenOptions {
@@ -35,20 +36,6 @@ const NUMBERS_ALL: &[u8] = b"0123456789";
 const NUMBERS_SAFE: &[u8] = b"23456789"; // No 0, 1
 
 const SYMBOLS: &[u8] = b"!@#$%^&*()-_=+[]{}|;:,.<>?";
-
-/// 77-word EFF Diceware curated compact offline list
-const DICEWARE_WORDLIST: &[&str] = &[
-    "ability", "absent", "absorb", "abstract", "academy", "accent", "account", "acquire",
-    "across", "actress", "advance", "airport", "album", "alibi", "alley", "alpha",
-    "alpine", "amber", "anchor", "angel", "anthem", "antique", "apron", "arcade",
-    "arctic", "arena", "artist", "aspect", "astral", "atlas", "atom", "audio",
-    "august", "avatar", "avenue", "bacon", "badge", "balcony", "banner", "baron",
-    "beacon", "breeze", "bronze", "cabin", "canyon", "castle", "cedar", "cipher",
-    "clover", "cobalt", "comet", "compass", "coral", "cosmos", "crater", "crystal",
-    "delta", "diamond", "drift", "echo", "ember", "falcon", "frost", "galaxy",
-    "glacier", "granite", "harbor", "horizon", "island", "jasper", "kinetic", "lagoon",
-    "lunar", "marble", "matrix", "meadow", "meteor",
-];
 
 /// Generates a high-entropy CSPRNG password based on configuration options.
 pub fn generate_password(opts: &PasswordGenOptions) -> String {
@@ -86,66 +73,268 @@ pub fn generate_password(opts: &PasswordGenOptions) -> String {
     let length = opts.length.clamp(6, 128);
     let mut password = Vec::with_capacity(length);
 
-    for _ in 0..length {
-        let mut rand_buf = [0u8; 1];
-        OsRng.fill_bytes(&mut rand_buf);
-        let idx = (rand_buf[0] as usize) % charset.len();
+    // SECURITY (V-08): rejection sampling instead of `byte % charset.len()`.
+    // A single random byte is uniform over 0..=255, but `256 % n != 0` for
+    // every real charset size, so the first `256 % n` characters were
+    // measurably over-represented (e.g. ~1.35x for n=78). We draw a u32 and
+    // reject the biased tail instead, giving a provably uniform selection.
+    let n = charset.len() as u32;
+    // Largest multiple of n that fits in u32; anything at or above is biased.
+    let limit = u32::MAX - (u32::MAX % n);
+
+    while password.len() < length {
+        let mut buf = [0u8; 4];
+        OsRng.fill_bytes(&mut buf);
+        let value = u32::from_le_bytes(buf);
+        if value >= limit {
+            continue; // Reject the biased tail and draw again.
+        }
+        let idx = (value % n) as usize;
         password.push(charset[idx]);
     }
 
     String::from_utf8(password).unwrap_or_else(|_| "GeneratedPass123!".to_string())
 }
 
-/// Generates an EFF Diceware passphrase with random words separated by a delimiter.
+/// Generates a passphrase from the shared EFF wordlist.
+///
+/// Words are drawn **without replacement**, so a 5-word passphrase always
+/// contains 5 distinct words (matching `src/lib/generate.ts`). The trailing
+/// `!<number>` suffix is fixed punctuation plus a uniform two-digit draw;
+/// it is part of the generated secret and is counted by
+/// [`passphrase_entropy`].
 pub fn generate_passphrase(word_count: usize, separator: &str, capitalize: bool) -> String {
-    let count = word_count.clamp(3, 10);
-    let mut words = Vec::with_capacity(count);
+    let count = word_count.clamp(3, 12).min(WORDLIST_LEN);
+    let mut words: Vec<String> = Vec::with_capacity(count);
 
-    for _ in 0..count {
-        if let Some(word) = DICEWARE_WORDLIST.choose(&mut OsRng) {
-            let mut w = word.to_string();
-            if capitalize {
-                let mut chars = w.chars();
-                if let Some(first) = chars.next() {
-                    w = format!("{}{}", first.to_uppercase(), chars.as_str());
-                }
+    for word in WORDLIST.as_slice().choose_multiple(&mut OsRng, count) {
+        let mut w = (*word).to_string();
+        if capitalize {
+            let mut chars = w.chars();
+            if let Some(first) = chars.next() {
+                w = format!("{}{}", first.to_uppercase(), chars.as_str());
             }
-            words.push(w);
         }
+        words.push(w);
     }
 
-    words.join(separator)
+    let suffix = OsRng.gen_range(0..100u32);
+    format!("{}!{}", words.join(separator), suffix)
 }
 
-/// Calculates Shannon entropy in bits for a given password.
+/// Reports the *actual* entropy of a generated passphrase, in bits.
+///
+/// The previous reporting assumed `k * log2(N)` even though words could
+/// repeat and an uncounted `!<digit>` suffix was appended. This mirrors the
+/// TypeScript implementation: a without-replacement draw has
+/// `log2(N!/(N-k)!)` bits, and the 100-valued suffix adds `log2(100)`.
+pub fn passphrase_entropy(word_count: usize) -> f64 {
+    let count = word_count.max(1);
+    if count > WORDLIST_LEN {
+        return (WORDLIST_LEN as f64) * (WORDLIST_LEN as f64).log2();
+    }
+
+    let mut without_replacement = 0.0f64;
+    for i in 0..count {
+        without_replacement += ((WORDLIST_LEN - i) as f64).log2();
+    }
+
+    let suffix_bits = 100.0f64.log2();
+    ((without_replacement + suffix_bits) * 100.0).round() / 100.0
+}
+
+/// Calculates the estimated entropy in bits for a given password.
+///
+/// SECURITY (V-09): the previous implementation computed
+/// `len * log2(pool_size)` where `pool_size` was derived from the *character
+/// classes present*. That treats every character as an independent uniform
+/// draw from the whole pool, which badly overstates the entropy of
+/// repetitive passwords: `"aaaaaaaaaaaa"` (12 chars) was reported as
+/// `12 * log2(26) = 56.9` bits when its real entropy is ~0.
+///
+/// The estimate below uses the **observed** character set, so the pool is
+/// exactly the set of characters that actually occur, and additionally
+/// applies penalties for the structural patterns that dominate real-world
+/// password reuse:
+///
+/// * **Repetition penalty** — a password built from fewer distinct
+///   characters than it has positions is discounted.
+/// * **Sequence penalty** — runs of adjacent characters (`abc`, `123`, `xyz`)
+///   and repeated blocks (`abcabc`) are discounted.
+/// * **Dictionary penalty** — passwords that are (or contain) a common word
+///   are discounted towards the size of that word rather than the full
+///   character pool.
+///
+/// The result is a *conservative* estimate: it never claims more entropy than
+/// the password plausibly has.
 pub fn calculate_entropy(password: &str) -> f64 {
     if password.is_empty() {
         return 0.0;
     }
 
-    let mut pool_size = 0usize;
-    let has_lower = password.chars().any(|c| c.is_ascii_lowercase());
-    let has_upper = password.chars().any(|c| c.is_ascii_uppercase());
-    let has_digit = password.chars().any(|c| c.is_ascii_digit());
-    let has_symbol = password.chars().any(|c| !c.is_alphanumeric());
-
-    if has_lower {
-        pool_size += 26;
-    }
-    if has_upper {
-        pool_size += 26;
-    }
-    if has_digit {
-        pool_size += 10;
-    }
-    if has_symbol {
-        pool_size += 32;
+    let chars: Vec<char> = password.chars().collect();
+    let len = chars.len();
+    if len == 0 {
+        return 0.0;
     }
 
-    if pool_size == 0 {
-        pool_size = 26;
+    // Observed character pool: the set of characters that actually occur.
+    let mut seen = std::collections::HashSet::new();
+    for &c in &chars {
+        seen.insert(c);
+    }
+    let distinct = seen.len();
+
+    // Base entropy from the observed pool.
+    let mut entropy = (len as f64) * (distinct as f64).log2();
+
+    // Penalty 1 — repetition: if the password uses far fewer distinct
+    // characters than it has positions, the effective pool is the distinct set
+    // and the length contributes far less than `len * log2(distinct)`.
+    // A password of `n` distinct characters repeated is essentially `distinct`
+    // worth of entropy, so scale down accordingly.
+    if distinct < len {
+        let repetition_ratio = distinct as f64 / len as f64;
+        entropy *= 0.25 + 0.75 * repetition_ratio;
     }
 
-    (password.len() as f64) * (pool_size as f64).log2()
+    // Penalty 2 — sequential runs (e.g. "abcdef", "123456", "qwerty").
+    let mut seq_runs = 0usize;
+    for w in chars.windows(3) {
+        let a = w[0] as u32;
+        let b = w[1] as u32;
+        let c = w[2] as u32;
+        let ascending = b == a + 1 && c == b + 1;
+        let descending = b + 1 == a && b + 1 == c;
+        if ascending || descending {
+            seq_runs += 1;
+        }
+    }
+    if seq_runs > 0 {
+        let seq_ratio = seq_runs as f64 / (len.saturating_sub(2).max(1)) as f64;
+        entropy *= 1.0 - 0.5 * seq_ratio.min(1.0);
+    }
+
+    // Penalty 3 — repeated blocks (e.g. "abcabcabc").
+    for block in [2usize, 3, 4] {
+        if len >= block * 2 && len.is_multiple_of(block) {
+            let mut is_repeating = true;
+            for i in 0..(len / block) {
+                for j in 0..block {
+                    if chars[i * block + j] != chars[j] {
+                        is_repeating = false;
+                        break;
+                    }
+                }
+                if !is_repeating {
+                    break;
+                }
+            }
+            if is_repeating {
+                entropy *= 0.4;
+                break;
+            }
+        }
+    }
+
+    // Penalty 4 — common-word / dictionary content. If the password is
+    // substantially made of a well-known word, cap the estimate at what that
+    // word could contribute.
+    if let Some(cap) = dictionary_entropy_cap(&chars) {
+        if entropy > cap {
+            entropy = cap;
+        }
+    }
+
+    entropy.max(0.0)
 }
 
+/// If the password contains a common word as its dominant component, returns
+/// an upper bound on its entropy (roughly the bits needed to guess that word
+/// plus a small allowance for the surrounding characters).
+fn dictionary_entropy_cap(chars: &[char]) -> Option<f64> {
+    let lower: String = chars.iter().collect::<String>().to_lowercase();
+
+    for word in COMMON_WORDS {
+        if word.len() < 3 {
+            continue;
+        }
+        if lower.contains(word) {
+            // Roughly log2(number of common words) for the word itself, plus
+            // 4 bits per remaining character.
+            let word_bits = 12.0f64; // ~4000 common words
+            let extra = (lower.len().saturating_sub(word.len())) as f64 * 4.0;
+            return Some(word_bits + extra);
+        }
+    }
+    None
+}
+
+/// A compact list of extremely common password words used for the
+/// dictionary entropy cap. This is intentionally small and offline.
+const COMMON_WORDS: &[&str] = &[
+    "password",
+    "admin",
+    "welcome",
+    "letmein",
+    "login",
+    "master",
+    "shadow",
+    "sunshine",
+    "princess",
+    "football",
+    "dragon",
+    "monkey",
+    "superman",
+    "batman",
+    "trustno1",
+    "iloveyou",
+    "starwars",
+    "whatever",
+    "qwerty",
+    "abc123",
+    "changeme",
+    "secret",
+    "computer",
+    "internet",
+    "service",
+    "google",
+    "facebook",
+    "instagram",
+    "linkedin",
+];
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::collections::HashSet;
+
+    #[test]
+    fn passphrase_entropy_uses_the_real_wordlist() {
+        assert!(passphrase_entropy(5) >= 64.0, "5 words must clear 64 bits");
+        assert!(passphrase_entropy(6) >= 77.0, "6 words must clear 77 bits");
+        assert!(passphrase_entropy(8) > passphrase_entropy(5));
+        assert_eq!(passphrase_entropy(0), passphrase_entropy(1));
+    }
+
+    #[test]
+    fn passphrase_words_are_distinct_and_come_from_the_shared_list() {
+        let phrase = generate_passphrase(6, "-", false);
+        let (body, suffix) = phrase.rsplit_once('!').expect("the numeric suffix");
+        assert!(
+            suffix
+                .parse::<u32>()
+                .map(|value| value < 100)
+                .unwrap_or(false),
+            "suffix must be a uniform 0..99 value: {suffix}"
+        );
+
+        let words: Vec<&str> = body.split('-').collect();
+        assert_eq!(words.len(), 6);
+        let mut seen = HashSet::new();
+        for word in words {
+            assert!(WORDLIST.contains(&word), "word not in the EFF list: {word}");
+            assert!(seen.insert(word), "word drawn twice: {word}");
+        }
+    }
+}

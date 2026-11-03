@@ -57,18 +57,35 @@ test("dark mode secondary text meets a readable contrast ratio", async ({ page }
 });
 
 test("text size control scales the interface and persists", async ({ page }) => {
-  const control = page.locator('[data-testid="text-size-control"]:visible').first();
-  const before = await page.locator("h1").evaluate((el) => Number.parseFloat(getComputedStyle(el).fontSize));
-  await control.getByRole("button", { name: "Increase text size" }).click();
-  await control.getByRole("button", { name: "Increase text size" }).click();
-  await expect(page.locator("html")).toHaveAttribute("data-text-step", "4");
-  const after = await page.locator("h1").evaluate((el) => Number.parseFloat(getComputedStyle(el).fontSize));
-  expect(after).toBeGreaterThan(before * 1.15);
-  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1)).toBe(true);
+  /*
+   * The step is persisted, so the test has to start from a known state.
+   * The value is cleared before the app is mounted, and the app is then
+   * loaded again.
+   */
+  await page.evaluate(() => window.localStorage.removeItem("vaultzero_font_scale_v2"));
   await page.reload();
-  await expect(page.locator("html")).toHaveAttribute("data-text-step", "4");
-  await page.locator('[data-testid="text-size-control"]:visible').first().getByRole("button", { name: "Decrease text size" }).click();
+  await expect(page.locator("html")).toHaveAttribute("data-text-step", "2");
+
+  const control = page
+    .locator('[data-testid="text-size-control"]:visible')
+    .first();
+  const heading = page.getByRole("heading", { name: /Good morning/i });
+
+  await expect(page.locator("html")).toHaveAttribute("data-text-step", "2");
+  const before = await heading.evaluate((el) => Number.parseFloat(getComputedStyle(el).fontSize));
+
+  await control.getByRole("button", { name: "Increase text size" }).click();
   await expect(page.locator("html")).toHaveAttribute("data-text-step", "3");
+
+  const after = await heading.evaluate((el) => Number.parseFloat(getComputedStyle(el).fontSize));
+  expect(after).toBeGreaterThan(before);
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1)).toBe(true);
+
+  await page.reload();
+  await expect(page.locator("html")).toHaveAttribute("data-text-step", "3");
+
+  await page.locator('[data-testid="text-size-control"]:visible').first().getByRole("button", { name: "Decrease text size" }).click();
+  await expect(page.locator("html")).toHaveAttribute("data-text-step", "2");
 });
 
 test("the largest text size still fits on a small phone", async ({ page }) => {

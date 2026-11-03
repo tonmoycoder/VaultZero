@@ -18,8 +18,8 @@ impl SecureShredder {
             return Ok(());
         }
 
-        let metadata = std::fs::metadata(p)
-            .map_err(|e| crate::errors::VaultError::Storage(e.to_string()))?;
+        let metadata =
+            std::fs::metadata(p).map_err(|e| crate::errors::VaultError::Storage(e.to_string()))?;
         let file_size = metadata.len();
 
         let mut file = OpenOptions::new()
@@ -50,8 +50,7 @@ impl SecureShredder {
             .map_err(|e| crate::errors::VaultError::Storage(e.to_string()))?;
         drop(file);
 
-        std::fs::remove_file(p)
-            .map_err(|e| crate::errors::VaultError::Storage(e.to_string()))?;
+        std::fs::remove_file(p).map_err(|e| crate::errors::VaultError::Storage(e.to_string()))?;
 
         Ok(())
     }
@@ -100,4 +99,3 @@ impl SecureShredder {
         Ok(())
     }
 }
-

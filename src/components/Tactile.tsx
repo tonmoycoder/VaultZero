@@ -1,5 +1,12 @@
 import { animate, MotionConfig, type AnimationPlaybackControls } from "framer-motion";
 import { createContext, useContext, useEffect, type ReactNode } from "react";
+import {
+  pressSpring,
+  reportInteractionSpeed,
+  speedFromSamples,
+  speedLabel,
+  stretchFromDelta,
+} from "../lib/gesturePhysics";
 import { spring, useMediaQuery } from "../lib/motion";
 
 const MotionSettings = createContext({ reduceMotion: false });
@@ -11,6 +18,16 @@ export function haptic(pattern: number | number[] = 7) {
   try { navigator.vibrate(pattern); } catch { /* Optional device support. */ }
 }
 export const hapticSuccess = () => haptic([8, 24, 12]);
+
+type PressSample = {
+  x: number;
+  y: number;
+  t: number;
+  lastX: number;
+  lastY: number;
+  lastT: number;
+  peakSpeed: number;
+};
 
 export default function TactileProvider({ press, haptics, children }: {
   press: boolean;
@@ -29,27 +46,40 @@ export default function TactileProvider({ press, haptics, children }: {
     const animations = new Map<HTMLElement, AnimationPlaybackControls>();
     const ripples = new Set<HTMLElement>();
     let pressed: HTMLElement | null = null;
+    let sample: PressSample | null = null;
+
     const targetFor = (origin: EventTarget | null) => {
       if (!(origin instanceof Element)) return null;
       const target = origin.closest<HTMLElement>('button, [role="button"], a[href]');
       if (!target || target.matches(':disabled, [data-no-tactile], [aria-disabled="true"]')) return null;
       return target;
     };
-    const scaleTo = (target: HTMLElement, value: number, releasing = false) => {
+
+    /**
+     * V-58: the release spring is chosen from the measured gesture speed.
+     * A gentle press settles softly (damping 30), a fast tap keeps its
+     * momentum and overshoots (damping 16, stiffness 640). The two-value
+     * `scale` string written during a drag is replaced by this single-value
+     * animation, so the elastic stretch springs back to an undistorted 1.
+     */
+    const scaleTo = (target: HTMLElement, value: number, releasing = false, speed = 0) => {
       animations.get(target)?.stop();
       const from = Number.parseFloat(getComputedStyle(target).scale) || 1;
-      // Individual scale composes with existing hover transforms rather than replacing them.
       const controls = animate(from, value, {
-        type: "spring", stiffness: releasing ? 480 : 1050,
-        damping: releasing ? 22 : 45, mass: 0.65,
+        ...pressSpring(speed, releasing, reduceMotion),
         onUpdate: (current) => { target.style.scale = String(current); },
         onComplete: () => {
-          if (releasing) target.style.removeProperty("scale");
+          if (releasing) {
+            target.style.removeProperty("scale");
+            target.removeAttribute("data-press-speed");
+            target.removeAttribute("data-elastic-state");
+          }
           animations.delete(target);
         },
       });
       animations.set(target, controls);
     };
+
     const ripple = (target: HTMLElement, clientX?: number, clientY?: number) => {
       const rect = target.getBoundingClientRect();
       const layer = document.createElement("span");
@@ -76,18 +106,66 @@ export default function TactileProvider({ press, haptics, children }: {
       );
       animation.onfinish = () => { layer.remove(); ripples.delete(layer); };
     };
+
     const release = () => {
-      if (pressed && !reduceMotion) scaleTo(pressed, 1, true);
+      const target = pressed;
+      if (target && !reduceMotion) {
+        const travelSpeed = sample
+          ? speedFromSamples(sample.x, sample.y, sample.lastX, sample.lastY, sample.lastT - sample.t)
+          : 0;
+        const speed = Math.max(travelSpeed, sample?.peakSpeed ?? 0);
+        // Share the gesture momentum with any surface that opens on this
+        // click (modal, palette, sheet) — that is Speed-Responsive Physics.
+        reportInteractionSpeed(speed);
+        target.dataset.pressSpeed = speedLabel(speed);
+        scaleTo(target, 1, true, speed);
+      } else if (target) {
+        reportInteractionSpeed(0);
+        target.removeAttribute("data-press-speed");
+        target.removeAttribute("data-elastic-state");
+      }
       pressed = null;
+      sample = null;
     };
+
     const start = (target: HTMLElement, x?: number, y?: number) => {
       release();
       haptic(5);
       if (reduceMotion) return;
       pressed = target;
+      const now = performance.now();
+      sample = {
+        x: x ?? 0, y: y ?? 0, t: now,
+        lastX: x ?? 0, lastY: y ?? 0, lastT: now,
+        peakSpeed: 0,
+      };
       scaleTo(target, target.classList.contains("vault-card") ? 0.985 : 0.95);
       ripple(target, x, y);
     };
+
+    /**
+     * Elastic Stretch: while a control is held, pointer movement physically
+     * deforms it. The deformation is bounded and follows the drag direction;
+     * the rebound happens in `release()` through the speed-responsive spring.
+     */
+    const onPointerMove = (event: PointerEvent) => {
+      if (!pressed || !sample || reduceMotion) return;
+      const now = performance.now();
+      const delta = speedFromSamples(sample.lastX, sample.lastY, event.clientX, event.clientY, now - sample.lastT);
+      sample.peakSpeed = Math.max(sample.peakSpeed, delta);
+      sample.lastX = event.clientX;
+      sample.lastY = event.clientY;
+      sample.lastT = now;
+      const stretch = stretchFromDelta(event.clientX - sample.x, event.clientY - sample.y);
+      // Stop the press-down tween before taking ownership of `scale`, or its
+      // onUpdate would overwrite the stretch on the very next frame.
+      animations.get(pressed)?.stop();
+      animations.delete(pressed);
+      pressed.dataset.elasticState = "stretch";
+      pressed.style.scale = `${stretch.scaleX} ${stretch.scaleY}`;
+      reportInteractionSpeed(sample.peakSpeed);
+    };
+
     const onPointerDown = (event: PointerEvent) => {
       if (event.button !== 0) return;
       const target = targetFor(event.target);
@@ -102,6 +180,7 @@ export default function TactileProvider({ press, haptics, children }: {
       if (event.key === "Enter" || event.key === " ") release();
     };
     document.addEventListener("pointerdown", onPointerDown, { passive: true });
+    window.addEventListener("pointermove", onPointerMove, { passive: true });
     window.addEventListener("pointerup", release);
     window.addEventListener("pointercancel", release);
     window.addEventListener("blur", release);
@@ -109,12 +188,18 @@ export default function TactileProvider({ press, haptics, children }: {
     document.addEventListener("keyup", onKeyUp);
     return () => {
       document.removeEventListener("pointerdown", onPointerDown);
+      window.removeEventListener("pointermove", onPointerMove);
       window.removeEventListener("pointerup", release);
       window.removeEventListener("pointercancel", release);
       window.removeEventListener("blur", release);
       document.removeEventListener("keydown", onKeyDown);
       document.removeEventListener("keyup", onKeyUp);
-      animations.forEach((controls, element) => { controls.stop(); element.style.removeProperty("scale"); });
+      animations.forEach((controls, element) => {
+        controls.stop();
+        element.style.removeProperty("scale");
+        element.removeAttribute("data-press-speed");
+        element.removeAttribute("data-elastic-state");
+      });
       ripples.forEach((layer) => layer.remove());
     };
   }, [reduceMotion]);

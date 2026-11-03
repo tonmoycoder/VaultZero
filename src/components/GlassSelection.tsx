@@ -1,5 +1,5 @@
 import { motion } from "framer-motion";
-import { spring } from "../lib/motion";
+import { surfaceEntranceSpring, surfaceSpeedLabel } from "../lib/motion";
 import { useMotionSettings } from "./Tactile";
 
 export default function GlassSelection({ id = "selection", hover = false }: { id?: string; hover?: boolean }) {
@@ -10,9 +10,11 @@ export default function GlassSelection({ id = "selection", hover = false }: { id
       layoutId={id}
       className={`liquid-selection${hover ? " is-hover" : ""}`}
       initial={false}
-      transition={reduceMotion ? { duration: 0 } : spring}
+      transition={reduceMotion ? { duration: 0 } : surfaceEntranceSpring(false, "open")}
       style={{ borderRadius: "inherit" }}
       data-glass-indicator={hover ? "hover" : "selected"}
+      data-elastic="selection"
+      data-surface-speed={surfaceSpeedLabel()}
     />
   );
 }

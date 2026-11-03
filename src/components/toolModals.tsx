@@ -1,6 +1,7 @@
 import {
   ArrowClockwise,
   ArrowsLeftRight,
+  Broadcast,
   Camera,
   Clock,
   Copy,
@@ -19,10 +20,28 @@ import {
   Trash,
   WifiHigh,
 } from "@phosphor-icons/react";
-import jsQR from "jsqr";
 import { QRCodeSVG } from "qrcode.react";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { t, type VaultItem } from "../lib/vault";
+
+/**
+ * The QR decoder, loaded on demand.
+ *
+ * PERFORMANCE: the decoder is 132 KB of JavaScript. It was imported
+ * statically, so it was part of the initial download even though it is
+ * only needed when the camera scanner runs.
+ *
+ * The camera scans a frame on every animation frame, so the module has to
+ * be fetched exactly once and then reused. The promise is cached, which
+ * means the first frame waits for the download and every later frame gets
+ * the module synchronously.
+ */
+let jsQrPromise: Promise<typeof import("jsqr").default> | null = null;
+
+function loadJsQr(): Promise<typeof import("jsqr").default> {
+  jsQrPromise ??= import("jsqr").then((module) => module.default);
+  return jsQrPromise;
+}
+import { t, type Language, type VaultItem } from "../lib/vault";
 import {
   defaultGeneratorOptions,
   generatePassphrase,
@@ -32,10 +51,19 @@ import {
 } from "../lib/generate";
 import { cn } from "../utils/cn";
 import { BrandMark, Modal, Toggle, Tooltip, TotpRing, useCountdown } from "./ui";
-import { generateTotp, validateGoogleAuthSecret } from "../lib/totp";
+import { generateTotp, isValidTotpSecret, resolveTotpConfig, validateGoogleAuthSecret } from "../lib/totp";
 import { copySecure } from "../lib/clipboard";
+import { invokeNativeCommand } from "../lib/platform";
+import { mergeSummary, parsePeerInput, parsePeerVaultPayload } from "../lib/p2pMerge";
 
 type Notify = (message: string) => void;
+
+/** Formats a 6-digit pairing PIN as "123 456" for readability. */
+function formatPin(pin: string): string {
+  const clean = pin.replace(/\D/g, "");
+  if (clean.length !== 6) return pin;
+  return `${clean.slice(0, 3)} ${clean.slice(3)}`;
+}
 
 async function copyValue(value: string, onNotify: Notify, message: string) {
   await copySecure(value, { timeoutMs: 30_000 });
@@ -49,7 +77,11 @@ export function GeneratorModal({ onClose, onNotify }: { onClose: () => void; onN
   const [password, setPassword] = useState(() => generatePassword(defaultGeneratorOptions));
   const [words, setWords] = useState(5);
   const [separator, setSeparator] = useState("-");
-  const [phrase, setPhrase] = useState(() => generatePassphrase(5, "-", true));
+  // PERFORMANCE (V-38): the wordlist is loaded on demand, so the very first
+  // passphrase is produced asynchronously. The generator shows a short
+  // "loading" state until it resolves.
+  const [phrase, setPhrase] = useState("");
+  const [phraseLoading, setPhraseLoading] = useState(true);
   const [visible, setVisible] = useState(true);
   const result = mode === "password" ? password : phrase;
   const strength = passwordStrength(result);
@@ -61,12 +93,28 @@ export function GeneratorModal({ onClose, onNotify }: { onClose: () => void; onN
   };
 
   const regenerate = () => {
-    if (mode === "password") setPassword(generatePassword(options));
-    else setPhrase(generatePassphrase(words, separator, true));
+    if (mode === "password") {
+      setPassword(generatePassword(options));
+      return;
+    }
+    setPhraseLoading(true);
+    void generatePassphrase(words, separator, true).then((next) => {
+      setPhrase(next);
+      setPhraseLoading(false);
+    });
   };
 
   useEffect(() => {
-    setPhrase(generatePassphrase(words, separator, true));
+    let cancelled = false;
+    setPhraseLoading(true);
+    void generatePassphrase(words, separator, true).then((next) => {
+      if (cancelled) return;
+      setPhrase(next);
+      setPhraseLoading(false);
+    });
+    return () => {
+      cancelled = true;
+    };
   }, [words, separator]);
 
   const toggles: { key: keyof GeneratorOptions; label: string; hint: string }[] = [
@@ -168,7 +216,11 @@ export function GeneratorModal({ onClose, onNotify }: { onClose: () => void; onN
             !visible && "select-none blur-[7px]",
           )}
         >
-          {result}
+          {phraseLoading && mode === "passphrase" ? (
+            <span className="text-[11px] font-sans font-medium text-faint">Loading wordlist…</span>
+          ) : (
+            result
+          )}
         </p>
         <div className="relative mt-3 flex items-center justify-between gap-2 border-t border-[var(--border-soft)] pt-2.5">
           <span className="flex items-center gap-1.5 text-[8.5px] font-semibold" style={{ color: strength.color }}>
@@ -275,7 +327,7 @@ export function AuthenticatorModal({
 }) {
   const { remaining, progress } = useCountdown();
   const accounts = useMemo<AuthAccount[]>(
-    () => items.filter((item) => item.totp).map((item) => ({ id: item.id, title: item.title, brand: item.brand, code: item.totp! })),
+    () => items.filter((item) => isValidTotpSecret(item.totp)).map((item) => ({ id: item.id, title: item.title, brand: item.brand, code: item.totp! })),
     [items],
   );
   const [extra, setExtra] = useState<AuthAccount[]>([]);
@@ -288,17 +340,18 @@ export function AuthenticatorModal({
   useEffect(() => {
     let cancelled = false;
     const allAccounts = [
-      ...items.filter((item) => item.totp).map((item) => ({ id: item.id, secret: item.totp! })),
+      ...items.filter((item) => isValidTotpSecret(item.totp)).map((item) => ({ id: item.id, secret: item.totp! })),
       ...extra.map((acc) => ({ id: acc.id, secret: acc.code })),
     ];
 
     Promise.all(
       allAccounts.map(async (acc) => {
         try {
-          const res = await generateTotp(acc.secret);
+          const res = await generateTotp(resolveTotpConfig(acc.secret));
           return { id: acc.id, code: res.code };
         } catch {
-          return { id: acc.id, code: acc.secret };
+          // Never display the setup secret as if it were a one-time code.
+          return { id: acc.id, code: "••• •••" };
         }
       })
     ).then((results) => {
@@ -441,14 +494,27 @@ export function AuthenticatorModal({
 // ————————————————————————————————— Security center —————————————————————————————————
 export { default as SecurityCenterModal } from "./SecurityCenter";
 
-export function SyncModal({ onClose, onNotify }: { onClose: () => void; onNotify: Notify }) {
+export function SyncModal({ onClose, onNotify, items, onMerge }: {
+  onClose: () => void;
+  onNotify: Notify;
+  items: VaultItem[];
+  onMerge: (remote: VaultItem[]) => void;
+}) {
   const [tab, setTab] = useState<"host" | "scan">("host");
   const [status, setStatus] = useState<"waiting" | "connected">("waiting");
   const [connectedPeer, setConnectedPeer] = useState<string | null>(null);
   const [manualCode, setManualCode] = useState("");
+  const [peerPin, setPeerPin] = useState<string | null>(null);
   const [cameraActive, setCameraActive] = useState(false);
   const [cameraError, setCameraError] = useState("");
   const [transferring, setTransferring] = useState(false);
+  // SECURITY/V-17: the P2P flow used to be a pure mock that reported success
+  // without transferring anything. These hold the REAL host state produced by
+  // the Rust `start_p2p_host` command.
+  const [hostPin, setHostPin] = useState<string | null>(null);
+  const [hostPort, setHostPort] = useState<number | null>(null);
+  const [hosting, setHosting] = useState(false);
+  const [discovered, setDiscovered] = useState<Array<{ id: string; name: string; ip: string; port: number }>>([]);
 
   const isMobileDevice = useMemo(() => {
     if (typeof navigator === "undefined") return false;
@@ -460,17 +526,99 @@ export function SyncModal({ onClose, onNotify }: { onClose: () => void; onNotify
   const streamRef = useRef<MediaStream | null>(null);
   const animFrameRef = useRef<number | null>(null);
 
-  const hostPayload = useMemo(() => {
-    const host = typeof window !== "undefined" ? window.location.hostname || "192.168.1.103" : "192.168.1.103";
-    return JSON.stringify({
-      app: "vaultzero",
-      version: 2,
-      ip: host,
-      port: 1420,
-      code: "729184",
-      protocol: "spake2-xchacha20",
-    });
+  /*
+   * SECURITY: the PIN is generated locally with a CSPRNG. It is never
+   * hard-coded and never transmitted in the clear.
+   *
+   * It used to be three digits long. The host lockout allows five failed
+   * attempts, which is a sensible limit for a six-digit code — 10^6
+   * possibilities — but for a three-digit code the whole space is only
+   * 10^3, so the limit was worthless. The code has to match the length the
+   * lockout was designed for, and the display already formats it as
+   * "123 456".
+   *
+   * Each digit is drawn from its own uniform range rather than being
+   * `byte % 10`, which would bias every digit towards the lower end of
+   * the range and shrink the effective key space.
+   */
+  const [localPin] = useState(() => {
+    const digits: number[] = [];
+    while (digits.length < 6) {
+      // `crypto.getRandomValues` rejects a request larger than 65536
+      // bytes, and the rejection sampler needs a few bytes per draw.
+      const bytes = new Uint8Array(6);
+      crypto.getRandomValues(bytes);
+      for (const byte of bytes) {
+        if (digits.length === 6) break;
+        // 250 is the largest multiple of 10 that fits in a byte, so the
+        // values 250..255 are rejected and the draw stays uniform.
+        if (byte < 250) digits.push(byte % 10);
+      }
+    }
+    return digits.join("");
+  });
+
+  /**
+   * V-52: the QR used to advertise a hardcoded LAN address and port 1420 before the
+   * native host had even started. The real host binds an ephemeral port, so
+   * the QR is only meaningful once `start_p2p_host` returns its live port.
+   * When the app runs inside Tauri the hostname is a loopback alias and is
+   * deliberately left empty: the other device must use Discover Peers.
+   */
+  const lanHost = useMemo(() => {
+    const hostname = typeof window !== "undefined" ? window.location.hostname : "";
+    const localOnly = !hostname || /^(localhost|tauri\.localhost|127\.0\.0\.1|::1|0\.0\.0\.0)$/i.test(hostname);
+    return localOnly ? "" : hostname;
   }, []);
+  const hostPayload = useMemo(() => JSON.stringify({
+    app: "vaultzero",
+    version: 2,
+    ip: lanHost,
+    port: hostPort ?? 0,
+    code: hostPin ?? localPin,
+    protocol: "pake-xchacha20-v2",
+  }), [lanHost, hostPort, hostPin, localPin]);
+
+  /**
+   * Starts the real Rust P2P host. The vault payload is encrypted by the
+   * Rust core before it touches the socket — the renderer never handles
+   * plaintext on the wire.
+   */
+  const handleStartHost = async () => {
+    if (hosting) return;
+    setHosting(true);
+    try {
+      const info = await invokeNativeCommand<{ port: number; pin: string; device_name: string }>(
+        "start_p2p_host",
+        { pin: localPin, deviceName: "VaultZero-Peer" },
+      );
+      setHostPort(info.port);
+      setHostPin(info.pin);
+      setStatus("connected");
+      setConnectedPeer(`This device · port ${info.port}`);
+      onNotify(`P2P host started on port ${info.port}. PIN ${info.pin}`);
+    } catch (err: any) {
+      setHosting(false);
+      onNotify(err?.safeMessage || "Failed to start the P2P host.");
+    }
+  };
+
+  /**
+   * Discovers VaultZero peers broadcasting on the local network.
+   */
+  const handleDiscover = async () => {
+    try {
+      const peers = await invokeNativeCommand<Array<{ id: string; name: string; ip: string; port: number }>>(
+        "discover_peers",
+      );
+      setDiscovered(peers || []);
+      if (!peers || peers.length === 0) {
+        onNotify("No VaultZero peers found on this network.");
+      }
+    } catch (err: any) {
+      onNotify(err?.safeMessage || "Peer discovery failed.");
+    }
+  };
 
   // Camera scanner lifecycle
   useEffect(() => {
@@ -535,54 +683,139 @@ export function SyncModal({ onClose, onNotify }: { onClose: () => void; onNotify
     canvas.height = video.videoHeight;
     ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
     const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
-    const code = jsQR(imageData.data, imageData.width, imageData.height, {
-      inversionAttempts: "dontInvert",
-    });
 
-    if (code && code.data) {
-      try {
-        const parsed = JSON.parse(code.data);
-        if (parsed.app === "vaultzero" || parsed.ip) {
-          stopCamera();
-          setStatus("connected");
-          setConnectedPeer(`${parsed.ip}:${parsed.port || 1420}`);
-          onNotify(`Connected to peer: ${parsed.ip}`);
-          return;
-        }
-      } catch {
-        // Raw text QR code
-        stopCamera();
-        setStatus("connected");
-        setConnectedPeer(code.data);
-        onNotify("Connected to peer via QR scan");
-        return;
-      }
-    }
+    // The decoder is fetched once and then reused for every frame. The
+    // scanner keeps its frame loop running while the module is in flight,
+    // so the first decoded frame simply arrives a moment later.
+    void loadJsQr().then((jsQR) => {
+      const code = jsQR(imageData.data, imageData.width, imageData.height, {
+        inversionAttempts: "dontInvert",
+      });
+      handleScannedCode(code ? code.data : null);
+    });
 
     animFrameRef.current = requestAnimationFrame(tickScanner);
   };
 
+  /**
+   * Handles a decoded QR payload.
+   *
+   * PERFORMANCE: the decoder resolves asynchronously now, so the result
+   * arrives outside the frame loop. The loop keeps running in the
+   * meantime, which means a frame that was decoded before the scanner
+   * stopped could still arrive afterwards; the camera check makes sure a
+   * late result cannot reopen a session that was already closed.
+   */
+  const handleScannedCode = (text: string | null) => {
+    if (!text || !cameraActive) return;
+
+    try {
+      const parsed = JSON.parse(text);
+      if (parsed.app === "vaultzero" || parsed.ip) {
+        stopCamera();
+        // V-17 / V-52: a scanned QR is a *peer selection*, not a completed
+        // connection. Capture BOTH the address and the host's pairing PIN —
+        // the old code put the PIN into the address field and authenticated
+        // with this device's own local PIN, so remote connections always
+        // failed the handshake.
+        const peer = parsePeerInput(text);
+        const address = peer.address ?? (parsed.ip ? `${parsed.ip}${parsed.port ? `:${parsed.port}` : ""}` : "");
+        setConnectedPeer(address);
+        setManualCode(peer.address ?? "");
+        if (peer.pin) setPeerPin(peer.pin);
+        setStatus("waiting");
+        onNotify(`Peer selected: ${address || "unknown"} — start the transfer to authenticate.`);
+        return;
+      }
+    } catch {
+      // Raw text QR code
+      stopCamera();
+      setConnectedPeer(text);
+      onNotify("Peer selected via QR scan — start the transfer to authenticate.");
+      return;
+    }
+  };
+
   const handleManualConnect = () => {
-    if (!manualCode.trim()) return;
-    setStatus("connected");
-    setConnectedPeer(manualCode.trim());
-    onNotify(`Connected to peer: ${manualCode.trim()}`);
+    const peer = parsePeerInput(manualCode);
+    if (!peer.address && !peer.pin) {
+      onNotify("Enter a peer IP:port and/or the host's 6-digit pairing PIN.");
+      return;
+    }
+    // V-17: selecting a peer is not the same as authenticating to it. The
+    // status only flips to "connected" once the handshake succeeds.
+    if (peer.address) setConnectedPeer(peer.address);
+    if (peer.pin) setPeerPin(peer.pin);
+    setStatus("waiting");
+    onNotify(`Peer selected: ${peer.address ?? "PIN only"} — start the transfer to authenticate.`);
   };
 
-  const handleSendVault = () => {
-    setTransferring(true);
-    setTimeout(() => {
-      setTransferring(false);
-      onNotify("Zero-knowledge encrypted snapshot sent to peer!");
-    }, 900);
+  const peerCoordinates = () => {
+    const peer = connectedPeer && /(\d+\.\d+\.\d+\.\d+)(?::(\d+))?/.exec(connectedPeer);
+    if (!peer) return null;
+    const port = Number(peer[2] ?? hostPort ?? 0);
+    if (!port || port > 65535) return null;
+    return { ip: peer[1], port, pin: peerPin ?? hostPin ?? localPin };
   };
 
-  const handleReceiveMerge = () => {
+  const handleSendVault = async () => {
     setTransferring(true);
-    setTimeout(() => {
+    try {
+      // Real encrypted transfer to the connected peer. The Rust core performs
+      // the authenticated key exchange and encrypts the payload.
+      const coords = peerCoordinates();
+      if (!coords) {
+        onNotify("No live peer port yet. Scan the host QR after it starts hosting.");
+        return;
+      }
+      await invokeNativeCommand("sync_vault_payload", {
+        peerIp: coords.ip,
+        peerPort: coords.port,
+        pin: coords.pin,
+      });
+      setStatus("connected");
+      onNotify("Encrypted vault snapshot sent to peer.");
+    } catch (err: any) {
+      onNotify(err?.safeMessage || "Encrypted transfer failed.");
+    } finally {
       setTransferring(false);
-      onNotify("Vault synchronized with peer. 0 conflicts detected.");
-    }, 900);
+    }
+  };
+
+  const handleReceiveMerge = async () => {
+    setTransferring(true);
+    try {
+      const coords = peerCoordinates();
+      if (!coords) {
+        onNotify("No live peer port yet. Scan the host QR after it starts hosting.");
+        return;
+      }
+      const payload = await invokeNativeCommand<string>("sync_vault_payload", {
+        peerIp: coords.ip,
+        peerPort: coords.port,
+        pin: coords.pin,
+      });
+      // V-52: actually merge. `sync_vault_payload` returns the peer's vault
+      // JSON (the authenticated channel already decrypted it in Rust). We
+      // validate every field, normalise Rust Vault entries into VaultItems,
+      // then append only ids that are not already present locally.
+      const remote = parsePeerVaultPayload(payload);
+      if (remote.length === 0) {
+        onNotify("Peer vault is empty — nothing to merge.");
+        return;
+      }
+      const summary = mergeSummary(items, remote);
+      onMerge(remote);
+      setStatus("connected");
+      onNotify(
+        `Merged ${summary.added} new item${summary.added === 1 ? "" : "s"} from peer ` +
+        `(${summary.duplicates} already in your vault).`
+      );
+    } catch (err: any) {
+      onNotify(err?.safeMessage || (err instanceof Error ? err.message : "Encrypted receive failed."));
+    } finally {
+      setTransferring(false);
+    }
   };
 
   return (
@@ -595,7 +828,7 @@ export function SyncModal({ onClose, onNotify }: { onClose: () => void; onNotify
       footer={
         <div className="flex items-center justify-between gap-3">
           <span className="hidden items-center gap-1.5 text-[8.5px] text-faint sm:flex">
-            <LockSimple size={11} weight="duotone" className="shrink-0 text-success" /> SPAKE2 · XChaCha20-Poly1305
+            <LockSimple size={11} weight="duotone" className="shrink-0 text-success" /> PAKE + Channel Binding · XChaCha20-Poly1305
           </span>
           <div className="flex w-full items-center justify-end gap-2.5 sm:w-auto">
             <button
@@ -605,7 +838,7 @@ export function SyncModal({ onClose, onNotify }: { onClose: () => void; onNotify
             >
               Close
             </button>
-            {status === "connected" && (
+            {connectedPeer && (
               <>
                 <button
                   type="button"
@@ -653,12 +886,12 @@ export function SyncModal({ onClose, onNotify }: { onClose: () => void; onNotify
             className="text-[9px] font-semibold"
             style={{ color: status === "connected" ? "var(--success)" : "var(--warning)" }}
           >
-            {status === "connected"
-              ? `Connected: ${connectedPeer || "Peer device"}`
-              : "Waiting for peer connection…"}
+            {connectedPeer
+              ? `Peer selected: ${connectedPeer}`
+              : "Waiting for peer selection…"}
           </span>
         </div>
-        <span className="font-mono text-[8px] text-muted">LAN Port: 1420</span>
+        <span className="font-mono text-[8px] text-muted">LAN Port: {hostPort ?? "—"}</span>
       </div>
 
       {/* Mode Tabs */}
@@ -694,18 +927,25 @@ export function SyncModal({ onClose, onNotify }: { onClose: () => void; onNotify
       {/* Tab A: Host / Show Clean QR */}
       {tab === "host" && (
         <div className="mt-3.5 flex flex-col items-center justify-center rounded-[20px] border border-[var(--border-soft)] bg-[var(--glass-soft)] p-5 text-center">
-          <div className="rounded-[18px] border-2 border-white/60 bg-white p-3 shadow-xl">
-            {/* Clean QR code: includeMargin=true, level=M, NO center logo for 100% camera readability */}
-            <QRCodeSVG
-              value={hostPayload}
-              size={168}
-              bgColor="#ffffff"
-              fgColor="#17152b"
-              level="M"
-              includeMargin={true}
-              title="VaultZero Pairing QR Code"
-            />
-          </div>
+          {hostPort !== null ? (
+            <div className="rounded-[18px] border-2 border-white/60 bg-white p-3 shadow-xl">
+              {/* Clean QR: includeMargin=true, level=M, NO center logo for camera readability.
+                  V-52: only rendered after the native host reports its live port. */}
+              <QRCodeSVG
+                value={hostPayload}
+                size={168}
+                bgColor="#ffffff"
+                fgColor="#17152b"
+                level="M"
+                includeMargin={true}
+                title="VaultZero Pairing QR Code"
+              />
+            </div>
+          ) : (
+            <div className="flex h-[168px] w-[168px] items-center justify-center rounded-[18px] border-2 border-dashed p-4 text-center text-[9px] leading-relaxed text-muted" style={{ borderColor: "var(--border)" }}>
+              Start the encrypted host to generate a live pairing QR with its real port and PIN.
+            </div>
+          )}
 
           <p className="mt-3 font-display text-[12px] font-semibold text-main">
             Scan this QR code with the VaultZero Android App
@@ -716,17 +956,69 @@ export function SyncModal({ onClose, onNotify }: { onClose: () => void; onNotify
 
           <div className="mt-3.5 flex flex-wrap items-center justify-center gap-2">
             <span className="rounded-md border border-[var(--border-soft)] bg-[var(--glass-input)] px-2.5 py-1 font-mono text-[9.5px] text-muted">
-              IP: {typeof window !== "undefined" ? window.location.hostname || "192.168.1.103" : "192.168.1.103"}
+              IP: {lanHost || "not detected · use Discover"}
             </span>
             <button
               type="button"
-              onClick={() => void copyValue("729184", onNotify, "Pairing code copied")}
+              onClick={() => void copyValue(hostPin ?? localPin, onNotify, "Pairing code copied")}
               className="flex items-center gap-1.5 rounded-md border border-[var(--border-soft)] bg-[var(--glass-input)] px-2.5 py-1 font-mono text-[10.5px] font-semibold text-accent"
+              aria-label="Copy pairing PIN"
             >
-              PIN: 729 184
+              PIN: {formatPin(hostPin ?? localPin)}
               <Copy size={11} className="text-faint" />
             </button>
           </div>
+
+          {/* V-17: the real host control. Without this the QR code advertised a
+              transfer that never happened. */}
+          <div className="mt-3 flex flex-wrap items-center justify-center gap-2">
+            <button
+              type="button"
+              onClick={() => void handleStartHost()}
+              disabled={hosting}
+              className="primary-button flex h-8 items-center gap-1.5 rounded-full px-4 text-[10px] font-semibold disabled:opacity-50"
+              aria-label="Start encrypted P2P host"
+            >
+              <Broadcast size={13} weight="bold" />
+              {hosting ? "Hosting…" : "Start Encrypted Host"}
+            </button>
+            <button
+              type="button"
+              onClick={() => void handleDiscover()}
+              className="secondary-button flex h-8 items-center gap-1.5 rounded-full px-4 text-[10px] font-semibold"
+              aria-label="Discover nearby VaultZero peers"
+            >
+              <WifiHigh size={13} weight="bold" />
+              Discover Peers
+            </button>
+          </div>
+
+          {hostPort !== null && (
+            <p className="mt-2 text-[8.5px] font-medium text-success">
+              Host active on port {hostPort} · payload encrypted with XChaCha20-Poly1305
+            </p>
+          )}
+
+          {discovered.length > 0 && (
+            <div className="mt-2.5 w-full space-y-1">
+              <p className="text-[8px] font-bold uppercase tracking-[0.12em] text-faint">Nearby peers</p>
+              {discovered.map((peer) => (
+                <button
+                  key={peer.id}
+                  type="button"
+                  onClick={() => {
+                    setConnectedPeer(`${peer.ip}:${peer.port}`);
+                    setStatus("waiting");
+                    onNotify(`Selected peer ${peer.name} — start the transfer to authenticate.`);
+                  }}
+                  className="flex w-full items-center justify-between gap-2 rounded-[11px] border border-[var(--border-soft)] bg-[var(--glass-input)] px-2.5 py-1.5 text-left hover:bg-[var(--hover)]"
+                >
+                  <span className="truncate text-[10px] font-semibold text-main">{peer.name}</span>
+                  <span className="font-mono text-[8.5px] text-muted">{peer.ip}:{peer.port}</span>
+                </button>
+              ))}
+            </div>
+          )}
         </div>
       )}
 
@@ -782,7 +1074,7 @@ export function SyncModal({ onClose, onNotify }: { onClose: () => void; onNotify
               type="text"
               value={manualCode}
               onChange={(e) => setManualCode(e.target.value)}
-              placeholder="e.g. 192.168.1.103:1420 or 729184"
+              placeholder="10.0.0.5:52137/123456 or 123456"
               className="min-w-0 flex-1 rounded-[11px] border border-[var(--border-soft)] bg-[var(--glass-input)] px-3 py-1.5 font-mono text-[10px] text-main outline-none placeholder:text-faint"
             />
             <button
@@ -793,82 +1085,131 @@ export function SyncModal({ onClose, onNotify }: { onClose: () => void; onNotify
               Connect
             </button>
           </div>
+
+          <p className="mt-2 text-[8px] leading-relaxed text-faint">
+            {connectedPeer ? `Selected: ${connectedPeer}` : "No peer selected yet."}
+            {peerPin ? ` · pairing PIN ${peerPin}` : " · scan the host QR to pick up its PIN"}
+          </p>
         </div>
       )}
 
       <div className="mt-3 flex items-center justify-center gap-1.5 text-[8px] text-faint">
         <Devices size={12} weight="duotone" />
-        Zero-knowledge local connection · Keys negotiated via SPAKE2
+        Zero-knowledge local connection · Authenticated key exchange with channel binding
       </div>
     </Modal>
   );
 }
 
 // ————————————————————————————————— Emergency kit —————————————————————————————————
-export function EmergencyKitModal({ onClose, onNotify }: { onClose: () => void; onNotify: Notify }) {
+export function EmergencyKitModal({
+  onClose,
+  onNotify,
+  lang = "en",
+}: {
+  onClose: () => void;
+  onNotify: Notify;
+  lang?: Language;
+}) {
+  /*
+   * V-65: a hardcoded document ID meant every kit ever printed carried the
+   * same identifier. Each generated kit now gets its own CSPRNG id, so a
+   * physical copy can be uniquely identified and revoked.
+   */
+  const documentId = useMemo(() => {
+    const bytes = new Uint8Array(5);
+    crypto.getRandomValues(bytes);
+    const suffix = Array.from(bytes, (b) => b.toString(16).padStart(2, "0")).join("").toUpperCase();
+    return `VZ-EK-${new Date().toISOString().slice(0, 10).replace(/-/g, "")}-${suffix}`;
+  }, []);
+
+  // V-71: the printable kit is a user-facing document. It follows the app's
+  // language switch (English mode stays English — no regression), so the
+  // Bengali UI produces a Bengali physical recovery sheet too.
+  const S = (bn: string, en: string) => (lang === "bn" ? bn : en);
+
   const savePdf = () => {
-    const win = window.open("", "_blank", "width=900,height=1000");
-    if (!win) {
-      onNotify("Allow pop-ups to save your emergency kit");
-      return;
-    }
-    win.document.write(`<!doctype html><html><head><title>VaultZero Emergency Kit</title><style>
+    const html = `<!doctype html><html lang="${S("bn", "en")}"><head><title>${S("ভল্টজিরো ইমার্জেন্সি কিট", "VaultZero Emergency Kit")}</title><style>
       @page { margin: 24mm; }
       * { box-sizing: border-box; }
-      body { font-family: "Helvetica Neue", Arial, sans-serif; color: #1c2230; margin: 0; background: #fbf8f0; }
+      body { font-family: ${S('"Hind Siliguri", "Noto Sans Bengali", Arial, sans-serif', '"Helvetica Neue", Arial, sans-serif')}; color: #1c2230; margin: 0; background: #fbf8f0; }
       .sheet { max-width: 720px; margin: 0 auto; padding: 34px 36px; }
       .top { display: flex; align-items: center; justify-content: space-between; border-bottom: 2px solid #171a2b; padding-bottom: 16px; }
       .brand { font-size: 22px; letter-spacing: -1px; font-weight: 700; }
       .brand span { color: #6457ee; }
-      .seal { border: 1px solid #a9a08e; border-radius: 6px; padding: 7px 10px; font-size: 9px; letter-spacing: 1.6px; text-transform: uppercase; }
-      .kicker { margin-top: 28px; font-size: 9px; font-weight: 700; letter-spacing: 3px; text-transform: uppercase; color: #7e7462; }
+      .seal { border: 1px solid #a9a08e; border-radius: 6px; padding: 7px 10px; font-size: 9px; letter-spacing: 1.6px; color: #7e7462; }
+      .kicker { margin-top: 28px; font-size: 9px; font-weight: 700; letter-spacing: 3px; color: #7e7462; }
       h1 { font-size: 31px; letter-spacing: -1px; margin: 8px 0 6px; }
-      .sub { font-size: 12px; line-height: 1.7; color: #665f54; max-width: 520px; }
+      .sub { font-size: 12px; line-height: 1.8; color: #665f54; max-width: 520px; }
       .rule { height: 1px; background: #d8d0c0; margin: 22px 0; }
       .box { border: 1px solid #c7bfac; background: #fffdf7; border-radius: 8px; padding: 14px; margin-bottom: 14px; }
-      .box label { display: block; font-size: 8px; font-weight: 700; letter-spacing: 1.6px; text-transform: uppercase; color: #756b58; margin-bottom: 11px; }
+      .box label { display: block; font-size: 10px; font-weight: 700; letter-spacing: 1.6px; color: #756b58; margin-bottom: 11px; }
       .lines { height: 36px; border-bottom: 1px solid #b8ae9b; }
       .lines.tall { height: 69px; }
       .hint { font-size: 9px; color: #8d8475; margin-top: 8px; }
       .two { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
       .codes { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
       .code { height: 27px; border: 1px dashed #b8ae9b; border-radius: 4px; display: flex; align-items: center; padding-left: 8px; font-family: monospace; font-size: 8px; color: #a59b88; }
-      .note { border-left: 3px solid #6457ee; padding: 2px 0 2px 11px; font-size: 10px; line-height: 1.65; color: #5d564b; }
+      .note { border-left: 3px solid #6457ee; padding: 2px 0 2px 11px; font-size: 10px; line-height: 1.8; color: #5d564b; }
       .footer { margin-top: 24px; padding-top: 12px; border-top: 1px solid #d8d0c0; display: flex; justify-content: space-between; font-size: 8px; letter-spacing: .6px; color: #8d8475; }
       .stamp { color: #6457ee; font-weight: 700; }
       @media print { body { background: white; } .sheet { padding: 0; } }
     </style></head><body><div class="sheet">
-      <div class="top"><div class="brand">Vault<span>Zero</span></div><div class="seal">Emergency access · confidential</div></div>
-      <div class="kicker">Offline recovery document</div>
-      <h1>Emergency access kit</h1>
-      <p class="sub">Store this document somewhere physically secure. VaultZero is zero-knowledge: your master password cannot be reset or recovered by anyone else.</p>
+      <div class="top"><div class="brand">Vault<span>Zero</span></div><div class="seal">${S("জরুরি প্রবেশ · গোপনীয়", "Emergency access · confidential")}</div></div>
+      <div class="kicker">${S("অফলাইন রিকভারি ডকুমেন্ট", "Offline recovery document")}</div>
+      <h1>${S("জরুরি প্রবেশ কিট", "Emergency access kit")}</h1>
+      <p class="sub">${S("এই ডকুমেন্টটি কোনো নিরাপদ ভৌত স্থানে রাখুন। VaultZero জিরো-নলেজ: আপনার মাস্টার পাসওয়ার্ড অন্য কেউ রিসেট বা উদ্ধার করতে পারে না।", "Store this document somewhere physically secure. VaultZero is zero-knowledge: your master password cannot be reset or recovered by anyone else.")}</p>
       <div class="rule"></div>
-      <div class="box"><label>Master password</label><div class="lines tall"></div><p class="hint">Write by hand. Never photograph or store this document digitally.</p></div>
+      <div class="box"><label>${S("মাস্টার পাসওয়ার্ড", "Master password")}</label><div class="lines tall"></div><p class="hint">${S("হাতে লিখুন। এই ডকুমেন্টের ছবি তুলবেন না বা ডিজিটালি সংরক্ষণ করবেন না।", "Write by hand. Never photograph or store this document digitally.")}</p></div>
       <div class="two">
-        <div class="box"><label>Password hint</label><div class="lines"></div></div>
-        <div class="box"><label>Vault created</label><div class="lines"></div></div>
+        <div class="box"><label>${S("পাসওয়ার্ড ইঙ্গিত", "Password hint")}</label><div class="lines"></div></div>
+        <div class="box"><label>${S("ভল্ট তৈরির তারিখ", "Vault created")}</label><div class="lines"></div></div>
       </div>
       <div class="two">
-        <div class="box"><label>Emergency contact name</label><div class="lines"></div></div>
-        <div class="box"><label>Phone / relationship</label><div class="lines"></div></div>
+        <div class="box"><label>${S("জরুরি যোগাযোগের নাম", "Emergency contact name")}</label><div class="lines"></div></div>
+        <div class="box"><label>${S("ফোন / সম্পর্ক", "Phone / relationship")}</label><div class="lines"></div></div>
       </div>
-      <div class="box"><label>Recovery key</label><div class="codes"><div class="code">— — — —</div><div class="code">— — — —</div><div class="code">— — — —</div><div class="code">— — — —</div></div><p class="hint">Handwrite all four groups from VaultZero → Emergency Kit.</p></div>
-      <div class="note">The authorized person should launch VaultZero from a device that already holds a local vault backup, choose "Restore from emergency kit," and enter the credentials above while offline.</div>
-      <div class="footer"><span>DOCUMENT ID · VZ-EK-0826-117</span><span class="stamp">VAULTZERO · LOCAL ONLY</span><span>PAGE 1 / 1</span></div>
-    </div></body></html>`);
-    win.document.close();
-    window.setTimeout(() => {
-      win.focus();
-      win.print();
-    }, 450);
-    onNotify("Emergency kit prepared — save as PDF");
+      <div class="box"><label>${S("রিকভারি কী", "Recovery key")}</label><div class="codes"><div class="code">— — — —</div><div class="code">— — — —</div><div class="code">— — — —</div><div class="code">— — — —</div></div><p class="hint">${S("VaultZero → ইমার্জেন্সি কিট থেকে চারটি অংশই হাতে লিখুন।", "Handwrite all four groups from VaultZero → Emergency Kit.")}</p></div>
+      <div class="note">${S("অনুমোদিত ব্যক্তিকে এমন ডিভাইসে VaultZero চালু করতে হবে যেখানে লোকাল ভল্ট ফাইল (local-vault.pmv) আছে; লক স্ক্রিনে \"Forgot master password? Recover vault\" বেছে নিয়ে অফলাইনে উপরের হাতে-লেখা ২৪-অক্ষরের রিকভারি কীটি দিতে হবে।", "The authorized person should launch VaultZero from a device that already holds the local vault file (local-vault.pmv), choose \"Forgot master password? Recover vault\" on the lock screen, and enter the handwritten 24-character recovery key above while offline.")}</div>
+      <div class="footer"><span>${S("ডকুমেন্ট আইডি", "DOCUMENT ID")} · ${documentId}</span><span class="stamp">${S("ভল্টজিরো · শুধু লোকাল", "VAULTZERO · LOCAL ONLY")}</span><span>${S("পাতা ১ / ১", "PAGE 1 / 1")}</span></div>
+    </div></body></html>`;
+
+    const win = window.open("", "_blank", "width=900,height=1000");
+    if (win) {
+      win.document.write(html);
+      win.document.close();
+      window.setTimeout(() => { win.focus(); win.print(); }, 450);
+    } else {
+      // V-65: WebView2 and hardened browsers often block pop-ups. Printing
+      // through an in-document frame keeps the whole flow inside the single
+      // native window instead of failing with "Allow pop-ups".
+      const frame = document.createElement("iframe");
+      frame.setAttribute("aria-hidden", "true");
+      frame.style.cssText = "position:fixed;left:-10000px;top:0;width:900px;height:1000px;border:0;";
+      document.body.appendChild(frame);
+      const frameDoc = frame.contentWindow?.document;
+      if (!frameDoc) {
+        frame.remove();
+        onNotify(S("ইমার্জেন্সি কিট সংরক্ষণে পপ-আপ অনুমতি দিন", "Allow pop-ups to save your emergency kit"));
+        return;
+      }
+      frameDoc.open();
+      frameDoc.write(html);
+      frameDoc.close();
+      window.setTimeout(() => {
+        frame.contentWindow?.focus();
+        frame.contentWindow?.print();
+        window.setTimeout(() => frame.remove(), 1000);
+      }, 450);
+    }
+    onNotify(S("ইমার্জেন্সি কিট প্রস্তুত — PDF হিসেবে সংরক্ষণ করুন", "Emergency kit prepared — save as PDF"));
   };
 
   return (
     <Modal
       onClose={onClose}
-      title="Emergency kit"
-      subtitle="A physical lifeline for a digital vault. Fill it in by hand and keep it safe."
+      title={S("ইমার্জেন্সি কিট", "Emergency kit")}
+      subtitle={S("ডিজিটাল ভল্টের একটি ভৌত নিরাপত্তা-রশি। হাতে পূরণ করে নিরাপদ স্থানে রাখুন।", "A physical lifeline for a digital vault. Fill it in by hand and keep it safe.")}
       icon={<FirstAidKit size={20} weight="duotone" />}
       width="max-w-[720px]"
       className="max-h-[94dvh]"
@@ -877,74 +1218,74 @@ export function EmergencyKitModal({ onClose, onNotify }: { onClose: () => void; 
         <div className="flex items-center justify-between gap-3">
           <span className="hidden min-w-0 items-center gap-1.5 text-[8.5px] leading-tight text-faint md:flex">
             <ShieldCheck size={12} weight="duotone" className="shrink-0 text-success" />
-            PDF saved locally. Nothing sent online.
+            {S("PDF কেবল লোকালে সংরক্ষিত। অনলাইনে কিছু পাঠানো হয় না।", "PDF saved locally. Nothing sent online.")}
           </span>
           <div className="flex w-full items-center justify-end gap-2.5 sm:w-auto">
-            <button onClick={savePdf} className="secondary-button flex h-10 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-full px-4 text-[11px] font-semibold"><Printer size={14} weight="duotone" /> Print</button>
-            <button onClick={savePdf} className="primary-button flex h-10 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-full px-5 text-[11px] font-semibold shadow-md shadow-[var(--accent-glow)]"><FilePdf size={14} weight="bold" /> Save as PDF</button>
+            <button onClick={savePdf} className="secondary-button flex h-10 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-full px-4 text-[11px] font-semibold"><Printer size={14} weight="duotone" /> {S("প্রিন্ট", "Print")}</button>
+            <button onClick={savePdf} className="primary-button flex h-10 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-full px-5 text-[11px] font-semibold shadow-md shadow-[var(--accent-glow)]"><FilePdf size={14} weight="bold" /> {S("PDF হিসেবে সংরক্ষণ", "Save as PDF")}</button>
           </div>
         </div>
       }
     >
       <div className="mb-2.5 flex items-center justify-between px-0.5">
-        <span className="flex items-center gap-1.5 text-[8px] font-medium text-faint"><FilePdf size={11} weight="duotone" /> Preview · A4 portrait</span>
-        <span className="flex items-center gap-1 rounded-full border border-[var(--border-soft)] bg-[var(--glass-soft)] px-2 py-1 text-[7px] text-muted"><LockSimple size={8} weight="duotone" /> Fill by hand</span>
+        <span className="flex items-center gap-1.5 text-[8px] font-medium text-faint"><FilePdf size={11} weight="duotone" /> {S("প্রিভিউ · A4 খাড়া", "Preview · A4 portrait")}</span>
+        <span className="flex items-center gap-1 rounded-full border border-[var(--border-soft)] bg-[var(--glass-soft)] px-2 py-1 text-[7px] text-muted"><LockSimple size={8} weight="duotone" /> {S("হাতে লিখুন", "Fill by hand")}</span>
       </div>
       <div className="overflow-hidden rounded-[10px] shadow-[0_24px_50px_rgba(20,15,35,.24)]">
-        <div id="emergency-kit" className="relative overflow-hidden p-5 sm:p-7" style={{ background: "#fbf8f0", color: "#1c2230" }}>
+        <div id="emergency-kit" className={cn("relative overflow-hidden p-5 sm:p-7", lang === "bn" && "font-bangla")} style={{ background: "#fbf8f0", color: "#1c2230" }}>
           <div aria-hidden className="pointer-events-none absolute right-[-28px] top-[38%] -rotate-12 text-[62px] font-bold tracking-[8px] opacity-[0.035]" style={{ color: "#171a2b" }}>VAULTZERO</div>
           <div className="relative flex items-start justify-between gap-3 border-b-2 pb-3" style={{ borderColor: "#171a2b" }}>
             <div>
               <p className="font-display text-[20px] font-bold leading-none tracking-[-0.06em]">Vault<span style={{ color: "#6457ee" }}>Zero</span></p>
-              <p className="mt-1 text-[6.5px] font-semibold uppercase tracking-[0.24em]" style={{ color: "#8d8475" }}>Private · offline · sealed</p>
+              <p className="mt-1 text-[7px] font-semibold tracking-[0.12em]" style={{ color: "#8d8475" }}>{S("ব্যক্তিগত · অফলাইন · সিল করা", "Private · offline · sealed")}</p>
             </div>
             <div className="rounded-[5px] border px-2 py-1.5 text-right" style={{ borderColor: "#b9b09d" }}>
-              <p className="text-[5.5px] font-bold uppercase tracking-[0.16em]" style={{ color: "#8d8475" }}>Emergency access</p>
-              <p className="mt-0.5 text-[6.5px] font-bold" style={{ color: "#6457ee" }}>CONFIDENTIAL</p>
+              <p className="text-[6.5px] font-bold tracking-[0.08em]" style={{ color: "#8d8475" }}>{S("জরুরি প্রবেশ", "Emergency access")}</p>
+              <p className="mt-0.5 text-[6.5px] font-bold" style={{ color: "#6457ee" }}>{S("গোপনীয়", "CONFIDENTIAL")}</p>
             </div>
           </div>
-          <p className="relative mt-4 text-[6.5px] font-bold uppercase tracking-[0.26em]" style={{ color: "#8d8475" }}>Offline recovery document</p>
-          <h3 className="relative mt-1 font-display text-[24px] font-semibold leading-none tracking-[-0.035em]">Emergency access kit</h3>
-          <p className="relative mt-2 max-w-[470px] text-[8px] leading-relaxed" style={{ color: "#6b6458" }}>Store this document somewhere physically secure. VaultZero is zero-knowledge: your master password cannot be reset or recovered by anyone else.</p>
+          <p className="relative mt-4 text-[7px] font-bold tracking-[0.12em]" style={{ color: "#8d8475" }}>{S("অফলাইন রিকভারি ডকুমেন্ট", "Offline recovery document")}</p>
+          <h3 className="relative mt-1 font-display text-[24px] font-semibold leading-none tracking-[-0.035em]">{S("জরুরি প্রবেশ কিট", "Emergency access kit")}</h3>
+          <p className="relative mt-2 max-w-[470px] text-[8px] leading-relaxed" style={{ color: "#6b6458" }}>{S("এই ডকুমেন্টটি কোনো নিরাপদ ভৌত স্থানে রাখুন। VaultZero জিরো-নলেজ: আপনার মাস্টার পাসওয়ার্ড অন্য কেউ রিসেট বা উদ্ধার করতে পারে না।", "Store this document somewhere physically secure. VaultZero is zero-knowledge: your master password cannot be reset or recovered by anyone else.")}</p>
           <div className="relative my-3.5 h-px" style={{ background: "#d8d0c0" }} />
           <div className="relative mb-2.5 rounded-md border p-2.5" style={{ borderColor: "#c7bfac", background: "#fffdf7" }}>
-            <label className="block text-[6px] font-bold uppercase tracking-[0.17em]" style={{ color: "#756b58" }}>Master password</label>
+            <label className="block text-[7px] font-bold tracking-[0.1em]" style={{ color: "#756b58" }}>{S("মাস্টার পাসওয়ার্ড", "Master password")}</label>
             <div className="mt-5 h-4 border-b" style={{ borderColor: "#b8ae9b" }} />
             <div className="mt-3 h-4 border-b" style={{ borderColor: "#b8ae9b" }} />
-            <p className="mt-2 text-[6.5px]" style={{ color: "#8d8475" }}>Write by hand. Never photograph or store this document digitally.</p>
+            <p className="mt-2 text-[7px]" style={{ color: "#8d8475" }}>{S("হাতে লিখুন। এই ডকুমেন্টের ছবি তুলবেন না বা ডিজিটালি সংরক্ষণ করবেন না।", "Write by hand. Never photograph or store this document digitally.")}</p>
           </div>
           <div className="relative grid grid-cols-2 gap-2">
             <div className="rounded-md border p-2.5" style={{ borderColor: "#c7bfac", background: "#fffdf7" }}>
-              <label className="block text-[6px] font-bold uppercase tracking-[0.17em]" style={{ color: "#756b58" }}>Password hint</label>
+              <label className="block text-[7px] font-bold tracking-[0.1em]" style={{ color: "#756b58" }}>{S("পাসওয়ার্ড ইঙ্গিত", "Password hint")}</label>
               <div className="mt-5 h-4 border-b" style={{ borderColor: "#b8ae9b" }} />
             </div>
             <div className="rounded-md border p-2.5" style={{ borderColor: "#c7bfac", background: "#fffdf7" }}>
-              <label className="block text-[6px] font-bold uppercase tracking-[0.17em]" style={{ color: "#756b58" }}>Vault created</label>
+              <label className="block text-[7px] font-bold tracking-[0.1em]" style={{ color: "#756b58" }}>{S("ভল্ট তৈরির তারিখ", "Vault created")}</label>
               <div className="mt-5 h-4 border-b" style={{ borderColor: "#b8ae9b" }} />
             </div>
           </div>
           <div className="relative mt-2 rounded-md border p-2.5" style={{ borderColor: "#c7bfac", background: "#fffdf7" }}>
-            <label className="block text-[6px] font-bold uppercase tracking-[0.17em]" style={{ color: "#756b58" }}>Recovery key · four groups</label>
+            <label className="block text-[7px] font-bold tracking-[0.1em]" style={{ color: "#756b58" }}>{S("রিকভারি কী · চারটি অংশ", "Recovery key · four groups")}</label>
             <div className="mt-2 grid grid-cols-4 gap-1.5">
               {[1, 2, 3, 4].map((n) => <div key={n} className="h-5 rounded-[3px] border border-dashed" style={{ borderColor: "#b8ae9b" }} />)}
             </div>
           </div>
           <div className="relative mt-2 rounded-md border p-2.5" style={{ borderColor: "#c7bfac", background: "#fffdf7" }}>
-            <label className="block text-[6px] font-bold uppercase tracking-[0.17em]" style={{ color: "#756b58" }}>Emergency contact · name and phone</label>
+            <label className="block text-[7px] font-bold tracking-[0.1em]" style={{ color: "#756b58" }}>{S("জরুরি যোগাযোগ · নাম ও ফোন", "Emergency contact · name and phone")}</label>
             <div className="mt-5 h-4 border-b" style={{ borderColor: "#b8ae9b" }} />
           </div>
           <div className="relative mt-2.5 border-l-2 pl-2.5" style={{ borderColor: "#6457ee" }}>
-            <p className="text-[6.5px] leading-relaxed" style={{ color: "#5d564b" }}>The authorized person should open VaultZero on a device holding a local backup, choose "Restore from emergency kit," and enter the handwritten credentials while offline.</p>
+            <p className="text-[7px] leading-relaxed" style={{ color: "#5d564b" }}>{S("অনুমোদিত ব্যক্তিকে এমন ডিভাইসে VaultZero চালু করতে হবে যেখানে লোকাল ভল্ট ফাইল (local-vault.pmv) আছে; লক স্ক্রিনে \"Forgot master password? Recover vault\" বেছে নিয়ে অফলাইনে হাতে-লেখা ২৪-অক্ষরের রিকভারি কীটি দিতে হবে।", "The authorized person should open VaultZero on a device holding the local vault file (local-vault.pmv), choose \"Forgot master password? Recover vault\" on the lock screen, and enter the handwritten 24-character recovery key while offline.")}</p>
           </div>
-          <div className="relative mt-3.5 flex items-center justify-between border-t pt-2 text-[6px] tracking-[0.05em]" style={{ borderColor: "#d8d0c0", color: "#8d8475" }}>
-            <span>DOCUMENT ID · VZ-EK-0826-117</span>
-            <span className="font-bold" style={{ color: "#6457ee" }}>VAULTZERO · LOCAL ONLY</span>
+          <div className="relative mt-3.5 flex items-center justify-between border-t pt-2 text-[7px] tracking-[0.05em]" style={{ borderColor: "#d8d0c0", color: "#8d8475" }}>
+            <span>{S("ডকুমেন্ট আইডি", "DOCUMENT ID")} · {documentId}</span>
+            <span className="font-bold" style={{ color: "#6457ee" }}>{S("ভল্টজিরো · শুধু লোকাল", "VAULTZERO · LOCAL ONLY")}</span>
           </div>
         </div>
       </div>
       <div className="mt-3 flex items-center justify-between gap-3">
-        <p className="flex items-center gap-1.5 text-[7.5px] text-faint"><Clock size={10} weight="duotone" /> Generated just now · 1 page</p>
-        <button onClick={onClose} className="text-[8px] font-semibold text-muted underline decoration-[var(--border)] underline-offset-2 hover:text-main">Close preview</button>
+        <p className="flex items-center gap-1.5 text-[7.5px] text-faint"><Clock size={10} weight="duotone" /> {S("এইমাত্র তৈরি · ১ পাতা", "Generated just now · 1 page")}</p>
+        <button onClick={onClose} className="text-[8px] font-semibold text-muted underline decoration-[var(--border)] underline-offset-2 hover:text-main">{S("প্রিভিউ বন্ধ করুন", "Close preview")}</button>
       </div>
     </Modal>
   );

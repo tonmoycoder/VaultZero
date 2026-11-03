@@ -50,7 +50,13 @@ impl BrandRegistry {
             BrandInfo {
                 slug: "microsoft".into(),
                 name: "Microsoft".into(),
-                domain_keywords: vec!["microsoft.com".into(), "live.com".into(), "outlook.com".into(), "office.com".into(), "azure.com".into()],
+                domain_keywords: vec![
+                    "microsoft.com".into(),
+                    "live.com".into(),
+                    "outlook.com".into(),
+                    "office.com".into(),
+                    "azure.com".into(),
+                ],
                 brand_color: "#00A4EF".into(),
                 text_color: "#FFFFFF".into(),
                 svg_icon: "<svg viewBox=\"0 0 24 24\" fill=\"currentColor\"><path d=\"M11.4 24H0V12.6h11.4V24zM24 24H12.6V12.6H24V24zM11.4 11.4H0V0h11.4v11.4zm12.6 0H12.6V0H24v11.4z\"/></svg>".into(),
@@ -66,7 +72,11 @@ impl BrandRegistry {
             BrandInfo {
                 slug: "amazon".into(),
                 name: "Amazon".into(),
-                domain_keywords: vec!["amazon.com".into(), "aws.amazon.com".into(), "amazon".into()],
+                domain_keywords: vec![
+                    "amazon.com".into(),
+                    "aws.amazon.com".into(),
+                    "amazon".into(),
+                ],
                 brand_color: "#FF9900".into(),
                 text_color: "#000000".into(),
                 svg_icon: "<svg viewBox=\"0 0 24 24\" fill=\"currentColor\"><path d=\"M13.916 17.587c-3.473 2.56-8.397 3.93-12.748 1.34-.607-.362-1.168.272-.613.722 4.015 3.256 9.878 3.738 14.394 1.036.717-.43.167-1.283-.49-1.098zm1.905-1.428c-.443-.574-2.905-.272-4.02-.136-.34.042-.39-.23-.082-.447 2-.1.417 4.717-.912 6.556.702.235.267-.04.912-.39 1.445-1.455 1.977-3.978 2.39-4.83.21-.428-.48-.63-.915-.63z\"/></svg>".into(),
@@ -122,20 +132,315 @@ impl BrandRegistry {
         ]
     }
 
-    /// Automatically matches a brand from an entry's title or URL without any network requests.
-    pub fn match_brand(title: &str, url: &str) -> Option<BrandInfo> {
-        let t_clean = title.to_lowercase();
-        let u_clean = url.to_lowercase();
-        let brands = Self::all_brands();
+    /// Extracts the lower-cased host from a URL-ish string.
+    ///
+    /// Accepts a bare host (`google.com`), a full URL
+    /// (`https://accounts.google.com/login`), or a host with a port/path.
+    fn extract_host(url: &str) -> Option<String> {
+        let trimmed = url.trim();
+        if trimmed.is_empty() {
+            return None;
+        }
 
-        for b in brands {
+        // Strip a scheme if present.
+        let after_scheme = match trimmed.find("://") {
+            Some(idx) => &trimmed[idx + 3..],
+            None => trimmed,
+        };
+
+        // Cut at the first path, query or fragment marker.
+        let host_part = after_scheme
+            .split(['/', '?', '#'])
+            .next()
+            .unwrap_or(after_scheme);
+
+        // Strip credentials and port.
+        let host_only = host_part.rsplit('@').next().unwrap_or(host_part);
+        let host_only = host_only.split(':').next().unwrap_or(host_only);
+
+        if host_only.is_empty() {
+            None
+        } else {
+            Some(host_only.trim_end_matches('.').to_lowercase())
+        }
+    }
+
+    /// Reduces a host to its registrable domain (eTLD+1 approximation).
+    ///
+    /// `accounts.google.com` -> `google.com`
+    /// `www.netflix.com`     -> `netflix.com`
+    /// `notgoogle.com`       -> `notgoogle.com`  (NOT google.com)
+    ///
+    /// The public-suffix list is not bundled, so a conservative two-label
+    /// rule is used: the last two labels of the host. Multi-label public
+    /// suffixes such as `co.uk` are handled by a small allowlist.
+    fn registrable_domain(host: &str) -> String {
+        const MULTI_LABEL_SUFFIXES: &[&str] = &[
+            "co.uk",
+            "org.uk",
+            "ac.uk",
+            "gov.uk",
+            "co.jp",
+            "co.kr",
+            "com.au",
+            "com.br",
+            "com.cn",
+            "co.in",
+            "co.nz",
+            "com.mx",
+            "co.za",
+            "com.tr",
+            "com.sg",
+            "com.hk",
+            "com.tw",
+            "com.ar",
+            "github.io",
+            "gitlab.io",
+        ];
+
+        let labels: Vec<&str> = host.split('.').filter(|l| !l.is_empty()).collect();
+        if labels.len() <= 2 {
+            return host.to_string();
+        }
+
+        let last_two = format!("{}.{}", labels[labels.len() - 2], labels[labels.len() - 1]);
+        if MULTI_LABEL_SUFFIXES.contains(&last_two.as_str()) && labels.len() >= 3 {
+            let third = labels[labels.len() - 3];
+            return format!("{}.{}", third, last_two);
+        }
+        last_two
+    }
+
+    /// Returns true when `keyword` appears in `text` as a whole word.
+    ///
+    /// Word boundaries are non-alphanumeric characters, so `"My Github
+    /// Account"` matches `github` but `"Not Google"` does not, and
+    /// `"googleish"` does not either.
+    fn contains_whole_word(text: &str, keyword: &str) -> bool {
+        if keyword.is_empty() {
+            return false;
+        }
+        let text = text.to_lowercase();
+        let keyword = keyword.to_lowercase();
+        let bytes = text.as_bytes();
+        let needle = keyword.as_bytes();
+        let mut start = 0usize;
+
+        while start < bytes.len() {
+            let match_at = match text[start..].find(&keyword) {
+                Some(offset) => start + offset,
+                None => return false,
+            };
+            let end = match_at + needle.len();
+
+            let left_ok = match_at == 0 || !bytes[match_at - 1].is_ascii_alphanumeric();
+            let right_ok = end == bytes.len() || !bytes[end].is_ascii_alphanumeric();
+
+            if left_ok && right_ok {
+                return true;
+            }
+            start = match_at + 1;
+        }
+        false
+    }
+
+    /// Automatically matches a brand from an entry's title or URL without any network requests.
+    ///
+    /// SECURITY (V-27): the previous implementation used a raw substring
+    /// test (`url.contains(keyword) || title.contains(keyword)`), which let
+    /// phishing look-alikes borrow a real brand's icon:
+    ///
+    /// * `notgoogle.com`            -> matched **Google**
+    /// * `fake-netflix-login.com`   -> matched **Netflix**
+    /// * `googleish.example.com`    -> matched **Google**
+    ///
+    /// A password manager that shows the genuine Google logo next to a
+    /// hostile domain actively trains the user to trust it. Matching is now
+    /// exact:
+    ///
+    /// * A keyword containing a `.` must equal the registrable domain of
+    ///   the URL host (or be a parent of it, so `google.com` still matches
+    ///   `accounts.google.com`).
+    /// * A keyword without a `.` (a bare name like `google`) is matched
+    ///   against the **title** as a whole word only, never against the URL.
+    pub fn match_brand(title: &str, url: &str) -> Option<BrandInfo> {
+        // Candidates: the URL host and, when the title itself contains a
+        // host-like token, that token. A title such as "google.com.hacker.io"
+        // must be judged as a domain, not as a bag of words.
+        let mut candidates: Vec<String> = Vec::new();
+        if let Some(host) = Self::extract_host(url) {
+            candidates.push(Self::registrable_domain(&host));
+        }
+        for token in Self::extract_title_hosts(title) {
+            candidates.push(Self::registrable_domain(&token));
+        }
+        let t_clean = title.to_lowercase();
+
+        for b in Self::all_brands() {
             for kw in &b.domain_keywords {
-                if u_clean.contains(kw) || t_clean.contains(kw) {
-                    return Some(b);
+                let keyword = kw.to_lowercase();
+
+                if keyword.contains('.') {
+                    // Domain keyword: require an exact registrable-domain
+                    // match against the URL host or a host-like title token.
+                    if candidates.iter().any(|c| c == &keyword) {
+                        return Some(b);
+                    }
+                } else {
+                    // Bare name: whole-word match against the title only,
+                    // and only when the title is not itself a domain (in
+                    // which case the domain rules above already applied).
+                    if !candidates.is_empty() && Self::title_is_host_like(title) {
+                        continue;
+                    }
+                    if Self::contains_whole_word(&t_clean, &keyword) {
+                        return Some(b);
+                    }
                 }
             }
         }
         None
     }
+
+    /// True when the title looks like a host (contains a dot-separated
+    /// token with a public-suffix-looking tail).
+    fn title_is_host_like(title: &str) -> bool {
+        !Self::extract_title_hosts(title).is_empty()
+    }
+
+    /// Extracts host-like tokens from free text.
+    ///
+    /// "Visit google.com now" -> ["google.com"]
+    /// "google.com.hacker.io"  -> ["google.com.hacker.io"]
+    fn extract_title_hosts(title: &str) -> Vec<String> {
+        let mut hosts = Vec::new();
+        for token in title.split(|c: char| c.is_whitespace() || c == ',' || c == ';') {
+            let cleaned = token
+                .trim_matches(|c: char| !c.is_ascii_alphanumeric() && c != '.' && c != '-')
+                .to_lowercase();
+            if cleaned.is_empty() || !cleaned.contains('.') {
+                continue;
+            }
+            // Require at least one alphabetic label and a plausible TLD.
+            let labels: Vec<&str> = cleaned.split('.').filter(|l| !l.is_empty()).collect();
+            if labels.len() < 2 {
+                continue;
+            }
+            let tld = labels[labels.len() - 1];
+            if tld.len() < 2 || !tld.chars().all(|c| c.is_ascii_alphabetic()) {
+                continue;
+            }
+            if !labels[0].chars().any(|c| c.is_ascii_alphabetic()) {
+                continue;
+            }
+            hosts.push(cleaned);
+        }
+        hosts
+    }
 }
 
+#[cfg(test)]
+mod tests {
+    use super::BrandRegistry;
+
+    fn slug_of(title: &str, url: &str) -> Option<String> {
+        BrandRegistry::match_brand(title, url).map(|b| b.slug)
+    }
+
+    /// V-27: phishing look-alikes must NOT inherit a real brand's identity.
+    #[test]
+    fn phishing_lookalikes_do_not_match_real_brands() {
+        let cases = [
+            ("notgoogle.com", "google"),
+            ("fake-netflix-login.com", "netflix"),
+            ("googleish.example.com", "google"),
+            ("netflix-login-secure.com", "netflix"),
+            ("github.com.attacker.net", "github"),
+            ("amazon.com.evil.io", "amazon"),
+            ("paypal-secure-verification.com", "paypal"),
+        ];
+        for (host, brand) in cases {
+            assert_eq!(
+                slug_of("Some Login", &format!("https://{}", host)),
+                None,
+                "{} must not be recognised as {}",
+                host,
+                brand
+            );
+        }
+    }
+
+    /// V-27: genuine hosts (and their subdomains) must still match.
+    #[test]
+    fn genuine_domains_still_match() {
+        assert_eq!(
+            slug_of("Google", "https://google.com"),
+            Some("google".into())
+        );
+        assert_eq!(
+            slug_of("Google", "https://accounts.google.com/signin"),
+            Some("google".into())
+        );
+        assert_eq!(
+            slug_of("Google", "https://mail.google.com"),
+            Some("google".into())
+        );
+        assert_eq!(
+            slug_of("Netflix", "https://www.netflix.com/browse"),
+            Some("netflix".into())
+        );
+        assert_eq!(slug_of("GitHub", "github.com"), Some("github".into()));
+    }
+
+    /// V-27: bare brand names are matched against the title as whole words,
+    /// never against the URL.
+    #[test]
+    fn bare_names_match_titles_as_whole_words() {
+        assert_eq!(slug_of("My Github Account", ""), Some("github".into()));
+        assert_eq!(slug_of("Netflix", ""), Some("netflix".into()));
+        // "Not Google" still contains the whole word "google", so it matches —
+        // that is expected for a title heuristic. What must never match is a
+        // *substring* such as "Googleish".
+        assert_eq!(slug_of("Googleish", ""), None);
+        assert_eq!(slug_of("I use google daily", ""), Some("google".into()));
+        assert_eq!(slug_of("google.com.hacker.io", ""), None);
+    }
+
+    #[test]
+    fn host_extraction_handles_malformed_input() {
+        assert_eq!(
+            BrandRegistry::extract_host("https://a.b/c?d=1"),
+            Some("a.b".into())
+        );
+        assert_eq!(
+            BrandRegistry::extract_host("user:pw@host.example.com:8443/x"),
+            Some("host.example.com".into())
+        );
+        assert_eq!(
+            BrandRegistry::extract_host("example.com."),
+            Some("example.com".into())
+        );
+        assert_eq!(BrandRegistry::extract_host(""), None);
+        assert_eq!(BrandRegistry::extract_host("   "), None);
+    }
+
+    #[test]
+    fn registrable_domain_reduction() {
+        assert_eq!(
+            BrandRegistry::registrable_domain("accounts.google.com"),
+            "google.com"
+        );
+        assert_eq!(
+            BrandRegistry::registrable_domain("notgoogle.com"),
+            "notgoogle.com"
+        );
+        assert_eq!(
+            BrandRegistry::registrable_domain("a.b.c.example.co.uk"),
+            "example.co.uk"
+        );
+        assert_eq!(
+            BrandRegistry::registrable_domain("example.com"),
+            "example.com"
+        );
+    }
+}

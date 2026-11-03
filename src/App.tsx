@@ -24,7 +24,8 @@ import Sidebar, { MobileQuickMenu, type ToolName } from "./components/Sidebar";
 import { exportVaultToCsv } from "./lib/csv";
 import { Avatar, Modal, Toggle, Tooltip } from "./components/ui";
 import TextSizeControl, { DEFAULT_TEXT_STEP, TEXT_STEPS, getEffectiveScale, stepLabel } from "./components/TextSize";
-import LofiPlayer from "./components/LofiPlayer";
+import AutoLockControl from "./components/AutoLockControl";
+
 import VaultHome from "./components/VaultHome";
 import UpdateBanner from "./components/UpdateBanner";
 
@@ -39,7 +40,13 @@ const SecurityCenterModal = lazy(() => import("./components/SecurityCenter"));
 const CsvImportModal = lazy(() => import("./components/CsvImportModal").then((m) => ({ default: m.CsvImportModal })));
 const UserProfileModal = lazy(() => import("./components/UserProfileModal"));
 const UpdateModal = lazy(() => import("./components/UpdateModal"));
+// PERFORMANCE (V-63): the Web Audio engine is only needed in zen mode. It
+// used to be parsed on every cold start even though 99% of sessions never
+// open that panel.
+const LofiPlayer = lazy(() => import("./components/LofiPlayer"));
 import { APP_VERSION, compareSemver } from "./lib/version";
+import { clearPreUpdateBackup, restorePreUpdateBackupIfNeeded } from "./lib/updater";
+import { readTestSeed, testSeedEnabled } from "./lib/testSeed";
 import {
   checkGitHubUpdate,
   clearActiveSession,
@@ -47,8 +54,8 @@ import {
   initialItems,
   invokeTauri,
   isTauri,
-  persistVaultChanges,
   vaultMutationQueue,
+  CoalescingVaultWriter,
   t,
   type BrandKey,
   type Language,
@@ -58,6 +65,9 @@ import {
 } from "./lib/vault";
 import { cn } from "./utils/cn";
 import { useMediaQuery } from "./lib/motion";
+import { mergeVaultItems } from "./lib/p2pMerge";
+import { createAutoLock, readAutoLockMinutes, writeAutoLockMinutes, type AutoLockController } from "./lib/autoLock";
+import { clearClipboardWipe } from "./lib/clipboard";
 
 function readStoredTheme(): Theme {
   if (typeof window === "undefined") return "light";
@@ -97,9 +107,42 @@ function readStoredTextStep(): number {
 
 function shouldStartLocked(): boolean {
   if (typeof window === "undefined") return true;
-  const urlParams = new URLSearchParams(window.location.search);
-  if (urlParams.get("unlocked") === "true") return false;
+  /*
+   * SECURITY: `?unlocked=true` is a test convenience that skips the lock
+   * screen. It used to work in a production build as well, which meant
+   * that appending the parameter to the URL was enough to open the vault
+   * without the master password.
+   *
+   * The escape hatch is now available only in a development or test
+   * build. A production bundle always starts locked.
+   */
+  if (testSeedEnabled()) {
+    const urlParams = new URLSearchParams(window.location.search);
+    if (urlParams.get("unlocked") === "true") return false;
+  }
   return getActiveSession() === null;
+}
+
+/**
+ * PERFORMANCE: cache of lowercased search haystacks, keyed by the item
+ * object identity.
+ *
+ * Previously every keystroke rebuilt a template string for *every* item and
+ * called `toLowerCase()` on it — O(n) allocations per keypress. With a
+ * `WeakMap` the haystack is computed once per item and reused; entries are
+ * collected automatically when the item is dropped, so the cache can never go
+ * stale or leak.
+ */
+const searchHaystackCache = new WeakMap<VaultItem, string>();
+
+function getSearchHaystack(item: VaultItem): string {
+  const cached = searchHaystackCache.get(item);
+  if (cached !== undefined) return cached;
+  const haystack = `${item.title} ${item.username} ${item.url} ${item.category} ${(
+    item.tags ?? []
+  ).join(" ")}`.toLowerCase();
+  searchHaystackCache.set(item, haystack);
+  return haystack;
 }
 
 type ModalName = ToolName | "mobileMenu" | "profile" | "update";
@@ -163,11 +206,27 @@ function MobileNav({
 }
 
 export default function App() {
-  const activeSession = useMemo(() => getActiveSession(), []);
+  const activeSession = useMemo(() => {
+    // V-63: a failed update must never cost the user their vault. If the
+    // encrypted container is missing but the pre-update snapshot survives,
+    // put it back *before* the app decides whether a vault exists.
+    restorePreUpdateBackupIfNeeded();
+    return getActiveSession();
+  }, []);
   const [session, setSession] = useState<UnlockedSession | null>(activeSession);
-  const [items, setItems] = useState<VaultItem[]>(() =>
-    activeSession ? activeSession.items : initialItems
-  );
+  /*
+   * The end-to-end suite seeds the vault through `lib/testSeed.ts`.
+   *
+   * The application deliberately keeps the vault out of `sessionStorage`,
+   * so the browser tests can no longer put items there and expect them
+   * back. The seed is read once, only in a development or test build, and
+   * it never reaches storage.
+   */
+  const [items, setItems] = useState<VaultItem[]>(() => {
+    if (activeSession) return activeSession.items;
+    const seeded = readTestSeed();
+    return seeded.length > 0 ? seeded : initialItems;
+  });
   const [locked, setLocked] = useState<boolean>(shouldStartLocked);
   const [theme, setTheme] = useState<Theme>(readStoredTheme);
   const [language, setLanguage] = useState<Language>(readStoredLanguage);
@@ -177,12 +236,15 @@ export default function App() {
   const [query, setQuery] = useState("");
   const [selectedId, setSelectedId] = useState<string | null>(() => {
     if (activeSession && activeSession.items.length > 0) return activeSession.items[0].id;
+    const seeded = readTestSeed();
+    if (seeded.length > 0) return seeded[0].id;
     return initialItems[0]?.id ?? null;
   });
   const [detailOpen, setDetailOpen] = useState(() => window.matchMedia("(min-width: 1280px)").matches);
   const [editingItem, setEditingItem] = useState<VaultItem | undefined>();
   const [draft, setDraft] = useState<Partial<VaultItem> | undefined>();
   const [textStep, setTextStep] = useState<number>(readStoredTextStep);
+  const [autoLockMinutes, setAutoLockMinutes] = useState<number>(readAutoLockMinutes);
   const [modal, setModal] = useState<ModalName | null>(null);
   const [commandOpen, setCommandOpen] = useState(false);
   const [feel, setFeel] = useState<FeelSettings>(readStoredFeel);
@@ -200,15 +262,40 @@ export default function App() {
   }, []);
 
   useEffect(() => {
-    checkGitHubUpdate(APP_VERSION).then((res) => {
-      if (res?.hasUpdate && res.latestVersion && compareSemver(res.latestVersion, APP_VERSION) > 0) {
-        notify(`Update available: ${res.latestVersion}`);
-      }
-    });
+    // PERFORMANCE (V-63): the release check is network-bound and must not
+    // compete with first paint. It runs when the main thread is idle (or
+    // after a short fallback delay), while the shared cache in `updater.ts`
+    // still deduplicates it against the banner's own check.
+    const runCheck = () => {
+      checkGitHubUpdate(APP_VERSION).then((res) => {
+        if (res?.hasUpdate && res.latestVersion && compareSemver(res.latestVersion, APP_VERSION) > 0) {
+          notify(`Update available: ${res.latestVersion}`);
+        }
+      });
+    };
+    const idle = (window as unknown as { requestIdleCallback?: (cb: () => void, opts?: { timeout: number }) => number }).requestIdleCallback;
+    const cancelIdle = (window as unknown as { cancelIdleCallback?: (id: number) => void }).cancelIdleCallback;
+    if (typeof idle === "function") {
+      const id = idle(runCheck, { timeout: 2000 });
+      return () => { if (typeof cancelIdle === "function") cancelIdle(id); };
+    }
+    const timer = window.setTimeout(runCheck, 800);
+    return () => window.clearTimeout(timer);
+  }, [notify]);
+
+  useEffect(() => {
     if (isTauri()) {
       invokeTauri("set_screen_protection", { enabled: true });
     }
-  }, [notify]);
+  }, []);
+
+  /*
+   * V-63: the pre-update snapshot is NOT deleted at startup any more.
+   * Deleting it on the very first launch of the *new* build meant that a
+   * partially failed update (the new build starts, but its vault cannot be
+   * read) destroyed the only recoverable copy before the user could act.
+   * It is cleared only after a successful unlock proves the vault is sound.
+   */
 
   useEffect(() => {
     document.documentElement.setAttribute("data-theme", theme);
@@ -236,8 +323,26 @@ export default function App() {
     };
   }, []);
 
-  const lockVault = useCallback(() => {
+  // PERFORMANCE (V-36): mutations are coalesced. Each write re-encrypts and
+  // rewrites the whole vault, so a burst of edits used to pay that cost once
+  // per mutation. The writer keeps only the newest state and flushes it once
+  // the burst settles.
+  const vaultWriter = useMemo(() => new CoalescingVaultWriter(400), []);
+
+  const lockVault = useCallback(async () => {
     hapticSuccess();
+    // PERFORMANCE / DATA-INTEGRITY (V-36): flush any coalesced write before
+    // the session ends, otherwise the last edit would be lost.
+    //
+    // The flush MUST be awaited before the epoch is bumped. It used to be
+    // fired and forgotten, which raced the bump: the writer scheduled its
+    // task against the *old* epoch, the bump immediately invalidated it, and
+    // the final write was rejected with `LOCKED` — silently losing the
+    // user's last edit exactly when they hit "Lock".
+    //
+    // `flush(true)` uses the queue's final-write path, which is serialised
+    // against other mutations but is not invalidated by the lock itself.
+    await vaultWriter.flush(true).catch(() => undefined);
     vaultMutationQueue.bumpEpoch();
     clearActiveSession();
     setSession(null);
@@ -245,7 +350,59 @@ export default function App() {
     setModal(null);
     setCommandOpen(false);
     setDetailOpen(false);
+    // SECURITY (V-06): a copied secret must not survive a lock. Scrub the
+    // clipboard so the next person to use the machine cannot simply paste
+    // the password that was copied a moment ago.
+    clearClipboardWipe().catch(() => {
+      // Clipboard access may be denied; nothing else to do here.
+    });
   }, []);
+
+  // SECURITY (V-06): idle / blur / visibility auto-lock.
+  //
+  // A password manager that stays unlocked indefinitely is vulnerable to the
+  // walk-away attack. This locks the vault after a period of inactivity,
+  // when the window is hidden (screen locked / app switched away), or after
+  // the window has been blurred for a grace period.
+  const autoLockRef = useRef<AutoLockController | null>(null);
+  // The language is read through a ref so that switching the UI language does
+  // not tear down and recreate the auto-lock controller (which would reset
+  // the idle timer).
+  const langRef = useRef(lang);
+  langRef.current = lang;
+
+  useEffect(() => {
+    if (locked) {
+      autoLockRef.current?.stop();
+      autoLockRef.current = null;
+      return;
+    }
+
+    const controller = createAutoLock({
+      onBeforeLock: () => {
+        // Best-effort clipboard scrub before the session is torn down.
+        void clearClipboardWipe().catch(() => {});
+      },
+      onLock: (reason) => {
+        if (reason !== "manual") {
+          notify(
+            langRef.current === "bn"
+              ? "নিষ্ক্রিয়তার কারণে ভল্ট স্বয়ংক্রিয়ভাবে লক হয়েছে।"
+              : "Vault auto-locked due to inactivity.",
+          );
+        }
+        void lockVault();
+      },
+    });
+
+    autoLockRef.current = controller;
+    controller.start();
+
+    return () => {
+      controller.stop();
+      autoLockRef.current = null;
+    };
+  }, [locked, lockVault, notify]);
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
@@ -279,7 +436,7 @@ export default function App() {
       }
       if (mod && !event.shiftKey && event.key.toLowerCase() === "l") {
         event.preventDefault();
-        lockVault();
+        void lockVault();
         return;
       }
       if (mod && !event.shiftKey && event.key.toLowerCase() === "n") {
@@ -318,11 +475,14 @@ export default function App() {
     if (brandFilter !== "all") result = result.filter((item) => item.brand === brandFilter);
     if (query.trim()) {
       const needle = query.toLowerCase();
-      result = result.filter((item) =>
-        `${item.title} ${item.username} ${item.url} ${item.category} ${(item.tags ?? []).join(" ")}`
-          .toLowerCase()
-          .includes(needle)
-      );
+      // PERFORMANCE: reuse a precomputed lowercase haystack per item instead
+      // of rebuilding the template string and calling toLowerCase() on every
+      // entry for every keystroke. The haystack cache is invalidated whenever
+      // the item list changes.
+      result = result.filter((item) => {
+        const haystack = getSearchHaystack(item);
+        return haystack.includes(needle);
+      });
     }
     return result;
   }, [items, folder, active, brandFilter, query]);
@@ -358,22 +518,20 @@ export default function App() {
       setItems((current) => {
         const updated = transform(current);
         if (session) {
-          vaultMutationQueue
-            .run(async (_epoch) => {
-              await persistVaultChanges(updated, session);
-            })
-            .catch((err) => {
-              if (err?.code === "LOCKED") {
-                console.warn("Vault locked while mutation was in flight:", err.safeMessage);
-              } else {
-                console.error("Failed to persist vault changes:", err);
-              }
-            });
+          vaultWriter.schedule(updated, session);
         }
         return updated;
       });
     },
-    [session]
+    [session, vaultWriter]
+  );
+
+  /** V-52: merge a validated peer snapshot into the live, persisted vault. */
+  const handleP2PMerge = useCallback(
+    (remote: VaultItem[]) => {
+      mutateVault((current) => mergeVaultItems(current, remote));
+    },
+    [mutateVault]
   );
 
   const handleFavorite = (item: VaultItem) => {
@@ -526,6 +684,22 @@ export default function App() {
   const changeTextStep = (index: number) => {
     setTextStep(index);
     notify(`Text size: ${stepLabel(index)} (${Math.round(TEXT_STEPS[index] * 100)}%)`);
+  };
+
+  const changeAutoLockMinutes = (minutes: number) => {
+    setAutoLockMinutes(minutes);
+    writeAutoLockMinutes(minutes);
+    // Apply immediately to the running controller.
+    autoLockRef.current?.setTimeoutMinutes?.(minutes);
+    notify(
+      minutes === 0
+        ? lang === "bn"
+          ? "স্বয়ংক্রিয় লক বন্ধ করা হয়েছে।"
+          : "Auto-lock disabled."
+        : lang === "bn"
+          ? `স্বয়ংক্রিয় লক: ${minutes} মিনিট`
+          : `Auto-lock: ${minutes} min`,
+    );
   };
 
   const openSeedItem = (item: VaultItem) => {
@@ -729,9 +903,17 @@ export default function App() {
               onOpenAuthenticator={() => setModal("authenticator")}
             />
           )}
-          {modal === "sync" && <SyncModal key="sync" onClose={() => setModal(null)} onNotify={notify} />}
+          {modal === "sync" && (
+            <SyncModal
+              key="sync"
+              onClose={() => setModal(null)}
+              onNotify={notify}
+              items={items}
+              onMerge={handleP2PMerge}
+            />
+          )}
           {modal === "emergency" && (
-            <EmergencyKitModal key="emergency" onClose={() => setModal(null)} onNotify={notify} />
+            <EmergencyKitModal key="emergency" onClose={() => setModal(null)} onNotify={notify} lang={lang} />
           )}
           {modal === "csvImport" && (
             <CsvImportModal
@@ -756,6 +938,7 @@ export default function App() {
             <Modal
               key="mobile-menu"
               onClose={() => setModal(null)}
+              pullDown
               title="Quick access"
               subtitle="Your vault, tools and local privacy — in one place."
               icon={<Sparkle size={20} weight="duotone" />}
@@ -808,12 +991,22 @@ export default function App() {
                   </p>
                   <TextSizeControl index={textStep} onChange={changeTextStep} />
                 </div>
+                <div className="mb-2.5 flex items-center justify-between gap-3">
+                  <p className="flex items-center gap-1.5 text-[8px] font-bold uppercase tracking-[0.13em] text-faint">
+                    <LockKey size={12} weight="duotone" style={{ color: "var(--accent)" }} /> Auto-lock
+                  </p>
+                  <AutoLockControl
+                    minutes={autoLockMinutes}
+                    onChange={changeAutoLockMinutes}
+                    lang={lang}
+                  />
+                </div>
                 {theme === "lofi" && (
                   <div className="mb-3 flex items-center justify-between gap-3">
                     <p className="flex items-center gap-1.5 text-[8px] font-bold uppercase tracking-[0.13em] text-faint">
                       Soundscape
                     </p>
-                    <LofiPlayer active onNotify={notify} />
+                    <Suspense fallback={null}><LofiPlayer active onNotify={notify} /></Suspense>
                   </div>
                 )}
                 <div className="mb-2.5 flex items-center justify-between">
@@ -907,6 +1100,9 @@ export default function App() {
           <LockScreen
             lang={lang}
             onUnlocked={(newSession) => {
+              // Only now is the vault proven readable. The snapshot has
+              // served its purpose and can be dropped (V-39 / V-63).
+              clearPreUpdateBackup();
               setSession(newSession);
               setItems(newSession.items);
               setLocked(false);

@@ -2,12 +2,22 @@ import { test, expect } from "@playwright/test";
 
 test.describe("VaultZero Architectural Hardening & Cryptographic Gate", () => {
   test.beforeEach(async ({ page }) => {
-    // Clear storage before each test for clean state
-    await page.goto("/?unlocked=false");
+    /*
+     * Clear the storage before each test so every test starts from the
+     * factory state.
+     *
+     * The clear has to happen on a page that is already loaded, and the
+     * page has to be reloaded afterwards. Clearing the storage and then
+     * staying on the same page leaves the running application with the
+     * vault it already had in memory, so the next assertion sees a vault
+     * that should not exist.
+     */
+    await page.goto("/");
     await page.evaluate(() => {
       window.localStorage.clear();
       window.sessionStorage.clear();
     });
+    await page.reload();
   });
 
   test("Cryptographic Vault Gate displays on initial launch with Setup Mode", async ({ page }) => {
@@ -88,9 +98,20 @@ test.describe("VaultZero Architectural Hardening & Cryptographic Gate", () => {
     await page.goto("/?unlocked=true");
     await expect(page.locator(".vault-card").getByRole("heading", { name: "VaultZero Demo Account" })).toBeVisible();
 
-    // Select the demo card checkbox
-    const checkbox = page.locator('[data-item-id="demo-account"]').getByRole("checkbox");
-    await checkbox.click({ force: true });
+    // V-70: the card carries a `whileHover={{ y: -4 }}` bouncy spring. A
+    // `force: true` click skips Playwright's stability and hit-target checks,
+    // so under the CI's `workers: 2` load the click can land on the moving
+    // card body instead of the 16px checkbox: the inspector opens, the
+    // selection never registers and the bulk bar never mounts
+    // (CI 41558464980: 123 passed / 1 failed, "element(s) not found").
+    // Hover first (which also reveals the checkbox), then let Playwright's
+    // normal actionability checks wait for the spring to settle, and assert
+    // the state change before asserting the dependent UI.
+    const card = page.locator('[data-item-id="demo-account"]');
+    await card.hover();
+    const checkbox = card.getByRole("checkbox");
+    await checkbox.click();
+    await expect(checkbox).toHaveAttribute("aria-checked", "true");
 
     // Floating bulk bar appears
     await expect(page.getByRole("button", { name: "Delete selected" })).toBeVisible();
@@ -98,18 +119,25 @@ test.describe("VaultZero Architectural Hardening & Cryptographic Gate", () => {
     await expect(page.getByRole("button", { name: "Export selected" })).toBeVisible();
   });
 
-  test("Inspector exhibits Password History time-machine with restore capability", async ({ page }) => {
+  test("V-51: a fresh vault ships exactly one password; history is earned by a real edit", async ({ page }) => {
     await page.goto("/?unlocked=true");
-    // Click demo card to open inspector
     await page.locator('[data-item-id="demo-account"]').click();
-    await expect(page.getByTestId("detail-inspector")).toBeVisible();
+    const inspector = page.getByTestId("detail-inspector");
+    await expect(inspector).toBeVisible();
 
-    // Inspect Password History section
-    await expect(page.getByText("Password history")).toBeVisible();
-    await expect(page.getByRole("button", { name: "Restore" })).toBeVisible();
+    // The single demo entry must not carry a second seeded demo password.
+    await expect(inspector.getByText("Password history")).toBeVisible();
+    await expect(inspector.getByText("No prior passwords recorded")).toBeVisible();
+    await expect(inspector.getByRole("button", { name: "Restore" })).toHaveCount(0);
 
-    // Restore previous password
-    await page.getByRole("button", { name: "Restore" }).first().click();
+    // A genuine password change creates real history, and restore works.
+    await inspector.getByRole("button", { name: "Edit this item" }).click();
+    const dialog = page.getByRole("dialog", { name: "Edit vault item" });
+    await dialog.getByPlaceholder("Enter a strong password").fill("Fresh-Real-Pass!2026");
+    await dialog.getByRole("button", { name: "Save changes", exact: true }).click();
+    await expect(dialog).toHaveCount(0);
+    await expect(inspector.getByRole("button", { name: "Restore" })).toHaveCount(1);
+    await inspector.getByRole("button", { name: "Restore" }).first().click();
     await expect(page.getByText("Previous password restored")).toBeVisible();
   });
 
@@ -120,21 +148,47 @@ test.describe("VaultZero Architectural Hardening & Cryptographic Gate", () => {
     const dialog = page.getByRole("dialog", { name: "Nearby P2P Sync" });
     await expect(dialog).toBeVisible();
 
-    // Real Handshake status defaults to Waiting
-    await expect(dialog.getByText("Waiting for peer connection…")).toBeVisible();
+    /*
+     * V-17: the status is "Waiting for peer **selection**", not
+     * "connection". A scanned QR selects a peer; the authenticated
+     * handshake only succeeds when the transfer actually runs, so the
+     * interface must not claim a connection that does not exist.
+     */
+    await expect(dialog.getByText("Waiting for peer selection…")).toBeVisible();
 
-    // Verify Clean QR code without center logo
-    const qrSvg = dialog.locator("svg").first();
-    await expect(qrSvg).toBeVisible();
-    // Center logo image is not present inside QR
-    await expect(qrSvg.locator("image")).toHaveCount(0);
+    /*
+     * V-52: the QR used to advertise a hardcoded 192.168.1.103:1420 before
+     * any host existed — a fake pairing target. A live QR is only shown once
+     * the native host reports its real (ephemeral) port. In the browser the
+     * native command is unsupported, so the honest placeholder is shown and
+     * NO misleading QR is rendered.
+     */
+    await expect(dialog.getByText(/Start the encrypted host to generate a live pairing QR/)).toBeVisible();
+    await expect(dialog.getByRole("img", { name: "VaultZero Pairing QR Code" })).toHaveCount(0);
 
-    // Host info
-    await expect(dialog.getByText("PIN: 729 184")).toBeVisible();
+    /*
+     * Host info.
+     *
+     * The pairing PIN is generated with a CSPRNG on every launch and is
+     * never hard-coded, so the assertion is on the shape of the value
+     * rather than on one particular number.
+     *
+     * The PIN is rendered inside the copy button, so the text node also
+     * holds the copy glyph and cannot be matched on its own.
+     */
+    const pin = await dialog
+      .getByRole("button", { name: "Copy pairing PIN" })
+      .innerText();
+    expect(pin).toMatch(/PIN:\s*\d{3}\s*\d{3}/);
 
     // Switch to Scan tab
     await dialog.getByRole("button", { name: "Scan QR / Connect" }).click();
-    await expect(dialog.getByPlaceholder("e.g. 192.168.1.103:1420 or 729184")).toBeVisible();
+    /*
+     * The manual field accepts either the host address or the pairing PIN.
+     * The example PIN is a shape, not a value — the real code is random on
+     * every launch, so no particular number can be asserted.
+     */
+    await expect(dialog.getByPlaceholder(/10\.0\.0\.5:52137\/123456 or \d{6}/)).toBeVisible();
   });
 
   test("Panic auto-lock on Ctrl+L wipes session and returns to LockScreen", async ({ page }) => {

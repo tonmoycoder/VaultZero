@@ -370,9 +370,22 @@ export function sanitizeCsvExportCell(val: string): string {
 
 /**
  * Exports vault items to RFC 4180 CSV with formula injection defense.
+ *
+ * SECURITY (V-30 / V-41): the export deliberately contains **no** TOTP
+ * material at all.
+ *
+ * The previous header said "TOTP Secret" but the value written was
+ * `item.totp` — the *current rotating code*, which expires in 30 seconds and
+ * is therefore useless in a backup. Exporting it was misleading, and the
+ * column name invited someone to "fix" it by exporting the real setup
+ * secret, which is a permanent 2FA bypass.
+ *
+ * The setup secret is available only through the explicit, individually
+ * confirmed "export 2FA key" action in the inspector — never as a side
+ * effect of exporting the vault.
  */
 export function exportVaultToCsv(items: VaultItem[]): string {
-  const headers = ["Title", "Username", "Password", "URL", "Category", "Folder", "TOTP Secret", "Notes"];
+  const headers = ["Title", "Username", "Password", "URL", "Category", "Folder", "Notes"];
   const rows: string[] = [headers.join(",")];
 
   for (const item of items) {
@@ -383,7 +396,6 @@ export function exportVaultToCsv(items: VaultItem[]): string {
       item.url,
       item.category,
       item.folder || "",
-      item.totp || "",
       item.note || "",
     ].map((raw) => {
       const sanitized = sanitizeCsvExportCell(raw);

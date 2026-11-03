@@ -6,9 +6,17 @@ members = [
 resolver = "2"
 
 [profile.release]
-opt-level = "z"
+# SECURITY/PERF (V-14): `opt-level = "z"` optimises for the smallest binary at
+# the cost of disabling loop vectorisation and aggressive inlining. For a
+# cryptographic application where Argon2id and XChaCha20-Poly1305 are the hot
+# path, that is the wrong trade-off. `3` keeps full speed; use `s` if binary
+# size matters more than unlock latency.
+opt-level = 3
 lto = true
 codegen-units = 1
 strip = true
-panic = "abort"
+# SECURITY (V-14): `panic = "abort"` means a panic in ANY command takes down
+# the whole process. With `unwind` a panic inside one Tauri command is
+# contained to that command and the app stays alive.
+panic = "unwind"
 

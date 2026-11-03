@@ -1,4 +1,5 @@
 import { test, expect, type Page } from "@playwright/test";
+import { seedVault } from "./helpers/seedVault";
 
 const inspector = (page: Page) => page.getByTestId("detail-inspector");
 const card = (page: Page, id: string) => page.locator(`[data-item-id="${id}"]`);
@@ -20,7 +21,7 @@ const TEST_ITEMS = [
     strength: "strong",
     score: 4,
     modified: "2 min ago",
-    totp: "482 197",
+    totp: "JBSWY3DPEHPK3PXP",
     recoveryCodes: ["GX7Q-4H2M-91LA", "P3NV-8K6D-27ZC", "LQ9A-5R1T-64BX", "MW2E-7Y8U-03KF"],
     tags: ["Work", "2FA"],
     folder: "Personal",
@@ -38,7 +39,7 @@ const TEST_ITEMS = [
     strength: "strong",
     score: 4,
     modified: "18 min ago",
-    totp: "731 408",
+    totp: "GEZDGNBVGY3TQOJQ",
     recoveryCodes: ["7BDF-2K9A-1140", "92KD-M4L0-73PQ", "X0TZ-66NC-3021", "1PQA-9L8V-4472"],
     tags: ["Work", "2FA"],
     folder: "Work",
@@ -55,7 +56,7 @@ const TEST_ITEMS = [
     strength: "strong",
     score: 4,
     modified: "2 hours ago",
-    totp: "294 613",
+    totp: "MFRGGZDFMZTWQ2LK",
     tags: ["Personal", "Devices"],
     folder: "Personal",
   },
@@ -71,7 +72,7 @@ const TEST_ITEMS = [
     strength: "strong",
     score: 4,
     modified: "Yesterday",
-    totp: "889 340",
+    totp: "KRUGS4ZANFZSAYJA",
     tags: ["Studio"],
     folder: "Work",
   },
@@ -180,13 +181,7 @@ const TEST_ITEMS = [
 ];
 
 test.beforeEach(async ({ page }) => {
-  await page.addInitScript((items) => {
-    window.sessionStorage.setItem(
-      "vaultzero_active_session",
-      JSON.stringify({ isDuress: false, items })
-    );
-  }, TEST_ITEMS);
-  await page.goto("/?unlocked=true");
+  await seedVault(page, TEST_ITEMS);
   await expect(page.getByRole("heading", { name: /Good morning/i })).toBeVisible();
 });
 
@@ -242,15 +237,41 @@ for (const width of [390, 320]) {
     await scroll.evaluate((element) => { element.scrollTop = element.scrollHeight; });
     await expect(inspector(page).getByText("Last edited", { exact: true })).toBeVisible();
     await scroll.evaluate((element) => { element.scrollTop = 0; });
+
+    /*
+     * The sheet springs in with a Living Flow overshoot. Starting the
+     * gesture while that entrance is still running makes the measured
+     * handle position and the gesture's offset disagree (at 320px the old
+     * target could even fall below the viewport), so the swipe sometimes
+     * did not reach the dismiss threshold. Wait for the transform to settle.
+     */
+    await expect
+      .poll(async () =>
+        Math.abs(
+          await inspector(page).evaluate((element) => {
+            const transform = getComputedStyle(element).transform;
+            return transform === "none" ? 0 : new DOMMatrix(transform).m42;
+          })
+        )
+      )
+      .toBeLessThan(1);
+
     const handle = inspector(page).getByRole("button", { name: "Drag down to close details" });
     const box = (await handle.boundingBox())!;
-    await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
+    const startX = box.x + box.width / 2;
+    const startY = box.y + box.height / 2;
+    await page.mouse.move(startX, startY);
     await page.mouse.down();
-    await page.mouse.move(box.x + box.width / 2, box.y + 250, { steps: 14 });
+    await page.mouse.move(startX, Math.min(startY + 260, 820), { steps: 14 });
     await page.mouse.up();
-    if ((await inspector(page).count()) > 0) {
-      await handle.click({ force: true });
-    }
+
+    /*
+     * AnimatePresence keeps the sheet mounted for its exit spring. The old
+     * fallback clicked the handle whenever the count was still 1; during
+     * the exit that click landed on the card underneath and *reopened* the
+     * inspector, which was the 320px flake. Waiting for removal is both
+     * simpler and race-free.
+     */
     await expect(inspector(page)).toHaveCount(0);
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1)).toBe(true);
   });
@@ -304,10 +325,7 @@ test("native touch swiping moves the brand rail", async ({ browser }) => {
   const context = await browser.newContext({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true });
   const page = await context.newPage();
   await page.addInitScript((items) => {
-    window.sessionStorage.setItem(
-      "vaultzero_active_session",
-      JSON.stringify({ isDuress: false, items })
-    );
+    window.sessionStorage.setItem("vaultzero_test_seed", JSON.stringify(items));
   }, TEST_ITEMS);
   await page.goto("/?unlocked=true");
   const rail = page.getByTestId("brand-scroll");

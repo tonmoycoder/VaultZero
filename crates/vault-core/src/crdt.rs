@@ -5,53 +5,94 @@ use uuid::Uuid;
 
 /// Hybrid Logical Clock (HLC) providing monotonically increasing timestamps
 /// across devices and preserving causal ordering.
-/// Format: 40 bits physical ms | 16 bits logical counter | 8 bits node id
+///
+/// # Bit layout (48-bit physical | 8-bit logical | 8-bit node id)
+///
+/// `| 48 bits physical ms | 8 bits logical counter | 8 bits node id |`
+///
+/// The physical field holds milliseconds since the Unix epoch. 48 bits of
+/// milliseconds covers ~8,900 years, so the packed value never overflows a
+/// `u64`.
+///
+/// SECURITY (V-10): the previous layout used `(ms << 24)`, which requires
+/// 40 bits of milliseconds — but the value being shifted was already in
+/// *milliseconds* (~1.78e12, needing 41 bits). `1.78e12 << 24 ≈ 3.0e19`
+/// overflows `u64::MAX` (1.8e19). In debug builds that panics; in release
+/// builds (`panic = "abort"`) it wraps silently, producing non-monotonic
+/// timestamps that break CRDT last-write-wins merge ordering.
 pub struct HlcClock {
-    last_physical_ms: AtomicU64,
-    logical_counter: AtomicU64,
+    /// `(physical_ms << 8) | logical_counter` in one atomic word.
+    ///
+    /// Keeping the two fields in a single atomic lets `now()` advance them
+    /// with one compare-and-swap, so two threads can never publish a pair
+    /// that is out of order.
+    state: AtomicU64,
     node_id: u8,
 }
 
 impl HlcClock {
+    /// Mask for the physical millisecond field (48 bits).
+    const PHYSICAL_MASK: u64 = (1u64 << 48) - 1;
+    /// The logical counter occupies 8 bits (0..=255).
+    const LOGICAL_MAX: u64 = 0xFF;
+
     pub fn new(node_id: u8) -> Self {
         Self {
-            last_physical_ms: AtomicU64::new(0),
-            logical_counter: AtomicU64::new(0),
+            state: AtomicU64::new(0),
             node_id,
         }
     }
 
     pub fn now(&self) -> u64 {
-        let physical = chrono::Utc::now().timestamp_millis() as u64;
-        let last = self.last_physical_ms.load(Ordering::SeqCst);
+        let physical = (chrono::Utc::now().timestamp_millis().max(0) as u64) & Self::PHYSICAL_MASK;
 
-        let (chosen_time, counter) = if physical > last {
-            self.last_physical_ms.store(physical, Ordering::SeqCst);
-            self.logical_counter.store(0, Ordering::SeqCst);
-            (physical, 0u64)
-        } else {
-            let next_count = self.logical_counter.fetch_add(1, Ordering::SeqCst) + 1;
-            (last, next_count)
-        };
+        loop {
+            let state = self.state.load(Ordering::SeqCst);
+            let last_physical = state >> 8;
+            let logical = state & Self::LOGICAL_MAX;
 
-        // Combine: (ms << 24) | ((counter & 0xFFFF) << 8) | (node_id & 0xFF)
-        (chosen_time << 24) | ((counter & 0xFFFF) << 8) | (self.node_id as u64)
+            let (chosen_time, counter) = if physical > last_physical {
+                // Wall clock moved forward: start a fresh logical sequence.
+                (physical, 0u64)
+            } else if logical < Self::LOGICAL_MAX {
+                // Same millisecond: bump the logical counter.
+                (last_physical, logical + 1)
+            } else {
+                // SECURITY (V-10 / V-45): the logical field is only 8 bits.
+                // The old implementation masked a `fetch_add` value with
+                // 0xFF, so after 256 calls inside one millisecond the packed
+                // timestamp went *backwards* and CRDT last-write-wins merge
+                // picked the older entry. An HLC is allowed to run ahead of
+                // wall time: advance the physical field by 1 ms and restart
+                // the logical sequence instead of wrapping.
+                (last_physical + 1, 0u64)
+            };
+
+            let next_state = (chosen_time << 8) | counter;
+            if self
+                .state
+                .compare_exchange(state, next_state, Ordering::SeqCst, Ordering::SeqCst)
+                .is_ok()
+            {
+                // 48-bit physical | 8-bit logical | 8-bit node id.
+                return ((chosen_time & Self::PHYSICAL_MASK) << 16)
+                    | (counter << 8)
+                    | (self.node_id as u64);
+            }
+        }
     }
 }
 
 /// Deterministically merges two Vault states (local and remote) without losing history.
 /// Follows CRDT Last-Write-Wins (LWW) semantics per entry based on HLC timestamps.
-/// When passwords are overwritten, old passwords are systematically preserved into `password_history`.
+/// When passwords are overwritten, old passwords are systematically preserved into
+/// `password_history`.
 pub fn merge_vault_states(local: &Vault, remote: &Vault) -> Vault {
     let mut merged = local.clone();
 
     // 1. Merge Entries
-    let mut local_map: HashMap<Uuid, Entry> = local
-        .entries
-        .iter()
-        .cloned()
-        .map(|e| (e.id, e))
-        .collect();
+    let mut local_map: HashMap<Uuid, Entry> =
+        local.entries.iter().cloned().map(|e| (e.id, e)).collect();
 
     for remote_entry in &remote.entries {
         match local_map.get_mut(&remote_entry.id) {
@@ -67,16 +108,22 @@ pub fn merge_vault_states(local: &Vault, remote: &Vault) -> Vault {
                             .iter()
                             .any(|h| h.password == local_entry.password);
                         if !already_has {
-                            winner.password_history.push(crate::models::PasswordHistoryEntry {
-                                password: local_entry.password.clone(),
-                                changed_at: local_entry.updated_at,
-                            });
+                            winner
+                                .password_history
+                                .push(crate::models::PasswordHistoryEntry {
+                                    password: local_entry.password.clone(),
+                                    changed_at: local_entry.updated_at,
+                                });
                         }
                     }
 
                     // Also preserve any distinct history entries from local
                     for hist in &local_entry.password_history {
-                        if !winner.password_history.iter().any(|h| h.password == hist.password) {
+                        if !winner
+                            .password_history
+                            .iter()
+                            .any(|h| h.password == hist.password)
+                        {
                             winner.password_history.push(hist.clone());
                         }
                     }
@@ -85,21 +132,29 @@ pub fn merge_vault_states(local: &Vault, remote: &Vault) -> Vault {
                 } else {
                     // Local won or tied (tie-breaker deterministic by device_id)
                     // If local won, ensure remote's distinct historical passwords are kept
-                    if local_entry.password != remote_entry.password && !remote_entry.password.is_empty() {
+                    if local_entry.password != remote_entry.password
+                        && !remote_entry.password.is_empty()
+                    {
                         let already_has = local_entry
                             .password_history
                             .iter()
                             .any(|h| h.password == remote_entry.password);
                         if !already_has {
-                            local_entry.password_history.push(crate::models::PasswordHistoryEntry {
-                                password: remote_entry.password.clone(),
-                                changed_at: remote_entry.updated_at,
-                            });
+                            local_entry.password_history.push(
+                                crate::models::PasswordHistoryEntry {
+                                    password: remote_entry.password.clone(),
+                                    changed_at: remote_entry.updated_at,
+                                },
+                            );
                         }
                     }
 
                     for hist in &remote_entry.password_history {
-                        if !local_entry.password_history.iter().any(|h| h.password == hist.password) {
+                        if !local_entry
+                            .password_history
+                            .iter()
+                            .any(|h| h.password == hist.password)
+                        {
                             local_entry.password_history.push(hist.clone());
                         }
                     }
@@ -118,12 +173,8 @@ pub fn merge_vault_states(local: &Vault, remote: &Vault) -> Vault {
     merged.entries = merged_entries;
 
     // 2. Merge Folders
-    let mut folder_map: HashMap<Uuid, Folder> = local
-        .folders
-        .iter()
-        .cloned()
-        .map(|f| (f.id, f))
-        .collect();
+    let mut folder_map: HashMap<Uuid, Folder> =
+        local.folders.iter().cloned().map(|f| (f.id, f)).collect();
 
     for remote_folder in &remote.folders {
         match folder_map.get_mut(&remote_folder.id) {
@@ -143,7 +194,8 @@ pub fn merge_vault_states(local: &Vault, remote: &Vault) -> Vault {
     merged.folders = merged_folders;
 
     // 3. Update metadata timestamps
-    merged.metadata.updated_at = std::cmp::max(local.metadata.updated_at, remote.metadata.updated_at);
+    merged.metadata.updated_at =
+        std::cmp::max(local.metadata.updated_at, remote.metadata.updated_at);
 
     merged
 }

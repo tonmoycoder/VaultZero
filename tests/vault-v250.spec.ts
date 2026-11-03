@@ -67,8 +67,18 @@ test.describe("VaultZero v2.5.0 Master Verification Suite", () => {
     expect(formatted).toContain("Password: V0-Secure$Demo2026");
     expect(formatted).toContain("Website: vaultzero.me");
     expect(formatted).toContain("2FA Code (TOTP): 123 456");
-    expect(formatted).toContain("Recovery Codes: VZ01-DEMO-9942");
     expect(formatted).toContain("Folder: Personal");
+
+    /*
+     * SECURITY (V-30): the bulk copy must not carry the 2FA recovery
+     * codes. They are the fallback that defeats the second factor, and a
+     * bundle that contains them turns one clipboard copy into a complete
+     * account takeover. The codes stay available through the explicit,
+     * individually confirmed action in the inspector.
+     */
+    expect(formatted).not.toContain("Recovery Codes");
+    expect(formatted).not.toContain("VZ01-DEMO-9942");
+    expect(formatted).not.toContain("VZ02-DEMO-8831");
   });
 
   test("4. Zero-Knowledge Breach Scanner & Cryptographic Anatomy", async () => {

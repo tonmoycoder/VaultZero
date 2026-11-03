@@ -29,11 +29,11 @@ import {
   passwordStrength,
 } from "../lib/generate";
 import { brands, type BrandKey, type Category, type VaultItem } from "../lib/vault";
+import { isValidTotpSecret } from "../lib/totp";
 import { cn } from "../utils/cn";
 import { BrandMark, CopyButton, GlassCheck, Modal, StrengthDots, Tooltip } from "./ui";
 import OcrCopyPad, { type OcrField } from "./OcrCopyPad";
 import { MAX_OCR_FILE_SIZE, runLocalOcr, type OcrLanguage } from "../lib/ocr";
-import jsQR from "jsqr";
 import { parseOtpAuthUri } from "../lib/totp";
 import type { Language } from "../lib/vault";
 
@@ -401,7 +401,7 @@ async function extractQrFromImage(file: File): Promise<string | null> {
   return new Promise((resolve) => {
     const img = new window.Image();
     const url = URL.createObjectURL(file);
-    img.onload = () => {
+    img.onload = async () => {
       URL.revokeObjectURL(url);
       try {
         const canvas = document.createElement("canvas");
@@ -411,6 +411,13 @@ async function extractQrFromImage(file: File): Promise<string | null> {
         if (!ctx) { resolve(null); return; }
         ctx.drawImage(img, 0, 0);
         const imgData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+        /*
+         * PERFORMANCE: the QR decoder is 132 KB of JavaScript. It used to
+         * be imported statically, so every user downloaded it on the first
+         * paint even though it is only needed when a QR code is scanned.
+         * It is now loaded on demand, at the moment a frame is decoded.
+         */
+        const { default: jsQR } = await import("jsqr");
         const code = jsQR(imgData.data, imgData.width, imgData.height, {
           inversionAttempts: "dontInvert",
         });
@@ -582,7 +589,7 @@ export function OcrModal({
       password: assignedPassword || parsed.password,
       url: assignedUrl || parsed.url,
       note: extracted,
-      totp: detectedTotp?.secret || parsed.totp,
+      totp: isValidTotpSecret(detectedTotp?.secret) ? detectedTotp!.secret : (isValidTotpSecret(parsed.totp) ? parsed.totp : undefined),
     });
     onNotify(lang === "bn" ? "ওসিআর তথ্য অ্যাড ফর্মে প্রস্তুত — রিভিউ করে সেভ করুন" : "Scanned details ready — review before saving");
   };
@@ -851,7 +858,7 @@ export function OcrModal({
                     strength: "strong",
                     score: 4,
                     modified: "Just now",
-                    totp: detectedTotp.secret,
+                    totp: isValidTotpSecret(detectedTotp.secret) ? detectedTotp.secret : undefined,
                     tags: ["2FA", "Scanned"],
                     folder: "Work",
                   });

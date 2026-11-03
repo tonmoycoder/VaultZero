@@ -5,6 +5,7 @@ import {
   CheckCircle,
   ClockCounterClockwise,
   Fingerprint,
+  GlobeHemisphereWest,
   Info,
   LockSimple,
   ShieldCheck,
@@ -19,8 +20,11 @@ import { BrandMark, Modal } from "./ui";
 import { useMotionSettings } from "./Tactile";
 import {
   addSecurityAuditEntry,
-  checkPasswordBreach,
+  getRangeRequestCount,
   getSecurityAuditLog,
+  isBreachOnlineEnabled,
+  setBreachOnlineEnabled,
+  scanPasswordsBreach,
   type BreachCheckResult,
   type SecurityAuditEntry,
 } from "../lib/breachScanner";
@@ -50,6 +54,9 @@ export default function SecurityCenterModal({
   const [checkedAt, setCheckedAt] = useState(Date.now());
   const [auditLogs, setAuditLogs] = useState<SecurityAuditEntry[]>(() => getSecurityAuditLog());
   const [breachScanning, setBreachScanning] = useState(false);
+  const [breachProgress, setBreachProgress] = useState<{ done: number; total: number } | null>(null);
+  const [onlineBreach, setOnlineBreach] = useState<boolean>(() => isBreachOnlineEnabled());
+  const [showConsent, setShowConsent] = useState(false);
   const [breachCount, setBreachCount] = useState<number | null>(null);
   const [breachedDetails, setBreachedDetails] = useState<
     Array<{ item: VaultItem; result: BreachCheckResult }>
@@ -96,24 +103,50 @@ export default function SecurityCenterModal({
 
   const runDeepBreachAudit = async () => {
     setBreachScanning(true);
-    const leaked: Array<{ item: VaultItem; result: BreachCheckResult }> = [];
+    setBreachProgress(null);
     try {
-      for (const item of items) {
-        if (!item.password || item.password === "—") continue;
-        const res = await checkPasswordBreach(item.password, "en");
-        if (res.breached) {
+      // PERFORMANCE (V-21) / SECURITY (V-19): the previous implementation
+      // issued one sequential HTTPS request per password, with no cache and
+      // no deduplication. This batches every distinct hash prefix into a
+      // bounded-concurrency fetch, so a vault of 500 passwords with 50
+      // distinct prefixes costs 50 requests instead of 500 — and it restores
+      // the k-anonymity property, because the whole vault is answered from a
+      // small set of shared range buckets rather than 500 unique ones.
+      const scannable = items.filter(
+        (item) => item.password && item.password !== "—"
+      );
+      const scannedCount = scannable.length;
+
+      if (scannedCount === 0) {
+        setBreachCount(0);
+        setBreachedDetails([]);
+        onNotify("No passwords to check.");
+        return;
+      }
+
+      const batch = await scanPasswordsBreach(
+        scannable.map((item) => item.password as string),
+        "en",
+        (done, total) => setBreachProgress({ done, total })
+      );
+
+      const leaked: Array<{ item: VaultItem; result: BreachCheckResult }> = [];
+      for (const item of scannable) {
+        const res = batch.results.get(item.password as string);
+        if (res?.breached) {
           leaked.push({ item, result: res });
         }
       }
+
       setBreachCount(leaked.length);
       setBreachedDetails(leaked);
 
+      // The log records only counts. Titles, usernames and hash prefixes are
+      // metadata about secrets and must never be persisted (V-20).
       const logDetail =
         leaked.length > 0
-          ? `Found ${leaked.length} compromised password(s): ${leaked
-              .map((b) => `"${b.item.title} (${b.item.username || "no email"})"`)
-              .join(", ")} via HIBP k-Anonymity [SHA1: ${leaked[0]?.result.sha1Prefix || ""}***]`
-          : "Zero passwords found across 1B+ breach leaks via HIBP k-Anonymity";
+          ? `Found ${leaked.length} compromised password(s) out of ${scannedCount} checked via HIBP k-Anonymity.`
+          : `Zero of ${scannedCount} checked passwords found across 1B+ breach leaks via HIBP k-Anonymity.`;
 
       const updated = addSecurityAuditEntry(
         "Zero-Knowledge Breach Scan",
@@ -126,12 +159,16 @@ export default function SecurityCenterModal({
           ? `⚠️ Breach Audit: ${leaked.length} items found in compromised registries!`
           : "✅ Zero breaches detected across entire vault!"
       );
+    } catch {
+      onNotify("Breach scan failed.");
     } finally {
       setBreachScanning(false);
+      setBreachProgress(null);
     }
   };
 
   return (
+    <>
     <Modal
       onClose={onClose}
       title="Security center"
@@ -143,6 +180,14 @@ export default function SecurityCenterModal({
           <span className="flex items-center gap-1.5 text-[8.5px] text-faint">
             <LockSimple size={12} weight="duotone" className="text-success" />
             Zero-knowledge k-Anonymity · Client side only
+            {getRangeRequestCount() > 0 && (
+              <span
+                title="Each request retrieves a whole range of hash prefixes at once, so one request covers many passwords."
+                className="ml-1 rounded-md border border-[var(--border-soft)] bg-[var(--glass-soft)] px-1.5 py-0.5 font-mono text-[8px] text-faint"
+              >
+                {getRangeRequestCount()} range {getRangeRequestCount() === 1 ? "query" : "queries"} this session
+              </span>
+            )}
           </span>
           <div className="flex items-center gap-2">
             <button
@@ -151,11 +196,28 @@ export default function SecurityCenterModal({
               className="secondary-button flex h-9 items-center gap-1.5 rounded-[12px] px-3.5 text-[10.5px] font-semibold text-accent"
             >
               <ShieldWarning size={14} className={breachScanning ? "animate-spin" : ""} />
-              {breachScanning ? "Scanning breaches…" : "🛡️ Scan Vault Breaches"}
+              {breachScanning
+                ? `Scanning… ${breachProgress ? `${breachProgress.done}/${breachProgress.total}` : "…"}`
+                : "🛡️ Scan Vault Breaches"}
             </button>
             <button onClick={refresh} disabled={checking} className="secondary-button flex h-9 items-center gap-1.5 rounded-[12px] px-3.5 text-[10.5px] font-semibold">
               <ArrowClockwise size={14} className={checking ? "animate-spin" : ""} />
               {checking ? "Reviewing items..." : "Refresh report"}
+            </button>
+            <button
+              onClick={() => {
+                if (onlineBreach) {
+                  setBreachOnlineEnabled(false);
+                  setOnlineBreach(false);
+                } else {
+                  setShowConsent(true);
+                }
+              }}
+              title="The optional online check queries a hash-prefix range API. Your passwords never leave the device."
+              className="secondary-button flex h-9 items-center gap-1.5 rounded-[12px] px-3.5 text-[10.5px] font-semibold"
+            >
+              <GlobeHemisphereWest size={14} className={onlineBreach ? "text-success" : "text-faint"} />
+              {onlineBreach ? "Online check on" : "Offline only"}
             </button>
           </div>
         </div>
@@ -437,5 +499,66 @@ export default function SecurityCenterModal({
         </AnimatePresence>
       </div>
     </Modal>
+
+    {/* Consent dialog for the optional online breach check (V-18). */}
+    {showConsent && (
+      <Modal
+        onClose={() => setShowConsent(false)}
+        title="Enable the online breach check?"
+        subtitle="This is optional. VaultZero works fully offline without it."
+        icon={<GlobeHemisphereWest size={22} weight="duotone" />}
+        width="max-w-[520px]"
+        footer={
+          <div className="flex items-center justify-end gap-2">
+            <button
+              onClick={() => setShowConsent(false)}
+              className="secondary-button flex h-9 items-center rounded-[12px] px-4 text-[10.5px] font-semibold"
+            >
+              Stay offline
+            </button>
+            <button
+              onClick={() => {
+                setBreachOnlineEnabled(true);
+                setOnlineBreach(true);
+                setShowConsent(false);
+                onNotify("Online breach check enabled.");
+              }}
+              className="primary-button flex h-9 items-center rounded-[12px] px-4 text-[10.5px] font-semibold"
+            >
+              Enable online check
+            </button>
+          </div>
+        }
+      >
+        <div className="space-y-3 text-[11px] leading-relaxed text-soft">
+          <p>
+            The offline audit always runs and never touches the network. Enabling this adds an
+            <strong> optional</strong> lookup against Have I Been Pwned&apos;s range API.
+          </p>
+          <div className="glass-soft rounded-[14px] border border-[var(--border-soft)] p-3">
+            <p className="mb-1.5 font-semibold text-main">What leaves your device</p>
+            <ul className="ml-4 list-disc space-y-1 text-[10.5px] text-muted">
+              <li>
+                One SHA-1 hash <em>prefix</em> per distinct password prefix — 5 hexadecimal
+                characters. Your password is never sent.
+              </li>
+              <li>
+                Requests are batched, so many passwords share a single request. The Security
+                Center shows the exact query count.
+              </li>
+            </ul>
+            <p className="mb-1.5 mt-2.5 font-semibold text-main">What never leaves your device</p>
+            <ul className="ml-4 list-disc space-y-1 text-[10.5px] text-muted">
+              <li>The password itself, and the full hash used to match it locally.</li>
+              <li>Your entry titles, usernames and notes.</li>
+            </ul>
+          </div>
+          <p className="text-[10px] text-faint">
+            You can switch this off at any time with the &ldquo;Offline only&rdquo; button.
+          </p>
+        </div>
+      </Modal>
+    )}
+    </>
   );
 }

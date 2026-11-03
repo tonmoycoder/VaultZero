@@ -231,3 +231,31 @@ export async function generateTotp(
     period,
   };
 }
+
+
+/**
+ * V-60: `VaultItem.totp` stores the **TOTP setup secret** (Base32 or an
+ * `otpauth://` URI), never a displayed code. The old default vault shipped
+ * static strings like "839 201" which are not valid Base32, so the
+ * authenticator could never generate a real one-time code from them.
+ */
+export function isValidTotpSecret(secret: string | undefined | null): boolean {
+  if (!secret || typeof secret !== "string") return false;
+  const value = secret.trim();
+  if (value.startsWith("otpauth://totp/")) {
+    try {
+      parseOtpAuthUri(value);
+      return true;
+    } catch {
+      return false;
+    }
+  }
+  return validateGoogleAuthSecret(value).valid;
+}
+
+/** Turns a stored secret (Base32 or otpauth URI) into a TotpConfig. */
+export function resolveTotpConfig(secret: string): TotpConfig {
+  const value = secret.trim();
+  if (value.startsWith("otpauth://totp/")) return parseOtpAuthUri(value);
+  return { secret: validateGoogleAuthSecret(value).cleanKey };
+}

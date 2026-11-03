@@ -1,0 +1,57 @@
+/**
+ * Runs every browserless verification harness in `tests/harness/`.
+ *
+ * The harnesses exercise the pure-logic parts of the app (storage, KDF,
+ * updater, breach scanner, URL sanitiser) without needing a browser, so
+ * they can run on any CI machine — including one where the Playwright
+ * browser download is blocked.
+ *
+ * Usage: node scripts/run-harness.mjs
+ */
+import { readdirSync } from "node:fs";
+import { spawnSync } from "node:child_process";
+import { fileURLToPath } from "node:url";
+import { dirname, join } from "node:path";
+
+const here = dirname(fileURLToPath(import.meta.url));
+const root = join(here, "..");
+const harnessDir = join(root, "tests", "harness");
+
+const files = readdirSync(harnessDir)
+  .filter((f) => f.endsWith(".test.mjs"))
+  .sort();
+
+let failed = 0;
+let passed = 0;
+
+for (const file of files) {
+  const name = file.replace(/\.test\.mjs$/, "");
+  process.stdout.write(`\n=== ${name} ===\n`);
+
+  // Each harness is run in its own child process so that a crash in one
+  // cannot take the whole suite down, and so the exit code is meaningful.
+  const result = spawnSync(process.execPath, [join(harnessDir, file)], {
+    stdio: "inherit",
+    cwd: root,
+    shell: false,
+    env: { ...process.env, NODE_OPTIONS: "" },
+  });
+
+  if (result.status === 0) {
+    passed += 1;
+    continue;
+  }
+
+  failed += 1;
+  // Surface the reason. A CI runner that only prints "exit 1" is useless.
+  if (result.error) {
+    console.error(`  runner error: ${result.error.message}`);
+  }
+  if (result.signal) {
+    console.error(`  terminated by signal: ${result.signal}`);
+  }
+  console.error(`  exit code: ${result.status}`);
+}
+
+console.log(`\n${passed} harness files passed, ${failed} failed.`);
+process.exit(failed === 0 ? 0 : 1);

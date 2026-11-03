@@ -16,7 +16,14 @@ test.describe("WP-08: Fail-Closed IPC & Runtime Boundaries", () => {
       const vErr = err as VaultError;
       expect(vErr.code).toBe("UNSUPPORTED");
       expect(vErr.retryable).toBe(false);
-      expect(vErr.safeMessage).toContain("Native runtime is not active");
+      /*
+       * SECURITY (V-26): the message is a fixed, user-safe string. It
+       * names the runtime boundary without exposing any internal detail,
+       * and it tells the user where the feature *is* available.
+       */
+      expect(vErr.safeMessage).toMatch(/browser/i);
+      expect(vErr.safeMessage).toMatch(/app/i);
+      expect(vErr.safeMessage).not.toMatch(/tauri|__TAURI_INTERNALS__|invoke/i);
     }
   });
 
