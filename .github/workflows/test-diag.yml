@@ -1,0 +1,33 @@
+name: Rust Test Diagnostic
+
+on:
+  push:
+    branches: [ arena/79f3d1ba-vaultzero ]
+  pull_request:
+    branches: [ main, master ]
+
+jobs:
+  test:
+    name: Rust Test Diagnostic
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Setup Rust Stable
+        uses: dtolnay/rust-toolchain@stable
+
+      # The report is written into the job summary. The summary is read
+      # from the API, so the report can be seen without downloading the
+      # log archive.
+      - name: Run the tests and capture the report
+        run: |
+          cargo test -p vault-core --verbose > test-output.txt 2>&1 || true
+          {
+            echo "## The Rust test report"
+            echo ""
+            echo '```text'
+            grep -v "^   Compiling\|^    Checking\|^ Downloading\|^  Downloaded\|^   Locking\|^ Adding\|^warning: unused" test-output.txt | tail -150
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
