@@ -49,7 +49,6 @@ const NUMBERS_SAFE: &[u8] = b"23456789"; // No 0, 1
 
 const SYMBOLS: &[u8] = b"!@#$%^&*()-_=+[]{}|;:,.<>?";
 
-
 /// Generates a high-entropy CSPRNG password based on configuration options.
 pub fn generate_password(opts: &PasswordGenOptions) -> String {
     let mut charset: Vec<u8> = Vec::new();
