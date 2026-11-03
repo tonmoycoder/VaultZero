@@ -424,7 +424,7 @@ mod tests {
                 query: query.to_string(),
                 ..Default::default()
             };
-            let results = SearchEngine::search(&[summary.clone()], &filter);
+            let results = SearchEngine::search(std::slice::from_ref(&summary), &filter);
             assert!(
                 !results.is_empty(),
                 "query '{}' should match via the precomputed blob",
