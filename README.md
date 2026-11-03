@@ -3,10 +3,10 @@
 <img src="./public/vaultzero-logo.png" width="160" alt="VaultZero Official Logo" style="border-radius: 36px; box-shadow: 0 16px 40px rgba(124, 107, 255, 0.35);" />
 
 # 🔒 VaultZero (ভল্টজিরো)
-### ColorOS 17 "Living Flow Design" · 120fps GPU-Accelerated · 100% Offline Zero-Knowledge Fortress
+### ColorOS 17 "Living Flow Design" · ১২০fps GPU-ত্বরিত · ১০০% অফলাইন জিরো-নলেজ দুর্গ
 
-**Blazing-fast, zero-telemetry desktop & mobile password manager built with Rust, Tauri 2 & React 19.**  
-*Military-grade XChaCha20-Poly1305 & Argon2id encryption · P2P LAN Serverless Sync · Master Password Recovery Wizard · Offline OCR scanner (Eng + বাংলা) · RFC 6238 2FA TOTP authenticator · Air-Gapped by Design · Procedural Lo-Fi Soundscape · Full English & বাংলা (Native Bangla).*
+**Rust, Tauri 2 ও React 19 দিয়ে তৈরি অতি-দ্রুত, শূন্য-টেলিমেট্রি ডেস্কটপ ও মোবাইল পাসওয়ার্ড ম্যানেজার।**  
+*XChaCha20-Poly1305 ও Argon2id এনক্রিপশন · সার্ভার-বিহীন P2P LAN সিঙ্ক · মাস্টার পাসওয়ার্ড রিকভারি উইজার্ড · অফলাইন OCR স্ক্যানার (ইংরেজি + বাংলা) · RFC 6238 2FA TOTP অথেনটিকেটর · ডিজাইনেই এয়ার-গ্যাপড · প্রোসিজিওরাল Lo-Fi সাউন্ডস্কেপ · সম্পূর্ণ English ও বাংলা (নেটিভ বাংলা)।*
 
 ---
 
@@ -20,133 +20,73 @@
 
 ---
 
-### 🌐 Language Selection / ভাষা নির্বাচন
+### 🌐 ভাষা নির্বাচন
 **[🇬🇧 English Documentation](#-english-documentation)** &nbsp;|&nbsp; **[🇧🇩 বাংলা ডকুমেন্টেশন (Bangla Guide)](#-বাংলা-ডকুমেন্টেশন-bangla-guide)**
 
 </div>
 
 ---
 
-## 📥 Direct Downloads / সরাসরি ডাউনলোড লিংক
+## 📥 সরাসরি ডাউনলোড লিংক
 
-> **No developer tools required.** You do **not** need Docker, Node.js, Rust, a
-> browser, or an internet connection to *use* VaultZero. Download one file and
-> run it. Both builds are **standalone native applications**: Windows opens its
-> own Tauri/WebView2 window (never a browser tab), and Android installs as a
-> normal APK with its own encrypted local vault.
+> **কোনো ডেভেলপার টুল লাগবে না।** VaultZero **ব্যবহার** করতে Docker, Node.js, Rust, ব্রাউজার বা ইন্টারনেট সংযোগের প্রয়োজন নেই। একটি ফাইল ডাউনলোড করে চালু করুন। দুটো বিল্ডই **স্বতন্ত্র নেটিভ অ্যাপ**: Windows নিজস্ব Tauri/WebView2 উইন্ডো খোলে (কখনোই ব্রাউজার ট্যাব নয়), আর Android সাধারণ APK হিসেবে ইনস্টল হয় নিজস্ব এনক্রিপ্টেড লোকাল ভল্টসহ।
 
-| Platform | Direct link (always the *latest* release) | What it is |
+| প্ল্যাটফর্ম | সরাসরি লিংক (সবসময় *latest* রিলিজ) | বিবরণ |
 |:---|:---|:---|
-| 🪟 **Windows (recommended)** | [**VaultZero-Windows-x64-Setup.exe**](https://github.com/tonmoycoder/VaultZero/releases/latest/download/VaultZero-Windows-x64-Setup.exe) | NSIS installer; Start-menu + desktop shortcut; preserves your vault on upgrade |
-| 💼 **Windows portable** | [**VaultZero-Windows-x64-Portable.exe**](https://github.com/tonmoycoder/VaultZero/releases/latest/download/VaultZero-Windows-x64-Portable.exe) | One standalone `.exe`, zero install, USB-friendly |
-| 🏢 **Windows MSI** | [**VaultZero-Windows-x64.msi**](https://github.com/tonmoycoder/VaultZero/releases/latest/download/VaultZero-Windows-x64.msi) | Silent / managed deployment |
-| 🤖 **Android (arm64)** | [**VaultZero-Android.apk**](https://github.com/tonmoycoder/VaultZero/releases/latest/download/VaultZero-Android.apk) | Signed release APK, installable directly, works fully offline |
-| 🔐 **Checksums** | [**SHA256SUMS.txt**](https://github.com/tonmoycoder/VaultZero/releases/latest/download/SHA256SUMS.txt) | One combined `sha256sum` manifest for **all** of the above |
+| 🪟 **Windows (প্রস্তাবিত)** | [**VaultZero-Windows-x64-Setup.exe**](https://github.com/tonmoycoder/VaultZero/releases/latest/download/VaultZero-Windows-x64-Setup.exe) | NSIS ইনস্টলার; Start-menu + ডেস্কটপ শর্টকাট; আপগ্রেডে ভল্ট অক্ষত থাকে |
+| 💼 **Windows portable** | [**VaultZero-Windows-x64-Portable.exe**](https://github.com/tonmoycoder/VaultZero/releases/latest/download/VaultZero-Windows-x64-Portable.exe) | একটি স্বতন্ত্র `.exe`, ইনস্টল ছাড়াই, USB-তে নেওয়া যায় |
+| 🏢 **Windows MSI** | [**VaultZero-Windows-x64.msi**](https://github.com/tonmoycoder/VaultZero/releases/latest/download/VaultZero-Windows-x64.msi) | সাইলেন্ট / ম্যানেজড ডিপ্লয়মেন্ট |
+| 🤖 **Android (arm64)** | [**VaultZero-Android.apk**](https://github.com/tonmoycoder/VaultZero/releases/latest/download/VaultZero-Android.apk) | সাইন করা রিলিজ APK, সরাসরি ইনস্টলযোগ্য, সম্পূর্ণ অফলাইনে কাজ করে |
+| 🔐 **চেকসাম** | [**SHA256SUMS.txt**](https://github.com/tonmoycoder/VaultZero/releases/latest/download/SHA256SUMS.txt) | উপরের **সব** ফাইলের জন্য একটিমাত্র সম্মিলিত `sha256sum` ম্যানিফেস্ট |
 
-These names are a **stable contract**. `.github/workflows/release.yml` emits
-exactly these files on every tag, `README.md` links to them, and the in-app
-updater (`src/lib/updater.ts`) verifies them against `SHA256SUMS.txt` before it
-installs anything. On Android the updater picks the `.apk`; on Windows it picks
-the NSIS `.exe` — never the wrong platform.
+এই নামগুলো একটি **স্থিতিশীল চুক্তি**। `.github/workflows/release.yml` প্রতিটি ট্যাগে ঠিক এই ফাইলগুলো তৈরি করে, `README.md` এগুলোর লিংক দেয়, আর ইন-অ্যাপ আপডেটার (`src/lib/updater.ts`) কিছু ইনস্টল করার আগে `SHA256SUMS.txt`-এর সাথে যাচাই করে। Android-এ আপডেটার `.apk`, Windows-এ NSIS `.exe` বেছে নেয় — কখনোই ভুল প্ল্যাটফর্ম নয়।
 
-Verify a manual download with:
+ম্যানুয়াল ডাউনলোড যাচাই করুন:
 
 ```bash
 sha256sum -c SHA256SUMS.txt --ignore-missing
 ```
 
-- 🔗 [**All releases & release notes**](https://github.com/tonmoycoder/VaultZero/releases/latest)
-- 📱 The Android release also publishes a versioned copy
-  (`VaultZero-<tag>-Android-arm64.apk`) for archival; the stable URL above is
-  the one the app and this README use.
+- 🔗 [**সব রিলিজ ও রিলিজ নোট**](https://github.com/tonmoycoder/VaultZero/releases/latest)
+- 📱 Android রিলিজে আর্কাইভের জন্য একটি ভার্সন-নামাঙ্কিত কপিও (`VaultZero-<tag>-Android-arm64.apk`) প্রকাশিত হয়; অ্যাপ ও এই README ব্যবহার করে উপরের স্থিতিশীল URL-টি।
 
 ---
 
-## 🖥️ Two standalone apps, one optional sync
+## 🖥️ দুটি স্বতন্ত্র অ্যাপ, একটি ঐচ্ছিক সিঙ্ক
 
-Windows and Android are **independent**. Each one creates and keeps its own
-`local-vault.pmv` in the app data directory, works with no network at all, and
-never requires the other device. That is the fail-closed default.
+Windows ও Android **পরস্পর থেকে স্বাধীন**। প্রতিটি অ্যাপ ডেটা ডিরেক্টরিতে নিজস্ব `local-vault.pmv` তৈরি ও সংরক্ষণ করে, কোনো নেটওয়ার্ক ছাড়াই চলে, এবং অন্য ডিভাইসটি কখনোই চায় না — এটিই fail-closed ডিফল্ট।
 
-If you *want* the same data on both, open **Sync** and use P2P LAN sync:
-X25519 key exchange, a 6-digit ephemeral PIN, transcript channel binding, and
-XChaCha20-Poly1305 encrypted payloads. **Receive & Merge** merges by item id
-with local-wins conflict resolution (`src/lib/p2pMerge.ts`), bounded to 8 MB /
-5,000 entries / 4,096 characters per field. No cloud account, no server, no
-plaintext on the wire. The QR panel is gated behind a real live pairing code —
-it never renders a fake placeholder code as a QR image.
+দুটোতেই একই ডেটা **চাইলে** **Sync** খুলে P2P LAN সিঙ্ক ব্যবহার করুন: X25519 কী-এক্সচেঞ্জ, ৬-অঙ্কের ephemeral PIN, transcript channel binding ও XChaCha20-Poly1305 এনক্রিপ্টেড পেলোড। **Receive & Merge** আইটেম id দিয়ে local-wins কনফ্লিক্ট সমাধানে মার্জ করে (`src/lib/p2pMerge.ts`), ৮ MB / ৫,০০০ এন্ট্রি / প্রতি ক্ষেত্রে ৪,০৯৬ অক্ষরে সীমাবদ্ধ। কোনো ক্লাউড অ্যাকাউন্ট নেই, সার্ভার নেই, তারে plaintext নেই। QR প্যানেল আসল লাইভ পেয়ারিং কোডের আড়ালে গেট করা — কখনোই নকল প্লেসহোল্ডার কোডকে QR ছবি বানিয়ে দেখায় না।
 
 ---
 
-## 🔄 Auto-update without losing your vault
+## 🔄 ভল্ট না হারিয়ে স্বয়ংক্রিয় আপডেট
 
-1. On startup the app checks GitHub releases **when the main thread is idle**
-   (it does not block first paint), and shows `Update available: vX.Y.Z`.
-2. **Settings → Check for Updates** runs a manual check; the result is cached
-   for 5 minutes so repeated clicks do not hammer the API.
-3. **Download & Install** fetches the asset from `github.com` /
-   `objects.githubusercontent.com` over HTTPS, streams it, verifies the SHA-256
-   against the signed `SHA256SUMS.txt` manifest, and only then writes it via the
-   Rust `save_update_artifact` IPC command. A mismatched or oversized download
-   is discarded — **fail closed**, no fake fallback.
-4. On Windows the verified NSIS installer is launched with `start /wait` on a
-   background thread, and `AppHandle::restart()` starts the new build only
-   *after* the installer exits. On Android the verified APK is saved to app data
-   and its path is surfaced — Android does not allow silent APK installation.
-5. Data safety is layered: the vault lives in the **app data directory**, never
-   inside the install directory, so an installer cannot overwrite it. A second
-   snapshot is taken before the download (before, not after); if a failed
-   update leaves the container unreadable, `restorePreUpdateBackupIfNeeded()`
-   (`src/lib/updater.ts`) puts it back on the next start. The snapshot is
-   cleared **only after a successful unlock**, never at startup.
+1. চালু হওয়ার সময় অ্যাপ **মূল থ্রেড অলস থাকলে** GitHub রিলিজ চেক করে (প্রথম পেইন্ট আটকায় না) এবং `Update available: vX.Y.Z` দেখায়।
+2. **সেটিংস → আপডেট পরীক্ষা করুন** ম্যানুয়াল চেক চালায়; ফলাফল ৫ মিনিট ক্যাশ থাকে, ফলে বারবার ক্লিকে API-তে চাপ পড়ে না।
+3. **ডাউনলোড ও ইনস্টল** `github.com` / `objects.githubusercontent.com` থেকে HTTPS-এ অ্যাসেট আনে, স্ট্রিম করে, সাইন করা `SHA256SUMS.txt` ম্যানিফেস্টের বিপরীতে SHA-256 যাচাই করে, **তারপর** Rust `save_update_artifact` IPC কমান্ডে লেখে। অমিল বা অতিরিক্ত আকারের ডাউনলোড বাতিল — **fail closed**, কোনো নকল ফলব্যাক নেই।
+4. Windows-এ যাচাইকৃত NSIS ইনস্টলার ব্যাকগ্রাউন্ড থ্রেডে `start /wait` দিয়ে চালু হয়, এবং ইনস্টলার শেষ হওয়ার **পরেই** `AppHandle::restart()` নতুন বিল্ড চালু করে। Android-এ যাচাইকৃত APK অ্যাপ ডেটায় সংরক্ষিত হয় ও তার পাথ দেখানো হয় — Android নীরব APK ইনস্টলেশন দেয় না।
+5. ডেটা নিরাপত্তা স্তরে স্তরে: ভল্ট থাকে **অ্যাপ ডেটা ডিরেক্টরিতে**, ইনস্টল ডিরেক্টরিতে নয়, তাই ইনস্টলার এটি ওভাররাইট করতে পারে না। ডাউনলোডের **আগে** (পরে নয়) দ্বিতীয় একটি স্ন্যাপশট নেওয়া হয়; ব্যর্থ আপডেটে কনটেইনার পড়া না গেলে পরের চালুতে `restorePreUpdateBackupIfNeeded()` (`src/lib/updater.ts`) তা ফেরত আনে। স্ন্যাপশট মোছা হয় **কেবল সফল আনলকের পরে**, চালুর সময় নয়।
 
 ---
 
-## 🔑 Genuine 2FA & the emergency kit
+## 🔑 আসল ২FA ও ইমার্জেন্সি কিট
 
-`src/lib/totp.ts` is a real RFC 6238 / RFC 4226 implementation using WebCrypto
-HMAC-SHA1, Base32 secrets, `otpauth://` URI parsing, and the official RFC test
-vectors. `VaultItem.totp` stores the **Base32 setup secret**; every surface that
-shows a *code* derives it live with `useLiveTotpCode()` and refreshes on the
-30-second period boundary. The setup secret is never displayed as a code, never
-printed into "Copy All" (`buildFormattedQuickCopy`), and never logged. Recovery
-codes are likewise excluded from bulk copy. If a stored secret is invalid, the
-UI shows `••• •••` instead of guessing a code.
+`src/lib/totp.ts` হলো WebCrypto HMAC-SHA1, Base32 সিক্রেট, `otpauth://` URI পার্সিং ও দাপ্তরিক RFC টেস্ট ভেক্টর ব্যবহার করা প্রকৃত RFC 6238 / RFC 4226 ইমপ্লিমেন্টেশন। `VaultItem.totp`-তে থাকে **Base32 সেটআপ কি**; যেকোনো পৃষ্ঠ যেটি *কোড* দেখায় সেটি `useLiveTotpCode()` দিয়ে লাইভ বের করে এবং ৩০-সেকেন্ড পিরিয়ডের সীমানায় রিফ্রেশ হয়। সেটআপ কি কখনোই কোড হিসেবে দেখানো হয় না, "Copy All"-এ (`buildFormattedQuickCopy`) ছাপা হয় না, লগেও যায় না। রিকভারি কোডও বাল্ক কপি থেকে বাদ। সঞ্চিত কি অবৈধ হলে UI কোড আন্দাজ না করে `••• •••` দেখায়।
 
-The **Emergency Kit** (`Settings → Tools → Emergency Kit`) is a printable A4
-*blank template*: you write your master password hint, 24-character recovery
-key and 2FA setup keys **by hand**, so no secret is ever sent to a printer
-spooler or written to disk by the app. Each generated kit receives a unique
-CSPRNG document ID. To recover a vault, use the **Recovery Key** wizard in the
-lock screen — the kit is an offline reminder, not a separately encrypted file
-format.
+**ইমার্জেন্সি কিট** (`সেটিংস → টুলস → ইমার্জেন্সি কিট`) একটি প্রিন্টযোগ্য A4 **ফাঁকা টেমপ্লেট**: মাস্টার পাসওয়ার্ডের ইঙ্গিত, ২৪-অক্ষরের রিকভারি কি ও 2FA সেটআপ কি **নিজের হাতে** লিখেন — তাই কোনো গোপন তথ্য প্রিন্টার স্পুলারে যায় না বা অ্যাপ ডিস্কে লেখে না। প্রতিটি কিট পায় আলাদা CSPRNG ডকুমেন্ট আইডি। ভল্ট ফেরত পেতে লক স্ক্রিনের **Recovery Key** উইজার্ড ব্যবহার করুন — কিটটি একটি অফলাইন স্মরণিকা, আলাদা কোনো এনক্রিপ্টেড ফাইল ফরম্যাট নয়।
 
 ---
 
-## ⚡ Cold start, physics & complexity
+## ⚡ কোল্ড স্টার্ট, ফিজিক্স ও কমপ্লেক্সিটি
 
-- The `.exe` starts a native Tauri window with no browser tab, no dev server
-  and no startup network request. The release check is deferred to
-  `requestIdleCallback`; the Web Audio / Lo-Fi engine is `React.lazy`-loaded
-  only when zen mode is opened. The main JS chunk is guarded by
-  `scripts/check-bundle-size.mjs`.
-- ColorOS-style physics is measured, not faked: `src/lib/gesturePhysics.ts`
-  computes speed from real pointer samples (`speedFromSamples`), clamps it,
-  applies `rubberBand` resistance and `speedResponsiveSpring`, and records the
-  last rebound in `data-elastic-state` / `data-last-rebound`. A very fast but
-  tiny flick can no longer fling a whole sheet away, and a post-drag click on
-  the sheet handle is suppressed so a gentle partial drag always springs back.
-- Complexity of the hot paths (see `docs/AUDIT-2026-11.md` for the full
-  analysis): search is `O(n·m)` over `n` items and `m` characters of the query
-  with `O(1)` extra memory; P2P merge is `O(n+m)` time / `O(n+m)` memory for a
-  single id-union pass; CRDT clock advancement is `O(1)` time and memory via a
-  single saturating `AtomicU64` CAS; TOTP is `O(1)` time and memory per code
-  (one HMAC); the updater streams in `O(1)` buffers with `O(size)` disk I/O and
-  verifies the digest incrementally.
+- `.exe` ব্রাউজার ট্যাব, ডেভ সার্ভার বা স্টার্টআপ নেটওয়ার্ক রিকোয়েস্ট ছাড়াই নেটিভ Tauri উইন্ডো খোলে। রিলিজ চেক `requestIdleCallback`-এ সরিয়ে রাখা হয়েছে; Web Audio / Lo-Fi ইঞ্জিন `React.lazy` দিয়ে কেবল zen মোড খুললে লোড হয়। প্রধান JS চাঙ্ক `scripts/check-bundle-size.mjs` দিয়ে নিয়ন্ত্রিত।
+- ColorOS-ধাঁচের ফিজিক্স মাপা হয়, নকল নয়: `src/lib/gesturePhysics.ts` বাস্তব পয়েন্টার স্যাম্পল থেকে গতি বের করে (`speedFromSamples`), ক্ল্যাম্প করে, `rubberBand` রেজিস্ট্যান্স ও `speedResponsiveSpring` প্রয়োগ করে, এবং শেষ রিবাউন্ড `data-elastic-state` / `data-last-rebound`-এ রাখে। খুব দ্রুত কিন্তু ক্ষুদ্র ফ্লিক আর পুরো শিট ছুঁড়ে ফেলতে পারে না, এবং ড্র্যাগের পর হ্যান্ডেলের ক্লিক দমন করা হয় — ফলে মৃদু আংশিক ড্র্যাগ সবসময় ফিরে আসে।
+- হট পাথের কমপ্লেক্সিটি (পূর্ণ বিশ্লেষণ `docs/AUDIT-2026-11.md`-এ): সার্চ `n` আইটেম ও কোয়েরির `m` অক্ষরে `O(n·m)` সময় / `O(1)` অতিরিক্ত মেমরি; P2P মার্জ একটিমাত্র id-union পাসে `O(n+m)` সময় / `O(n+m)` মেমরি; CRDT ক্লক একটি saturating `AtomicU64` CAS-এ `O(1)` সময় ও মেমরি; TOTP প্রতি কোডে (একটি HMAC) `O(1)` সময় ও মেমরি; আপডেটার `O(1)` বাফারে স্ট্রিম করে `O(size)` ডিস্ক I/O করে ও ডাইজেস্ট ধাপে ধাপে যাচাই করে।
 
 ---
 
-## ✅ Verify a checkout
+## ✅ চেকআউট যাচাই
 
 ```bash
 npm ci
@@ -158,11 +98,8 @@ cargo test --package vault-core
 cargo clippy --all-targets -- -D warnings
 ```
 
-CI runs the Rust gates on `windows-latest` and the Playwright suite on
-`ubuntu-latest`; the release workflow builds the NSIS/MSI Windows binaries and
-the signed Android APK from the same commit.
+CI Rust গেটগুলো `windows-latest`-এ এবং Playwright সুইট `ubuntu-latest`-এ চালায়; রিলিজ ওয়ার্কফ্লো একই কমিট থেকে NSIS/MSI Windows বাইনারি ও সাইন করা Android APK তৈরি করে।
 
----
 
 # 🇬🇧 English Documentation
 
@@ -336,7 +273,7 @@ npx tauri build
 
 ## 🔄 আপডেট ও ডেটা নিরাপত্তা (বাংলা)
 
-নতুন রিলিজ বের হলে অ্যাপ নিজে GitHub থেকে জানায়; **সেটিংস → Check for Updates**-এম্যানুয়ালিভাবেও চেক করা যায়। ডাউনলোডযোগ্য ফাইলটি `SHA256SUMS.txt` দিয়ে যাচাই না হওয়া পর্যন্ত ইনস্টল হয় না। উইন্ডোজে ইনস্টলার শেষ হলে অ্যাপ নিজে আবার চালু হয়; অ্যান্ড্রয়েডে যাচাইকৃত APK অ্যাপের ডেটা ফোল্ডারে সংরক্ষিত হয় (অ্যান্ড্রয়েড নীরবে APK ইনস্টল করতে দেয় না)।
+নতুন রিলিজ বের হলে অ্যাপ নিজে GitHub থেকে জানায়; **সেটিংস → Check for Updates** থেকেও ম্যানুয়ালিভাবেও চেক করা যায়। ডাউনলোডযোগ্য ফাইলটি `SHA256SUMS.txt` দিয়ে যাচাই না হওয়া পর্যন্ত ইনস্টল হয় না। উইন্ডোজে ইনস্টলার শেষ হলে অ্যাপ নিজে আবার চালু হয়; অ্যান্ড্রয়েডে যাচাইকৃত APK অ্যাপের ডেটা ফোল্ডারে সংরক্ষিত হয় (অ্যান্ড্রয়েড নীরবে APK ইনস্টল করতে দেয় না)।
 
 আপনার ভল্ট `local-vault.pmv` ফাইলে **অ্যাপ ডেটা ফোল্ডারে** থাকে, ইনস্টল ফোল্ডারে নয় — তাই আপডেট কখনোই পুরনো ডেটা মুছে দেয় না। আপডেটের আগে আরও একটি এনক্রিপ্টেড স্ন্যাপশট নেওয়া হয়; কোনো কারণে ভল্ট পড়া না গেলে পরের চালুতে সেটি স্বয়ংক্রিয়ভাবে ফেরত আনা হয়, এবং **সফল আনলকের পরেই** কেবল স্ন্যাপশট মোছা হয়।
 

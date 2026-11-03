@@ -98,9 +98,20 @@ test.describe("VaultZero Architectural Hardening & Cryptographic Gate", () => {
     await page.goto("/?unlocked=true");
     await expect(page.locator(".vault-card").getByRole("heading", { name: "VaultZero Demo Account" })).toBeVisible();
 
-    // Select the demo card checkbox
-    const checkbox = page.locator('[data-item-id="demo-account"]').getByRole("checkbox");
-    await checkbox.click({ force: true });
+    // V-70: the card carries a `whileHover={{ y: -4 }}` bouncy spring. A
+    // `force: true` click skips Playwright's stability and hit-target checks,
+    // so under the CI's `workers: 2` load the click can land on the moving
+    // card body instead of the 16px checkbox: the inspector opens, the
+    // selection never registers and the bulk bar never mounts
+    // (CI 41558464980: 123 passed / 1 failed, "element(s) not found").
+    // Hover first (which also reveals the checkbox), then let Playwright's
+    // normal actionability checks wait for the spring to settle, and assert
+    // the state change before asserting the dependent UI.
+    const card = page.locator('[data-item-id="demo-account"]');
+    await card.hover();
+    const checkbox = card.getByRole("checkbox");
+    await checkbox.click();
+    await expect(checkbox).toHaveAttribute("aria-checked", "true");
 
     // Floating bulk bar appears
     await expect(page.getByRole("button", { name: "Delete selected" })).toBeVisible();

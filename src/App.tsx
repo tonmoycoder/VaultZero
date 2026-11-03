@@ -913,7 +913,7 @@ export default function App() {
             />
           )}
           {modal === "emergency" && (
-            <EmergencyKitModal key="emergency" onClose={() => setModal(null)} onNotify={notify} />
+            <EmergencyKitModal key="emergency" onClose={() => setModal(null)} onNotify={notify} lang={lang} />
           )}
           {modal === "csvImport" && (
             <CsvImportModal
