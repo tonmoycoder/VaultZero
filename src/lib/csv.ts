@@ -4,6 +4,7 @@ import { brands } from "./vault";
 export const MAX_CSV_FILE_SIZE = 8 * 1024 * 1024; // 8 MiB
 export const MAX_CSV_COLUMNS = 64;
 export const MAX_CSV_ROWS = 10_000;
+export const MAX_CSV_CELL_LENGTH = 16_384; // 16 KiB per cell limit against buffer exhaustion
 
 export interface CsvParseOptions {
   hasHeader?: boolean;
@@ -105,7 +106,9 @@ export function parseCsvRaw(
           continue;
         }
       } else {
-        currentCell += ch;
+        if (currentCell.length < MAX_CSV_CELL_LENGTH) {
+          currentCell += ch;
+        }
         i++;
         continue;
       }
@@ -361,8 +364,9 @@ function extractDomain(urlStr: string): string {
  */
 export function sanitizeCsvExportCell(val: string): string {
   if (!val) return "";
-  const first = val.charAt(0);
-  if (first === "=" || first === "+" || first === "-" || first === "@" || first === "\t" || first === "\r") {
+  const trimmed = val.trimStart();
+  const first = trimmed.charAt(0);
+  if (first === "=" || first === "+" || first === "-" || first === "@" || first === "\t" || first === "\r" || first === "|") {
     return `'${val}`;
   }
   return val;

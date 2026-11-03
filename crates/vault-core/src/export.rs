@@ -21,8 +21,9 @@ impl VaultExporter {
             return String::new();
         }
 
-        if let Some(first) = value.chars().next() {
-            if matches!(first, '=' | '+' | '-' | '@' | '\t' | '\r') {
+        let trimmed = value.trim_start();
+        if let Some(first) = trimmed.chars().next() {
+            if matches!(first, '=' | '+' | '-' | '@' | '\t' | '\r' | '|') {
                 return format!("'{}", value);
             }
         }

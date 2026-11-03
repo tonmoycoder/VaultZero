@@ -734,6 +734,8 @@ mod tests {
             ("+12345", "'+12345"),
             ("-999", "'-999"),
             ("@SUM(A1:A10)", "'@SUM(A1:A10)"),
+            ("  =cmd|' /C calc'!A0", "'  =cmd|' /C calc'!A0"),
+            ("|pipe_command", "'|pipe_command"),
             ("normal_title", "normal_title"),
         ];
 

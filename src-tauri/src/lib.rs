@@ -171,6 +171,9 @@ pub mod commands {
             || file_name.contains('\\')
             || file_name.contains("..")
             || file_name.contains('\0')
+            || (!file_name.ends_with(".exe")
+                && !file_name.ends_with(".apk")
+                && !file_name.ends_with(".msi"))
         {
             return Err("The update artifact name is not acceptable.".into());
         }
