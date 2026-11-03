@@ -93,15 +93,26 @@ async function main() {
 
   for (const file of files) {
     const source = readFileSync(file, "utf8");
+    /*
+     * The line endings are normalised before the comparison.
+     *
+     * `rustfmt` writes Unix line endings. A checkout on Windows turns the
+     * source into CRLF, and comparing that with the formatter's output
+     * would report every file as unformatted — a difference in the line
+     * endings, not in the formatting. The repository pins the endings
+     * with `.gitattributes`, and this normalisation covers the checkouts
+     * that predate that file or that were made outside git.
+     */
+    const normalised = source.replace(/\r\n/g, "\n");
     let formatted;
     try {
-      formatted = await format(source, { edition: "2021" });
+      formatted = await format(normalised, { edition: "2021" });
     } catch (error) {
       console.error(`${relative(root, file)}: the formatter could not parse the file.`);
       console.error(error.message ?? error);
       process.exit(1);
     }
-    if (formatted === source) continue;
+    if (formatted === normalised) continue;
     if (write) {
       writeFileSync(file, formatted);
       console.log(`formatted ${relative(root, file)}`);
