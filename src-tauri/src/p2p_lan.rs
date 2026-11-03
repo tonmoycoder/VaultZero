@@ -7,7 +7,7 @@ use std::time::Duration;
 use tokio::net::TcpListener;
 use tokio_tungstenite::tungstenite::protocol::Message;
 use tokio_tungstenite::{accept_async, connect_async};
-use vault_core::p2p::{P2PRole, P2PSessionHandshake, P2PSessionKey};
+use vault_core::p2p::{P2PRole, P2PSessionHandshake};
 
 pub const SERVICE_TYPE: &str = "_vaultzero._tcp.local.";
 
@@ -168,7 +168,7 @@ impl P2PManager {
                     Err(_) => break,
                 };
 
-                let mut ws_stream = match accept_async(stream).await {
+                let ws_stream = match accept_async(stream).await {
                     Ok(s) => s,
                     Err(_) => continue,
                 };

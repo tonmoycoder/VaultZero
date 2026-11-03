@@ -145,4 +145,21 @@ impl VaultError {
     }
 }
 
+/*
+ * The conversion to a string is safe by design.
+ *
+ * The detailed text of an error names the file format, the platform
+ * and the memory protection technique, so it must not cross the
+ * boundary to the frontend. The conversion below therefore reports the
+ * fixed, user-safe message and never the detailed one. Without it the
+ * conversion to a string does not exist at all, which is why a call
+ * that returned a plain string could not carry an error out of the
+ * function.
+ */
+impl From<VaultError> for String {
+    fn from(error: VaultError) -> Self {
+        error.user_message().to_string()
+    }
+}
+
 pub type Result<T> = std::result::Result<T, VaultError>;
