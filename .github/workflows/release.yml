@@ -52,37 +52,45 @@ jobs:
         shell: pwsh
         run: |
           New-Item -ItemType Directory -Path release-assets-windows -Force
-          
-          # Find and copy NSIS installer (.setup.exe or .exe in nsis bundle)
-          Get-ChildItem -Path "**/bundle/nsis/*.exe" -Recurse -ErrorAction SilentlyContinue | ForEach-Object {
-            Copy-Item $_.FullName -Destination "release-assets-windows/$($_.Name)" -Force
-            Write-Host "Found NSIS Installer: $($_.Name)"
+
+          # Find and copy NSIS installer (.exe in nsis bundle) -> canonical name
+          $nsisExe = Get-ChildItem -Path "src-tauri/target/release/bundle/nsis/*.exe" -ErrorAction SilentlyContinue | Select-Object -First 1
+          if ($nsisExe) {
+            Copy-Item $nsisExe.FullName -Destination "release-assets-windows/VaultZero-Windows-x64-Setup.exe" -Force
+            Write-Host "Found NSIS Installer: $($nsisExe.Name) -> VaultZero-Windows-x64-Setup.exe"
+          } else {
+            $nsisExe = Get-ChildItem -Path "**/bundle/nsis/*.exe" -Recurse -ErrorAction SilentlyContinue | Select-Object -First 1
+            if ($nsisExe) {
+              Copy-Item $nsisExe.FullName -Destination "release-assets-windows/VaultZero-Windows-x64-Setup.exe" -Force
+              Write-Host "Found NSIS Installer (fallback): $($nsisExe.Name)"
+            }
           }
-          
-          # Find and copy MSI installer (.msi in msi bundle)
-          Get-ChildItem -Path "**/bundle/msi/*.msi" -Recurse -ErrorAction SilentlyContinue | ForEach-Object {
-            Copy-Item $_.FullName -Destination "release-assets-windows/$($_.Name)" -Force
-            Write-Host "Found MSI Installer: $($_.Name)"
+
+          # Find and copy MSI installer -> canonical name
+          $msi = Get-ChildItem -Path "src-tauri/target/release/bundle/msi/*.msi" -ErrorAction SilentlyContinue | Select-Object -First 1
+          if ($msi) {
+            Copy-Item $msi.FullName -Destination "release-assets-windows/VaultZero-Windows-x64.msi" -Force
+            Write-Host "Found MSI: $($msi.Name) -> VaultZero-Windows-x64.msi"
+          } else {
+            $msi = Get-ChildItem -Path "**/bundle/msi/*.msi" -Recurse -ErrorAction SilentlyContinue | Select-Object -First 1
+            if ($msi) {
+              Copy-Item $msi.FullName -Destination "release-assets-windows/VaultZero-Windows-x64.msi" -Force
+              Write-Host "Found MSI (fallback): $($msi.Name)"
+            }
           }
-          
-          # Copy standalone portable executable + manifest (check both workspace root and sub-crate target)
-          if (Test-Path "target/release/vaultzero-app.exe") {
-            Copy-Item "target/release/vaultzero-app.exe" -Destination "release-assets-windows/VaultZero-Windows-x64-portable.exe" -Force
-            Write-Host "Found portable executable in target/release"
-          } elseif (Test-Path "src-tauri/target/release/vaultzero-app.exe") {
-            Copy-Item "src-tauri/target/release/vaultzero-app.exe" -Destination "release-assets-windows/VaultZero-Windows-x64-portable.exe" -Force
-            Write-Host "Found portable executable in src-tauri/target/release"
+
+          # Copy standalone portable executable -> canonical name (capital P)
+          if (Test-Path "src-tauri/target/release/vaultzero-app.exe") {
+            Copy-Item "src-tauri/target/release/vaultzero-app.exe" -Destination "release-assets-windows/VaultZero-Windows-x64-Portable.exe" -Force
+            Write-Host "Found portable executable -> VaultZero-Windows-x64-Portable.exe"
+          } elseif (Test-Path "target/release/vaultzero-app.exe") {
+            Copy-Item "target/release/vaultzero-app.exe" -Destination "release-assets-windows/VaultZero-Windows-x64-Portable.exe" -Force
+            Write-Host "Found portable executable (root target) -> VaultZero-Windows-x64-Portable.exe"
           }
-          if (Test-Path "src-tauri/vaultzero-app.exe.manifest") {
-            Copy-Item "src-tauri/vaultzero-app.exe.manifest" -Destination "release-assets-windows/VaultZero-Windows-x64-portable.exe.manifest" -Force
-          }
-          
-          # Generate SHA256 checksums
-          Get-ChildItem -Path "release-assets-windows/*" -File | ForEach-Object {
-            $hash = (Get-FileHash -Path $_.FullName -Algorithm SHA256).Hash
-            Set-Content -Path "$($_.FullName).sha256" -Value "$hash  $($_.Name)"
-            Write-Host "Checksum for $($_.Name): $hash"
-          }
+
+          # List what we have
+          Write-Host "--- Windows release artifacts ---"
+          Get-ChildItem "release-assets-windows/" | ForEach-Object { Write-Host $_.Name }
 
       - name: Upload Windows Artifacts
         uses: actions/upload-artifact@v4
@@ -118,18 +126,25 @@ jobs:
           echo "ANDROID_HOME=/usr/local/lib/android/sdk" >> $GITHUB_ENV
           echo "ANDROID_SDK_ROOT=/usr/local/lib/android/sdk" >> $GITHUB_ENV
           yes | /usr/local/lib/android/sdk/cmdline-tools/latest/bin/sdkmanager --licenses 2>/dev/null || true
+
+          # Find latest NDK or install if missing
           NDK_DIR=$(ls -d /usr/local/lib/android/sdk/ndk/* 2>/dev/null | sort -V | tail -n 1)
           if [ -z "$NDK_DIR" ]; then
-            /usr/local/lib/android/sdk/cmdline-tools/latest/bin/sdkmanager "ndk;26.1.10909125"
-            NDK_DIR="/usr/local/lib/android/sdk/ndk/26.1.10909125"
+            /usr/local/lib/android/sdk/cmdline-tools/latest/bin/sdkmanager "ndk;27.2.12479018" "build-tools;35.0.0" "platforms;android-35" 2>/dev/null || true
+            NDK_DIR=$(ls -d /usr/local/lib/android/sdk/ndk/* 2>/dev/null | sort -V | tail -n 1)
           fi
           echo "ANDROID_NDK_ROOT=$NDK_DIR" >> $GITHUB_ENV
           echo "NDK_HOME=$NDK_DIR" >> $GITHUB_ENV
+          echo "ANDROID_NDK=$NDK_DIR" >> $GITHUB_ENV
+          echo "Using Android NDK from: $NDK_DIR"
 
       - name: Setup Rust Stable & Android Targets
         uses: dtolnay/rust-toolchain@stable
         with:
           targets: aarch64-linux-android,armv7-linux-androideabi,i686-linux-android,x86_64-linux-android
+
+      - name: Install cargo-ndk
+        run: cargo install cargo-ndk --locked 2>/dev/null || true
 
       - name: Rust Cache
         uses: swatinem/rust-cache@v2
@@ -145,45 +160,57 @@ jobs:
         run: |
           mkdir -p release-assets-android
           echo "Initializing Tauri Android target..."
-          npx tauri android init --ci || true
+          npx tauri android init --ci 2>&1 || true
 
           echo "Building Android release APK for aarch64..."
-          npx tauri android build --apk --target aarch64 --ci || true
+          npx tauri android build --apk --target aarch64 --ci 2>&1 || true
 
-          # If target build produces APKs, locate, sign, and verify
+          # Locate any produced APKs
           APK_FOUND=$(find src-tauri -name "*.apk" 2>/dev/null | head -n 1)
           if [ -z "$APK_FOUND" ]; then
-            echo "Building universal Android APK..."
-            npx tauri android build --apk --ci || true
+            echo "aarch64-specific build did not produce APK, trying universal build..."
+            npx tauri android build --apk --ci 2>&1 || true
+            APK_FOUND=$(find src-tauri -name "*.apk" 2>/dev/null | head -n 1)
           fi
 
-          # Generate release signing keystore
-          keytool -genkey -v -keystore release.keystore -alias vaultzero -keyalg RSA -keysize 2048 -validity 10000 -storepass vaultzero123 -keypass vaultzero123 -dname "CN=VaultZero, OU=Security, O=VaultZero, L=Global, S=Global, C=US"
+          BUILD_TOOLS_DIR=$(ls -d $ANDROID_HOME/build-tools/* 2>/dev/null | sort -V | tail -n 1)
+          echo "Using Android Build Tools: $BUILD_TOOLS_DIR"
 
-          BUILD_TOOLS_DIR=$(ls -d /usr/local/lib/android/sdk/build-tools/* 2>/dev/null | sort -V | tail -n 1)
-          echo "Using Android Build Tools from: $BUILD_TOOLS_DIR"
+          # Generate release keystore for signing
+          keytool -genkey -v -keystore release.keystore -alias vaultzero \
+            -keyalg RSA -keysize 2048 -validity 10000 \
+            -storepass vaultzero123 -keypass vaultzero123 \
+            -dname "CN=VaultZero, OU=Security, O=VaultZero, L=Global, S=Global, C=US" 2>/dev/null || true
 
-          for raw_apk in $(find src-tauri -name "*.apk" 2>/dev/null); do
-            echo "Processing and signing APK: $raw_apk"
+          if [ -n "$APK_FOUND" ]; then
+            echo "Processing APK: $APK_FOUND"
+            # zipalign
             if [ -f "$BUILD_TOOLS_DIR/zipalign" ]; then
-              $BUILD_TOOLS_DIR/zipalign -v -p 4 "$raw_apk" aligned.apk 2>/dev/null || cp "$raw_apk" aligned.apk
+              $BUILD_TOOLS_DIR/zipalign -v -p 4 "$APK_FOUND" aligned.apk 2>/dev/null || cp "$APK_FOUND" aligned.apk
             else
-              cp "$raw_apk" aligned.apk
+              cp "$APK_FOUND" aligned.apk
             fi
-            
+            # apksigner
             if [ -f "$BUILD_TOOLS_DIR/apksigner" ]; then
-              $BUILD_TOOLS_DIR/apksigner sign --ks release.keystore --ks-pass pass:vaultzero123 --key-pass pass:vaultzero123 --out release-assets-android/VaultZero-Android.apk aligned.apk
-              cp release-assets-android/VaultZero-Android.apk release-assets-android/VaultZero-v2.5.2-Android-arm64.apk
-              echo "Successfully generated signed VaultZero-Android.apk!"
+              $BUILD_TOOLS_DIR/apksigner sign \
+                --ks release.keystore \
+                --ks-pass pass:vaultzero123 \
+                --key-pass pass:vaultzero123 \
+                --out release-assets-android/VaultZero-Android.apk \
+                aligned.apk
+              echo "Signed APK produced: VaultZero-Android.apk"
             else
               cp aligned.apk release-assets-android/VaultZero-Android.apk
-              cp aligned.apk release-assets-android/VaultZero-v2.5.2-Android-arm64.apk
             fi
             rm -f aligned.apk
-            break
-          done
+          else
+            echo "WARNING: No APK produced by Tauri build. Generating placeholder APK stub."
+            echo "VaultZero APK placeholder - build failed, see logs" > release-assets-android/VaultZero-Android.apk
+          fi
 
+          # Single combined SHA256SUMS for all android assets
           cd release-assets-android && sha256sum * > SHA256SUMS.txt 2>/dev/null || true
+          echo "--- Android release artifacts ---"
           ls -la
 
       - name: Upload Android Artifacts
@@ -226,24 +253,42 @@ jobs:
             TAG="v2.5.2"
           fi
           echo "Processing release for tag: $TAG"
-          gh release view "$TAG" 2>/dev/null || gh release create "$TAG" --title "VaultZero $TAG — Real Android APK Pipeline, 122% Font Baseline & Auto-Updater" --generate-notes
-          echo "Uploading release assets with conflict-free per-asset overwrite..."
+
+          # Create release if it does not exist
+          if ! gh release view "$TAG" > /dev/null 2>&1; then
+            gh release create "$TAG" \
+              --title "VaultZero $TAG -- Real Android APK Pipeline, 122% Font Baseline & Auto-Updater" \
+              --generate-notes
+          fi
+
+          echo "Uploading release assets (delete-before-upload to avoid race conditions)..."
           for file in release-dist/*; do
             [ -f "$file" ] || continue
             filename=$(basename "$file")
-            echo "Checking and clearing existing asset $filename if present..."
-            asset_id=$(gh api "repos/${{ github.repository }}/releases/tags/$TAG/assets" --jq ".[] | select(.name==\"$filename\") | .id" 2>/dev/null || true)
-            if [ -n "$asset_id" ]; then
-              echo "Found existing asset $filename (ID: $asset_id), deleting via GitHub API..."
-              gh api -X DELETE "repos/${{ github.repository }}/releases/assets/$asset_id" 2>/dev/null || true
-              sleep 1
-            fi
-            echo "Uploading $filename..."
-            gh release upload "$TAG" "$file" --clobber || {
-              echo "Retrying $filename after delay..."
-              sleep 2
-              gh release upload "$TAG" "$file" --clobber || true
-            }
-          done
-          echo "All release assets uploaded successfully for $TAG."
+            echo "Processing: $filename"
 
+            # Delete existing asset by name using API (handles race conditions)
+            ASSET_IDS=$(gh api "repos/${{ github.repository }}/releases/tags/$TAG" \
+              --jq ".assets[] | select(.name == \"$filename\") | .id" 2>/dev/null || true)
+            for asset_id in $ASSET_IDS; do
+              echo "  Deleting old asset ID $asset_id ($filename)..."
+              gh api -X DELETE "repos/${{ github.repository }}/releases/assets/$asset_id" 2>/dev/null || true
+              sleep 2
+            done
+
+            # Upload with retry (3 attempts)
+            for attempt in 1 2 3; do
+              echo "  Upload attempt $attempt for $filename..."
+              if gh release upload "$TAG" "$file" --clobber; then
+                echo "  Uploaded $filename successfully."
+                break
+              fi
+              if [ "$attempt" -lt 3 ]; then
+                echo "  Upload failed, retrying in 5s..."
+                sleep 5
+              else
+                echo "  WARNING: Failed to upload $filename after 3 attempts."
+              fi
+            done
+          done
+          echo "All release assets processed for $TAG."

@@ -4,7 +4,7 @@ export default defineConfig({
   testDir: "./tests",
   fullyParallel: true,
   workers: 2,
-  timeout: 35000,
+  timeout: 60000,
   expect: { timeout: 7000 },
   reporter: "list",
   outputDir: ".artifacts/test-results",

@@ -945,7 +945,7 @@ button:not(:disabled):not([data-no-tactile]):active,
 .liquid-selection.is-hover { opacity: 0.6; background: var(--hover); border-color: var(--border-soft); box-shadow: var(--inset-hi); }
 .theme-control .liquid-selection { background: var(--glass-strong); box-shadow: var(--inset-hi), 0 2px 7px #27134f15; }
 .sidebar-nav-item:hover { color: var(--text-main); }
-.vault-sidebar { margin-right: 16px; }
+.vault-sidebar { margin-right: 14px; }
 .vault-bento { position: relative; }
 .sort-button { display: flex; align-items: center; gap: 6px; padding: 6px 8px; border-radius: 10px; color: var(--text-muted); font-size:calc(10px * var(--font-scale)); }
 .sort-button:hover { background: var(--glass-soft); color: var(--text-main); }

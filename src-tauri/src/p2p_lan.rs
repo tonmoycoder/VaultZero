@@ -66,7 +66,8 @@ impl P2PManager {
 
         // Initialize mDNS daemon and register service
         let daemon = ServiceDaemon::new().map_err(|e| format!("Failed to init mDNS: {}", e))?;
-        let host_name = format!("{}.local.", device_name.replace(' ', "-"));
+        let host_name = device_name.replace(' ', "-") + ".local.";
+
         let mut properties = HashMap::new();
         properties.insert("app".to_string(), "vaultzero".to_string());
         properties.insert("version".to_string(), "2.5.0".to_string());
@@ -140,8 +141,7 @@ impl P2PManager {
             tokio::select! {
                 event = receiver.recv_async() => {
                     if let Ok(mdns_sd::ServiceEvent::ServiceResolved(info)) = event {
-                        let addrs = info.get_addresses();
-                        if let Some(addr) = addrs.iter().next() {
+                        if let Some(addr) = info.get_addresses().iter().next() {
                             peers.push(DiscoveredPeer {
                                 id: info.get_fullname().to_string(),
                                 name: info.get_hostname().replace(".local.", ""),

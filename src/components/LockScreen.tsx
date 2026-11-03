@@ -430,11 +430,11 @@ export default function LockScreen({
                   <span>{isSetup ? "Sealing vault with Argon2id…" : "Deriving vault key…"}</span>
                 </div>
               ) : (
-                <>
+                <div className="flex w-full items-center justify-center gap-2">
                   <LockSimple size={16} weight="bold" className="shrink-0" />
                   <span>{isSetup ? t(lang, "createVaultBtn") : t(lang, "unlockVaultBtn")}</span>
-                  <ArrowRight size={15} weight="bold" className="absolute right-5 opacity-80" />
-                </>
+                  <ArrowRight size={15} weight="bold" className="shrink-0 opacity-80" />
+                </div>
               )}
             </button>
           </form>

@@ -624,12 +624,12 @@ export function OcrModal({
       title="Scan & import"
       subtitle="Turn a screenshot into a new vault item. OCR runs entirely on this device."
       icon={<Scan size={20} weight="duotone" />}
-      width="max-w-[700px]"
+      width="max-w-[760px]"
       footer={
-        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between w-full">
-          <span className="hidden items-center gap-1.5 text-[9px] text-faint md:flex">
+        <div className="flex flex-col gap-3.5 sm:flex-row sm:items-center sm:justify-between w-full">
+          <span className="hidden items-center gap-1.5 text-[9px] font-medium text-faint lg:flex shrink-0">
             <LockSimple size={12} weight="duotone" className="shrink-0 text-success" />
-            Images are discarded after extraction (100% offline)
+            {lang === "bn" ? "এক্সট্রাকশনের পর ছবি মুছে ফেলা হয় (১০০% অফলাইন)" : "Images are discarded after extraction (100% offline)"}
           </span>
           <div className="flex items-center justify-end gap-2.5 w-full sm:w-auto">
             {stage !== "done" ? (
@@ -637,40 +637,40 @@ export function OcrModal({
                 <button
                   type="button"
                   onClick={onClose}
-                  className="secondary-button flex h-10 shrink-0 items-center justify-center whitespace-nowrap rounded-full px-5 text-[11px] font-semibold"
+                  className="secondary-button flex h-9.5 shrink-0 items-center justify-center whitespace-nowrap rounded-[14px] px-4.5 text-[11px] font-semibold"
                 >
-                  Cancel
+                  {lang === "bn" ? "বাতিল" : "Cancel"}
                 </button>
                 <button
                   type="button"
                   onClick={() => fileRef.current?.click()}
-                  className="primary-button flex h-10 shrink-0 items-center gap-2 whitespace-nowrap rounded-full px-5 text-[11px] font-semibold shadow-md shadow-[var(--accent-glow)]"
+                  className="primary-button flex h-9.5 shrink-0 items-center gap-2 whitespace-nowrap rounded-[14px] px-5 text-[11px] font-semibold shadow-md shadow-[var(--accent-glow)]"
                 >
-                  <Image size={15} weight="bold" /> Choose image
+                  <Image size={15} weight="bold" /> {lang === "bn" ? "ছবি নির্বাচন করুন" : "Choose image"}
                 </button>
               </>
             ) : (
-              <div className="flex items-center gap-2 w-full justify-end flex-wrap sm:flex-nowrap">
+              <div className="flex items-center gap-2.5 w-full sm:w-auto justify-end flex-wrap sm:flex-nowrap">
                 <button
                   type="button"
                   onClick={reset}
-                  className="secondary-button flex h-10 shrink-0 items-center justify-center whitespace-nowrap rounded-full px-4 text-[11px] font-semibold"
+                  className="secondary-button flex h-9.5 shrink-0 items-center justify-center whitespace-nowrap rounded-[14px] px-4 text-[10.5px] font-semibold"
                 >
-                  Scan another
+                  {lang === "bn" ? "আরেকটি স্ক্যান" : "Scan another"}
                 </button>
                 <button
                   type="button"
                   onClick={save}
-                  className="secondary-button flex h-10 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-full px-4 text-[11px] font-semibold"
+                  className="secondary-button flex h-9.5 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-[14px] px-4 text-[10.5px] font-semibold text-[var(--accent)]"
                 >
-                  <NotePencil size={14} weight="duotone" /> Save as note
+                  <NotePencil size={14} weight="duotone" /> {lang === "bn" ? "নোট হিসেবে সেভ" : "Save as note"}
                 </button>
                 <button
                   type="button"
                   onClick={createItem}
-                  className="primary-button flex h-10 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-full px-5 text-[11px] font-semibold shadow-md shadow-[var(--accent-glow)]"
+                  className="primary-button flex h-9.5 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-[14px] px-5 text-[10.5px] font-semibold shadow-md shadow-[var(--accent-glow)]"
                 >
-                  <Plus size={14} weight="bold" /> Create item
+                  <Plus size={14} weight="bold" /> {lang === "bn" ? "আইটেম তৈরি করুন" : "Create item"}
                 </button>
               </div>
             )}

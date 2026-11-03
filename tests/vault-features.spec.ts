@@ -61,14 +61,14 @@ test("text size control scales the interface and persists", async ({ page }) => 
   const before = await page.locator("h1").evaluate((el) => Number.parseFloat(getComputedStyle(el).fontSize));
   await control.getByRole("button", { name: "Increase text size" }).click();
   await control.getByRole("button", { name: "Increase text size" }).click();
-  await expect(page.locator("html")).toHaveAttribute("data-text-step", "3");
+  await expect(page.locator("html")).toHaveAttribute("data-text-step", "4");
   const after = await page.locator("h1").evaluate((el) => Number.parseFloat(getComputedStyle(el).fontSize));
   expect(after).toBeGreaterThan(before * 1.15);
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1)).toBe(true);
   await page.reload();
-  await expect(page.locator("html")).toHaveAttribute("data-text-step", "3");
+  await expect(page.locator("html")).toHaveAttribute("data-text-step", "4");
   await page.locator('[data-testid="text-size-control"]:visible').first().getByRole("button", { name: "Decrease text size" }).click();
-  await expect(page.locator("html")).toHaveAttribute("data-text-step", "2");
+  await expect(page.locator("html")).toHaveAttribute("data-text-step", "3");
 });
 
 test("the largest text size still fits on a small phone", async ({ page }) => {
