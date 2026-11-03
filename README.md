@@ -10,7 +10,7 @@
 
 ---
 
-[![Version](https://img.shields.io/badge/Version-v2.5.0-8A2BE2?style=for-the-badge&logo=github)](https://github.com/tonmoycoder/VaultZero/releases/latest)
+[![Version](https://img.shields.io/badge/Version-v2.5.2-8A2BE2?style=for-the-badge&logo=github)](https://github.com/tonmoycoder/VaultZero/releases/latest)
 [![Rust](https://img.shields.io/badge/Rust-1.85%2B-black?style=for-the-badge&logo=rust&logoColor=white)](https://www.rust-lang.org/)
 [![Tauri v2](https://img.shields.io/badge/Tauri-v2.2-blue?style=for-the-badge&logo=tauri&logoColor=white)](https://v2.tauri.app/)
 [![React 19](https://img.shields.io/badge/React-19.2-61DAFB?style=for-the-badge&logo=react&logoColor=black)](https://react.dev/)
