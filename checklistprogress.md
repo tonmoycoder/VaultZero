@@ -42,6 +42,15 @@ Active branch: `arena/61b1561a-vaultzero` (never rename). PR #2 MERGED.
 - [x] V-79 single-source icons, NSIS `installerIcon` + header/sidebar BMPs,
       GitHub-safe README logo, honest FPS claims, stale paths/typo fixed
 - [x] `tests/vault-mobile-shell.spec.ts` M-01…M-09 → 11/11 pass
+- [x] V-81 Windows release `**/` PowerShell glob fixed (signed-log proof),
+      harness guard added
+- [!] Beta release `41715962554` FAILED: Android signing secrets are NOT set
+      (v2.5.2 used a hardcoded `vaultzero123` keystore — earlier inference was
+      wrong); Windows build itself succeeded but the asset-collection glob
+      falsely threw. NO debug keystore / fake asset was created.
+- [ ] User decision: configure the 4 secrets, approve a labelled dev key, or
+      skip publication. Until then `/releases/latest` = v2.5.2 and the 3
+      Windows links still 404.
 - [x] V-80 Windows CI `prebuild` ENOENT root-caused from the signed log and
       fixed with `basename()`; 3 cross-platform guards added
 - [x] Re-measured AFTER: 16.7 ms median / p95, 0 frames >32 ms, 0 blur surfaces
@@ -56,7 +65,8 @@ Active branch: `arena/61b1561a-vaultzero` (never rename). PR #2 MERGED.
 - [x] `npm audit --audit-level=high` → 0 vulnerabilities
 - [x] `npx playwright test --workers=2` → **135 passed (6.8 m)**, 0 failed
 - [x] Commit `910a23b` + push; PR #3 opened (CI only triggers on PR/main push)
-- [ ] Re-watch CI after the V-80 fix → `gh pr checks 3` BOTH green
+- [x] Re-watch CI `41714765933` → `gh pr checks 3` BOTH green (6m14s / 3m21s)
+- [ ] Re-watch CI after the V-81 fix → `gh pr checks 3` BOTH green
 - [ ] Publish `v2.6.0-beta.1` via `gh workflow run … --ref …` and verify the
       five live assets (the actual 404 fix)
 - [ ] Update this file + `checkpoint.md` with the published release result

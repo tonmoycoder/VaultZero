@@ -76,14 +76,22 @@ jobs:
           $ErrorActionPreference = 'Stop'
           New-Item -ItemType Directory -Path release-assets-windows -Force | Out-Null
 
-          $nsis = Get-ChildItem -Path "**/bundle/nsis/*.exe" -Recurse -ErrorAction SilentlyContinue |
-                  Select-Object -First 1
+          # V-81: `**/bundle/...` does NOT recurse in PowerShell 7 and returned
+          # $null even though Tauri produced
+          # `target/release/bundle/nsis/VaultZero_2.5.2_x64-setup.exe`.
+          # Use explicit, known output directories instead (fail-closed).
+          $nsis = @(
+            Get-ChildItem -Path "target/release/bundle/nsis" -Filter "*.exe" -File -ErrorAction SilentlyContinue
+            Get-ChildItem -Path "src-tauri/target/release/bundle/nsis" -Filter "*.exe" -File -ErrorAction SilentlyContinue
+          ) | Select-Object -First 1
           if (-not $nsis) { throw "NSIS installer was not produced by tauri build." }
           Copy-Item $nsis.FullName -Destination "release-assets-windows/VaultZero-Windows-x64-Setup.exe" -Force
           Write-Host "NSIS installer -> VaultZero-Windows-x64-Setup.exe ($($nsis.Name))"
 
-          $msi = Get-ChildItem -Path "**/bundle/msi/*.msi" -Recurse -ErrorAction SilentlyContinue |
-                 Select-Object -First 1
+          $msi = @(
+            Get-ChildItem -Path "target/release/bundle/msi" -Filter "*.msi" -File -ErrorAction SilentlyContinue
+            Get-ChildItem -Path "src-tauri/target/release/bundle/msi" -Filter "*.msi" -File -ErrorAction SilentlyContinue
+          ) | Select-Object -First 1
           if (-not $msi) { throw "MSI installer was not produced by tauri build." }
           Copy-Item $msi.FullName -Destination "release-assets-windows/VaultZero-Windows-x64.msi" -Force
           Write-Host "MSI installer -> VaultZero-Windows-x64.msi ($($msi.Name))"

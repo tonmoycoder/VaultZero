@@ -174,14 +174,42 @@ control reproducing the bad split, `path.win32.basename`, and a source check).
 Local `node scripts/sync-tesseract-assets.mjs` + 31/31 harness PASS. Do NOT
 reintroduce `split("/")` in a path built with `join()`.
 
+### V-81 / Beta release attempt `41715962554` — BLOCKED, honest correction
+
+`gh workflow run "Release (Windows Installer & Android APK)" --ref arena/61b1561a-vaultzero -f tag_name=v2.6.0-beta.1`
+→ **failure** (both build jobs failed, publish skipped).
+
+1. **Android**: `Android signing secrets are not configured.` Earlier I inferred
+   from v2.5.2's successful signed APK that the 4 secrets existed. That was
+   WRONG. `gh api .../contents/.github/workflows/release.yml?ref=v2.5.2` shows
+   v2.5.2 generated a **hardcoded keystore**
+   (`keytool -genkey ... -storepass vaultzero123 -keypass vaultzero123`). V-31
+   correctly replaced that with fail-closed secrets, which have never been set.
+   `gh secret list` returns 403 for the integration token. Required:
+   `ANDROID_KEYSTORE_BASE64`, `ANDROID_KEYSTORE_PASSWORD`,
+   `ANDROID_KEY_ALIAS`, `ANDROID_KEY_PASSWORD`. NO debug/ephemeral keystore was
+   created — that would be a fake fallback and would break in-place upgrades.
+2. **Windows**: Tauri **did** build all three binaries successfully
+   (NSIS 12.27 MiB, MSI 13.47 MiB, `target/release/vaultzero-app.exe`), but
+   `Get-ChildItem -Path "**/bundle/nsis/*.exe" -Recurse` returns `$null` in
+   PowerShell 7 → false `throw "NSIS installer was not produced"`. Signed log
+   chunk 13 proved this. V-81 replaces both `**/` globs with explicit
+   `target/release/bundle/{nsis,msi}` + `src-tauri/...` directories; a harness
+   guard prevents regression.
+
+**Consequence**: the live `/releases/latest` is still `v2.5.2` and the 3
+Windows links STILL 404. Publishing the Beta release is blocked on a user
+decision (configure secrets / approve a clearly-labelled dev key / skip).
+Never fabricate assets or silently downgrade to a debug keystore.
+
 ### Still open (needs a decision / cannot be done locally)
-1. Publish a **Beta** release via
+1. **[!] BLOCKED** — Publish a **Beta** release via
    `gh workflow run "Release (Windows Installer & Android APK)" --ref arena/61b1561a-vaultzero -f tag_name=v2.6.0-beta.1`
-   AFTER this branch is pushed and CI is green. This is the ONLY way to put
+   AFTER the 4 Android signing secrets are configured. This is the ONLY way to put
    real Windows binaries on `/releases/latest` and end the 404s; the local
    sandbox has no MSVC/WebView2/Android NDK. Watch the run and verify all 5
    assets with `gh release view`. If Android signing secrets are missing the
-   Android job will fail closed (that is by design).
+   Android job fails closed by design (observed in run `41715962554`).
 2. Absolute `<2 s` Windows `.exe` cold start is STILL NOT MEASURED (no MSVC).
    The 284 ms figure from the previous phase is a WebView proxy only.
 3. Native fail-closed `.pmv` backup/restore via Rust IPC is STILL NOT

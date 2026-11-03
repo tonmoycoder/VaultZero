@@ -42,6 +42,7 @@ t(
     /MSI installer was not produced/.test(workflow)
 );
 t("no `|| true` masks an MSI failure", !/msi[^\n]*\|\| true/.test(workflow));
+t("V-81 Windows step uses explicit bundle paths, not broken `**/` globs", !/Get-ChildItem -Path "\*\*\/bundle/.test(workflow) && /bundle\/nsis" -Filter/.test(workflow));
 
 console.log("=== Beta naming for a development build ===");
 t("release title marks beta tags as a Beta / development preview", /BETA|Beta/.test(workflow) && /beta/.test(workflow));
