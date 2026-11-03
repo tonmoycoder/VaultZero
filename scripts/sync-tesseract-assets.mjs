@@ -8,7 +8,7 @@
 // (LSTM only) means only the two -lstm variants are needed; SIMD detection
 // in tesseract.js picks between them at runtime.
 import { copyFileSync, existsSync, mkdirSync, readdirSync, statSync } from "node:fs";
-import { dirname, join } from "node:path";
+import { basename, dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..");
@@ -33,11 +33,14 @@ for (const src of REQUIRED) {
 }
 
 mkdirSync(OUT, { recursive: true });
-for (const src of REQUIRED) copyFileSync(src, join(OUT, src.split("/").pop()));
+// V-80: `join()` uses backslashes on Windows, so splitting on "/" would make
+// the ENTIRE absolute path the destination filename (CI job 126186571526
+// failed with ENOENT). `basename()` is separator-aware on the host OS.
+for (const src of REQUIRED) copyFileSync(src, join(OUT, basename(src)));
 
 // Fail closed: the OCR engine must never silently fall back to a CDN.
 for (const src of REQUIRED) {
-  const dest = join(OUT, src.split("/").pop());
+  const dest = join(OUT, basename(src));
   if (!existsSync(dest) || statSync(dest).size !== statSync(src).size) {
     console.error(`[tesseract] copy verification failed for ${dest}`);
     process.exit(1);

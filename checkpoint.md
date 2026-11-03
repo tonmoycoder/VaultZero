@@ -8,6 +8,8 @@
 - Active branch (FIXED, never rename): `arena/61b1561a-vaultzero`
 - Base: `main` @ `df048f9d3276c4eaf7b2b0f3220c69ff4b56d800`
   (`docs(readme): update version badge to v2.5.2`, 2026-11-03 22:53 +0600)
+- PR #3 OPEN (`arena/61b1561a-vaultzero` → `main`), head `910a23b`.
+  CI `41713265261`: Frontend PASS 6m38s, Windows FAIL 42s (V-80, see below).
 - PR #2 (V-01…V-71) **MERGED** 2026-11-03T16:54:12Z. Its CI `41568757031`
   was green on both jobs. PR #1 (`arena/79f3d1ba-vaultzero`, `5c98a1f`) is
   still **OPEN** and superseded — deliberately NOT inspected, pushed, merged
@@ -152,6 +154,25 @@ calls. Manifest patch: 5 permissions + cleartext, idempotent on 2nd run.
 - `public/tesseract/` and `.artifacts/` are gitignored; `.agent/` is
   gitignored and local-only. `docs/FINAL-REPORT-2026-11.md` from the previous
   phase is NOT tracked in this checkout.
+
+### V-80 — Windows CI regression caught and fixed (empirical, not guessed)
+
+CI `41713265261` / job `126186571526` failed at `npm run build` → `prebuild`.
+Signed plain-text log (via the authenticated 302 → `fetch_page chunk 1` route)
+showed verbatim:
+
+```
+Error: ENOENT: no such file or directory, copyfile
+ 'D:\a\VaultZero\VaultZero\node_modules\tesseract.js\dist\worker.min.js'
+ -> 'D:\a\VaultZero\VaultZero\public\tesseract\D:\a\VaultZero\...'
+```
+
+`src.split("/").pop()` cannot split Windows `join()` backslashes, so the whole
+absolute path became the destination filename. Fixed with `basename()` from
+`node:path`; `tests/harness/offline-ocr.test.mjs` gained 3 guards (a positive
+control reproducing the bad split, `path.win32.basename`, and a source check).
+Local `node scripts/sync-tesseract-assets.mjs` + 31/31 harness PASS. Do NOT
+reintroduce `split("/")` in a path built with `join()`.
 
 ### Still open (needs a decision / cannot be done locally)
 1. Publish a **Beta** release via

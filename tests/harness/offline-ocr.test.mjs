@@ -3,7 +3,7 @@
 // stalls at "loading tesseract core" with no error. This guard makes the
 // offline contract explicit and proves the detector is not a stub.
 import { existsSync, readFileSync, readdirSync } from "node:fs";
-import { dirname, join } from "node:path";
+import { dirname, join, win32 } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..", "..");
@@ -47,6 +47,12 @@ if (has(syncScript)) {
   t("sync copies the worker", /worker\.min\.js/.test(sync));
   t("sync copies LSTM cores (oem=1)", /simd-lstm\.wasm\.js|tesseract-core-lstm\.wasm\.js/.test(sync));
   t("sync output is gitignored", /tesseract/.test(read(".gitignore")));
+  // V-80: regression guard for CI job 126186571526. On Windows, join()
+  // produces backslashes; splitting on "/" returned the whole absolute path.
+  const winPath = "D:\\a\\VaultZero\\VaultZero\\node_modules\\tesseract.js\\dist\\worker.min.js";
+  t("detects the Windows path-splitting bug", winPath.split("/").pop() === winPath);
+  t("path.win32.basename extracts the real filename", win32.basename(winPath) === "worker.min.js");
+  t("sync uses basename() (cross-platform)", /basename\(src\)/.test(sync));
 }
 const tessdata = has("public/tessdata") ? readdirSync(join(ROOT, "public/tessdata")) : [];
 t("bundles English traineddata", tessdata.includes("eng.traineddata"), tessdata.join(", "));

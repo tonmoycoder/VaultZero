@@ -42,6 +42,8 @@ Active branch: `arena/61b1561a-vaultzero` (never rename). PR #2 MERGED.
 - [x] V-79 single-source icons, NSIS `installerIcon` + header/sidebar BMPs,
       GitHub-safe README logo, honest FPS claims, stale paths/typo fixed
 - [x] `tests/vault-mobile-shell.spec.ts` M-01…M-09 → 11/11 pass
+- [x] V-80 Windows CI `prebuild` ENOENT root-caused from the signed log and
+      fixed with `basename()`; 3 cross-platform guards added
 - [x] Re-measured AFTER: 16.7 ms median / p95, 0 frames >32 ms, 0 blur surfaces
 - [x] Offline OCR proof: 606 ms, correct text, zero CDN requests
 - [x] Manifest patch proof: 5 permissions + cleartext, idempotent
@@ -53,8 +55,8 @@ Active branch: `arena/61b1561a-vaultzero` (never rename). PR #2 MERGED.
 - [x] `npx -y node@20 scripts/run-harness.mjs` → 31/31, 0 failed
 - [x] `npm audit --audit-level=high` → 0 vulnerabilities
 - [x] `npx playwright test --workers=2` → **135 passed (6.8 m)**, 0 failed
-- [ ] Commit + push `arena/61b1561a-vaultzero` → watch CI → both `gh pr checks`
-      jobs green (Rust clippy/test verified ONLY by Windows CI)
+- [x] Commit `910a23b` + push; PR #3 opened (CI only triggers on PR/main push)
+- [ ] Re-watch CI after the V-80 fix → `gh pr checks 3` BOTH green
 - [ ] Publish `v2.6.0-beta.1` via `gh workflow run … --ref …` and verify the
       five live assets (the actual 404 fix)
 - [ ] Update this file + `checkpoint.md` with the published release result
