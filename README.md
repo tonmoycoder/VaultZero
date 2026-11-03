@@ -37,7 +37,7 @@
 
 | প্ল্যাটফর্ম | সরাসরি লিংক (সবসময় *latest* রিলিজ) | বিবরণ |
 |:---|:---|:---|
-| 🪟 **Windows (প্রস্তাবিত)** | [**VaultZero-Windows-x64-Setup.exe**](https://github.com/tonmoycoder/VaultZero/releases/latest/download/VaultZero-Windows-x64-Setup.exe) | NSIS ইনস্টলার; Start-menu + ডেস্কটপ শর্টকাট; আপগ্রেডে ভল্ট অক্ষত থাকে |
+| 💻 **Windows (প্রস্তাবিত)** | [**VaultZero-Windows-x64-Setup.exe**](https://github.com/tonmoycoder/VaultZero/releases/latest/download/VaultZero-Windows-x64-Setup.exe) | NSIS ইনস্টলার; Start-menu + ডেস্কটপ শর্টকাট; আপগ্রেডে ভল্ট অক্ষত থাকে |
 | 💼 **Windows portable** | [**VaultZero-Windows-x64-Portable.exe**](https://github.com/tonmoycoder/VaultZero/releases/latest/download/VaultZero-Windows-x64-Portable.exe) | একটি স্বতন্ত্র `.exe`, ইনস্টল ছাড়াই, USB-তে নেওয়া যায় |
 | 🏢 **Windows MSI** | [**VaultZero-Windows-x64.msi**](https://github.com/tonmoycoder/VaultZero/releases/latest/download/VaultZero-Windows-x64.msi) | সাইলেন্ট / ম্যানেজড ডিপ্লয়মেন্ট |
 | 🤖 **Android (arm64)** | [**VaultZero-Android.apk**](https://github.com/tonmoycoder/VaultZero/releases/latest/download/VaultZero-Android.apk) | সাইন করা রিলিজ APK, সরাসরি ইনস্টলযোগ্য, সম্পূর্ণ অফলাইনে কাজ করে |
@@ -291,7 +291,7 @@ npx tauri build
 
 | প্ল্যাটফর্ম | লিংক |
 |:---|:---|
-| 🪟 উইন্ডোজ ইনস্টলার | [VaultZero-Windows-x64-Setup.exe](https://github.com/tonmoycoder/VaultZero/releases/latest/download/VaultZero-Windows-x64-Setup.exe) |
+| 💻 উইন্ডোজ ইনস্টলার | [VaultZero-Windows-x64-Setup.exe](https://github.com/tonmoycoder/VaultZero/releases/latest/download/VaultZero-Windows-x64-Setup.exe) |
 | 💼 উইন্ডোজ পোর্টেবল | [VaultZero-Windows-x64-Portable.exe](https://github.com/tonmoycoder/VaultZero/releases/latest/download/VaultZero-Windows-x64-Portable.exe) |
 | 🤖 অ্যান্ড্রয়েড APK | [VaultZero-Android.apk](https://github.com/tonmoycoder/VaultZero/releases/latest/download/VaultZero-Android.apk) |
 | 🔐 চেকসাম | [SHA256SUMS.txt](https://github.com/tonmoycoder/VaultZero/releases/latest/download/SHA256SUMS.txt) |
