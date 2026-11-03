@@ -143,12 +143,11 @@ jobs:
           yes | /usr/local/lib/android/sdk/cmdline-tools/latest/bin/sdkmanager --licenses >/dev/null 2>&1 || true
           NDK_DIR=$(ls -d /usr/local/lib/android/sdk/ndk/* 2>/dev/null | sort -V | tail -n 1)
           if [ -z "$NDK_DIR" ]; then
-            /usr/local/lib/android/sdk/cmdline-tools/latest/bin/sdkmanager "ndk;27.2.12479018" "build-tools;35.0.0" "platforms;android-35" 2>/dev/null || true
-            NDK_DIR=$(ls -d /usr/local/lib/android/sdk/ndk/* 2>/dev/null | sort -V | tail -n 1)
+            /usr/local/lib/android/sdk/cmdline-tools/latest/bin/sdkmanager "ndk;26.1.10909125"
+            NDK_DIR="/usr/local/lib/android/sdk/ndk/26.1.10909125"
           fi
           echo "ANDROID_NDK_ROOT=$NDK_DIR" >> "$GITHUB_ENV"
           echo "NDK_HOME=$NDK_DIR" >> "$GITHUB_ENV"
-          echo "ANDROID_NDK=$NDK_DIR" >> "$GITHUB_ENV"
 
       - name: Setup Rust Stable & Android Targets
         uses: dtolnay/rust-toolchain@stable
@@ -166,6 +165,8 @@ jobs:
       - name: Initialize & Build Real Signed Android APK
         env:
           CI: true
+          # SECURITY (V-31): long-lived Android upload key. A fresh keystore
+          # per release would break in-place updates and destroy app data.
           ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
           ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
           ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
@@ -173,29 +174,40 @@ jobs:
         run: |
           set -euo pipefail
 
+          if [ -z "${ANDROID_KEYSTORE_BASE64:-}" ] || [ -z "${ANDROID_KEYSTORE_PASSWORD:-}" ] || \
+             [ -z "${ANDROID_KEY_ALIAS:-}" ] || [ -z "${ANDROID_KEY_PASSWORD:-}" ]; then
+            echo "::error::Android signing secrets are not configured."
+            echo "::error::Required: ANDROID_KEYSTORE_BASE64, ANDROID_KEYSTORE_PASSWORD, ANDROID_KEY_ALIAS, ANDROID_KEY_PASSWORD"
+            exit 1
+          fi
+
           # V-64: `tauri android init` FAILS when gen/android already exists.
+          # The old `|| true` hid both that harmless error AND real init
+          # failures. Only run it when the project is genuinely uninitialised.
           if [ ! -d src-tauri/gen/android ]; then
             echo "Initializing Tauri Android target..."
-            npx tauri android init --ci 2>&1 || true
+            npx tauri android init --ci
           else
             echo "Tauri Android target already initialised; skipping init."
           fi
 
           mkdir -p release-assets-android
           echo "Building signed Android release APK for aarch64..."
-          npx tauri android build --apk --target aarch64 --ci 2>&1 || true
+          npx tauri android build --apk --target aarch64 --ci
 
           APK_FOUND=$(find src-tauri -type f -name "*.apk" 2>/dev/null | head -n 1 || true)
           if [ -z "$APK_FOUND" ]; then
-            echo "aarch64 build produced no APK; retrying with universal target..."
-            npx tauri android build --apk --ci 2>&1 || true
+            echo "aarch64 build produced no APK; retrying with the universal target..."
+            npx tauri android build --apk --ci
             APK_FOUND=$(find src-tauri -type f -name "*.apk" 2>/dev/null | head -n 1 || true)
           fi
-
           if [ -z "$APK_FOUND" ]; then
             echo "::error::No Android APK was produced. Refusing to publish an empty release."
             exit 1
           fi
+
+          echo "$ANDROID_KEYSTORE_BASE64" | base64 --decode > release.keystore
+          echo "Restored the long-lived release signing keystore."
 
           BUILD_TOOLS_DIR=$(ls -d /usr/local/lib/android/sdk/build-tools/* 2>/dev/null | sort -V | tail -n 1)
           if [ ! -x "$BUILD_TOOLS_DIR/zipalign" ] || [ ! -x "$BUILD_TOOLS_DIR/apksigner" ]; then
@@ -203,37 +215,19 @@ jobs:
             exit 1
           fi
 
-          # Prepare release keystore (either from GitHub Secrets or fallback release key)
-          if [ -n "${ANDROID_KEYSTORE_BASE64:-}" ]; then
-            echo "$ANDROID_KEYSTORE_BASE64" | base64 --decode > release.keystore
-            echo "Restored long-lived release signing keystore from secret."
-            KEY_ALIAS="$ANDROID_KEY_ALIAS"
-            STORE_PASS="$ANDROID_KEYSTORE_PASSWORD"
-            KEY_PASS="$ANDROID_KEY_PASSWORD"
-          else
-            echo "Generating consistent release keystore..."
-            keytool -genkey -v -keystore release.keystore -alias vaultzero \
-              -keyalg RSA -keysize 2048 -validity 10000 \
-              -storepass vaultzero123 -keypass vaultzero123 \
-              -dname "CN=VaultZero, OU=Security, O=VaultZero, L=Global, S=Global, C=US" 2>/dev/null || true
-            KEY_ALIAS="vaultzero"
-            STORE_PASS="vaultzero123"
-            KEY_PASS="vaultzero123"
-          fi
-
           echo "Processing APK: $APK_FOUND"
           "$BUILD_TOOLS_DIR/zipalign" -v -p 4 "$APK_FOUND" aligned.apk
           "$BUILD_TOOLS_DIR/apksigner" sign \
             --ks release.keystore \
-            --ks-key-alias "$KEY_ALIAS" \
-            --ks-pass "pass:$STORE_PASS" \
-            --key-pass "pass:$KEY_PASS" \
+            --ks-key-alias "$ANDROID_KEY_ALIAS" \
+            --ks-pass "pass:$ANDROID_KEYSTORE_PASSWORD" \
+            --key-pass "pass:$ANDROID_KEY_PASSWORD" \
             --out release-assets-android/VaultZero-Android.apk \
             aligned.apk
           "$BUILD_TOOLS_DIR/apksigner" verify --verbose release-assets-android/VaultZero-Android.apk
-          echo "APK signed and verified."
+          echo "APK signed and verified with the long-lived release key."
 
-          # The versioned name uses the ACTUAL tag
+          # The versioned name uses the ACTUAL tag, never a hardcoded one.
           if [ "${{ github.event_name }}" = "workflow_dispatch" ] && [ -n "${{ inputs.tag_name }}" ]; then
             TAG="${{ inputs.tag_name }}"
           else
@@ -328,6 +322,7 @@ jobs:
               gh api -X DELETE "repos/${{ github.repository }}/releases/assets/$asset_id" >/dev/null
               sleep 1
             fi
+            # No `|| true`: a failed upload must fail the release.
             gh release upload "$TAG" "$file" --clobber
           done
 
