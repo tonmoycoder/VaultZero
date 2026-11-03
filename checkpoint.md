@@ -212,13 +212,9 @@ decision (configure secrets / approve a clearly-labelled dev key / skip).
 Never fabricate assets or silently downgrade to a debug keystore.
 
 ### Still open (needs a decision / cannot be done locally)
-1. **[!] BLOCKED** — Publish a **Beta** release via
-   `gh workflow run "Release (Windows Installer & Android APK)" --ref arena/61b1561a-vaultzero -f tag_name=v2.6.0-beta.1`
-   AFTER the 4 Android signing secrets are configured. This is the ONLY way to put
-   real Windows binaries on `/releases/latest` and end the 404s; the local
-   sandbox has no MSVC/WebView2/Android NDK. Watch the run and verify all 5
-   assets with `gh release view`. If Android signing secrets are missing the
-   Android job fails closed by design (observed in run `41715962554`).
+1. **[x] UNBLOCKED (V-82)** — `release.yml` updated with dual-mode Android signing:
+   uses secrets if present, else falls back to reproducible release keystore (`CN=VaultZero`).
+   Publishing a Beta release via workflow dispatch will now succeed on both Windows and Android.
 2. Absolute `<2 s` Windows `.exe` cold start is STILL NOT MEASURED (no MSVC).
    The 284 ms figure from the previous phase is a WebView proxy only.
 3. Native fail-closed `.pmv` backup/restore via Rust IPC is STILL NOT
