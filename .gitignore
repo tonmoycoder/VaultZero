@@ -57,3 +57,6 @@ MEMORY_BANK.md
 TASK_QUEUE.md
 .mcp.json
 
+
+# V-74: generated offline OCR worker/WASM assets (large, rebuilt by npm ci + predev/prebuild)
+public/tesseract/

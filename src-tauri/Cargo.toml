@@ -16,7 +16,11 @@ vault-core = { path = "../crates/vault-core" }
 tauri = { version = "2.2", features = [] }
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
-tokio = { version = "1.43", features = ["full"] }
+# V-78: only the features actually used by the opt-in LAN P2P host:
+#   tokio::spawn / Mutex / TcpListener / AsyncRead+AsyncWrite / sleep / select!
+# "full" also pulls fs, process, signal and extra drivers into the binary for
+# no reason. Air-seal scope (crates/vault-core) remains network-free.
+tokio = { version = "1.43", features = ["rt-multi-thread", "macros", "sync", "time", "net", "io-util"] }
 uuid = { version = "1.11", features = ["v4"] }
 chrono = "0.4"
 regex = "1.10"

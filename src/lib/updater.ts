@@ -223,7 +223,10 @@ export function selectDownloadableAsset(
 ): GitHubAsset | undefined {
   if (!info) return undefined;
   if (platform === "android") {
-    return info.androidAsset || info.installerAsset || info.portableAsset;
+    // V-73: Android's package installer only accepts a signed APK. A release
+    // that publishes no APK must FAIL CLOSED with an explicit diagnostic —
+    // it must never silently hand a Windows .exe to an Android device.
+    return info.androidAsset;
   }
   if (platform === "windows" || platform === "desktop" || platform === "browser" || platform === undefined) {
     return info.installerAsset || info.portableAsset || info.androidAsset;
@@ -617,9 +620,13 @@ export async function runVerifiedUpdate(
 
   report({ stage: "snapshot", percent: 0 });
 
-  const asset = selectDownloadableAsset(info, detectUpdatePlatform());
+  const platform = detectUpdatePlatform();
+  const asset = selectDownloadableAsset(info, platform);
   if (!asset) {
-    const reason = "This release does not contain an installer for this platform.";
+    const reason =
+      platform === "android"
+        ? "This release contains no signed Android APK. Open the release page and install VaultZero-Android.apk manually — no unverified file will be installed."
+        : "This release does not contain an installer for this platform.";
     report({ stage: "failed", percent: 0, reason });
     throw new Error(reason);
   }

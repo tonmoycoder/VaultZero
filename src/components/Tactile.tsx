@@ -179,8 +179,16 @@ export default function TactileProvider({ press, haptics, children }: {
     const onKeyUp = (event: KeyboardEvent) => {
       if (event.key === "Enter" || event.key === " ") release();
     };
+    // V-77: a global pointermove listener fires on EVERY touch move and
+    // writes inline styles each frame. That is the main source of jitter on
+    // Android. Elastic stretch is a mouse/hover affordance anyway.
+    const finePointer =
+      typeof window !== "undefined" &&
+      typeof window.matchMedia === "function" &&
+      window.matchMedia("(pointer: fine)").matches;
+
     document.addEventListener("pointerdown", onPointerDown, { passive: true });
-    window.addEventListener("pointermove", onPointerMove, { passive: true });
+    if (finePointer) window.addEventListener("pointermove", onPointerMove, { passive: true });
     window.addEventListener("pointerup", release);
     window.addEventListener("pointercancel", release);
     window.addEventListener("blur", release);
@@ -188,7 +196,7 @@ export default function TactileProvider({ press, haptics, children }: {
     document.addEventListener("keyup", onKeyUp);
     return () => {
       document.removeEventListener("pointerdown", onPointerDown);
-      window.removeEventListener("pointermove", onPointerMove);
+      if (finePointer) window.removeEventListener("pointermove", onPointerMove);
       window.removeEventListener("pointerup", release);
       window.removeEventListener("pointercancel", release);
       window.removeEventListener("blur", release);

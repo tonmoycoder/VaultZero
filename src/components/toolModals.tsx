@@ -525,6 +525,9 @@ export function SyncModal({ onClose, onNotify, items, onMerge }: {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
   const animFrameRef = useRef<number | null>(null);
+  // V-75: rAF callbacks close over stale render state. A ref is the only
+  // reliable way to stop the scanner loop the instant the camera is stopped.
+  const cameraActiveRef = useRef(false);
 
   /*
    * SECURITY: the PIN is generated locally with a CSPRNG. It is never
@@ -620,14 +623,13 @@ export function SyncModal({ onClose, onNotify, items, onMerge }: {
     }
   };
 
-  // Camera scanner lifecycle
+  // Camera scanner lifecycle (V-75)
+  // Android WebView only shows the runtime permission prompt in response to a
+  // real user gesture. Auto-starting on tab change produced an immediate
+  // "Permission denied" and made the panel look as if it closed itself. Only
+  // the explicit "Start camera" button may request the camera now.
   useEffect(() => {
-    if (tab !== "scan" || !isMobileDevice) {
-      stopCamera();
-      return;
-    }
-
-    startCamera();
+    if (tab !== "scan" || !isMobileDevice) stopCamera();
     return () => {
       stopCamera();
     };
@@ -635,28 +637,48 @@ export function SyncModal({ onClose, onNotify, items, onMerge }: {
 
   const startCamera = async () => {
     setCameraError("");
-    setCameraActive(true);
+    cameraActiveRef.current = false;
+    setCameraActive(false);
     try {
       if (!navigator.mediaDevices?.getUserMedia) {
         throw new Error("Camera API not supported in this environment");
       }
-      const stream = await navigator.mediaDevices.getUserMedia({
+      // When android.permission.CAMERA is absent the promise never settles.
+      // Bound the wait so the UI explains the problem instead of hanging.
+      const request = navigator.mediaDevices.getUserMedia({
         video: { facingMode: "environment" },
+        audio: false,
       });
+      const stream = await Promise.race([
+        request,
+        new Promise<MediaStream>((_, reject) =>
+          window.setTimeout(() => reject(new Error("Camera permission timed out")), 15000)
+        ),
+      ]);
       streamRef.current = stream;
-      if (videoRef.current) {
-        videoRef.current.srcObject = stream;
-        videoRef.current.setAttribute("playsinline", "true");
-        await videoRef.current.play();
-        requestAnimationFrame(tickScanner);
+      if (!videoRef.current) {
+        stream.getTracks().forEach((track) => track.stop());
+        return;
       }
+      videoRef.current.srcObject = stream;
+      videoRef.current.setAttribute("playsinline", "true");
+      await videoRef.current.play();
+      cameraActiveRef.current = true;
+      setCameraActive(true);
+      animFrameRef.current = requestAnimationFrame(tickScanner);
     } catch (err: any) {
+      cameraActiveRef.current = false;
       setCameraActive(false);
-      setCameraError(err?.message || "Camera access denied or unavailable");
+      setCameraError(
+        /denied|not allowed|permission/i.test(err?.message || "")
+          ? "Camera permission denied — allow it in Android Settings, then retry."
+          : err?.message || "Camera unavailable — tap Start camera to retry."
+      );
     }
   };
 
   const stopCamera = () => {
+    cameraActiveRef.current = false;
     if (animFrameRef.current) {
       cancelAnimationFrame(animFrameRef.current);
       animFrameRef.current = null;
@@ -669,8 +691,9 @@ export function SyncModal({ onClose, onNotify, items, onMerge }: {
   };
 
   const tickScanner = () => {
+    if (!cameraActiveRef.current) return;
     if (!videoRef.current || !canvasRef.current || videoRef.current.readyState !== videoRef.current.HAVE_ENOUGH_DATA) {
-      animFrameRef.current = requestAnimationFrame(tickScanner);
+      if (cameraActiveRef.current) animFrameRef.current = requestAnimationFrame(tickScanner);
       return;
     }
 
@@ -694,7 +717,7 @@ export function SyncModal({ onClose, onNotify, items, onMerge }: {
       handleScannedCode(code ? code.data : null);
     });
 
-    animFrameRef.current = requestAnimationFrame(tickScanner);
+    if (cameraActiveRef.current) animFrameRef.current = requestAnimationFrame(tickScanner);
   };
 
   /**

@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  V-75: canonical Android permission overlay for VaultZero.
+
+  `tauri android init` regenerates src-tauri/gen/android from scratch, and that
+  directory is deliberately NOT committed. `scripts/patch-android-manifest.mjs`
+  injects every <uses-permission> below into the generated manifest at build
+  time, so the signed APK always carries them. Without CAMERA, the WebView's
+  getUserMedia is denied instantly ("Permission denied" in Sync → Scan QR).
+  Without the Wi-Fi/LAN permissions, the opt-in P2P LAN host cannot bind.
+
+  This is a template/overlay, NOT the generated manifest itself.
+-->
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+  <uses-permission android:name="android.permission.CAMERA" />
+  <uses-permission android:name="android.permission.INTERNET" />
+  <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+  <uses-permission android:name="android.permission.ACCESS_WIFI_STATE" />
+  <uses-permission android:name="android.permission.CHANGE_WIFI_MULTICAST_STATE" />
+
+  <!-- Local Wi-Fi P2P uses plain HTTP on the LAN (no external server). -->
+  <application android:usesCleartextTraffic="true" />
+</manifest>

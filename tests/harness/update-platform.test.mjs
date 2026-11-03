@@ -29,7 +29,9 @@ t("android picks the APK", m.selectDownloadableAsset(info, "android")?.name === 
 t("windows picks the NSIS installer", m.selectDownloadableAsset(info, "windows")?.name === "VaultZero-Windows-x64-Setup.exe");
 t("desktop picks the NSIS installer", m.selectDownloadableAsset(info, "desktop")?.name === "VaultZero-Windows-x64-Setup.exe");
 t("browser (legacy default) picks the NSIS installer", m.selectDownloadableAsset(info)?.name === "VaultZero-Windows-x64-Setup.exe");
-t("missing APK falls back instead of returning nothing", m.selectDownloadableAsset({ ...info, androidAsset: undefined }, "android")?.name === "VaultZero-Windows-x64-Setup.exe");
+// V-73: Android must NEVER silently receive a Windows .exe. A release that
+// publishes no signed APK has to fail closed with a clear diagnostic instead.
+t("missing APK fails closed (no .exe fallback)", m.selectDownloadableAsset({ ...info, androidAsset: undefined }, "android") === undefined);
 t("null info is safe", m.selectDownloadableAsset(null, "android") === undefined);
 
 console.log(`\nRESULT: ${failures === 0 ? "all passed" : failures + " failed"}`);

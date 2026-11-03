@@ -2,114 +2,74 @@
 
 Legend: `[x]` done & verified · `[ ]` open · `[!]` blocked (reason)
 Companion state: `checkpoint.md`. Read both before resuming.
+Active branch: `arena/61b1561a-vaultzero` (never rename). PR #2 MERGED.
 
-## PHASE A — CI / correctness
+## PHASE A — inherited state (V-01…V-71)
 
-```
-[x] V-67 Node 20 `navigator` parity (b3a6125) — node20 harness 25/25
-[x] V-68 scale-spring flake -> expect.poll (ab2a8ca) — targeted 6/6, full 124/124 local
-[x] V-66 lib-totp folded into main chunk; prod-bundle heavy-payload invariant
-[x] V-63 snapshot BEFORE download in UpdateModal + UpdateBanner
-[x] V-50/59/60/62/64/65 fixes documented in docs/AUDIT-2026-11.md
-[x] Identify failing test of 41558464980 via authenticated signed plain-text
-    job log + fetch_page (artifact blob host is not allowlisted) — 123/1 at
-    tests/vault-architecture.spec.ts:106, Delete selected not found
-[x] V-70 fix: remove `force: true`, hover + normal click + aria-checked guard;
-    targeted `--repeat-each=20 --workers=2` → 20/20 PASS
-[x] V-69 air-seal harness written, 19 Rust files + 7 positive controls PASS
-[x] V-71 Bengali emergency-kit harness written, Node 20 parity PASS
-[x] Re-run all gates: tsc 0 · verify 27/27 · node@20 27/27 · full 124/124
-    (exact CI config, 6.4m) · audit 0 · clippy belongs to the Windows CI job
-[ ] Commit + push; `gh pr checks 2` BOTH green on the NEW run
-```
+- [x] PR #2 green on CI `41568757031` (Frontend 7m18s + Test&Build 2m35s)
+- [x] PR #2 MERGED into `main` 2026-11-03T16:54:12Z → `df048f9d`
+- [x] V-69 air-seal, V-70 hover/plain-click flake fix, V-71 Bengali kit guard
+- [x] 124 Playwright tests, 25→31 harness files, tsc/audit/verify green
+- [!] PR #1 still OPEN & superseded — NOT touched; needs an explicit decision
 
-## PHASE B — persistent resumable files
+## PHASE B — empirical audit of the new defect report
 
-```
-[x] checkpoint.md               (written 2026-11-03, workspace restored)
-[x] checklistprogress.md        (this file)
-[x] docs/EXTERNAL-REPO-SURVEY.md (written 2026-11-03, 23/23 repos)
-[x] review survey doc + reference it in the final Bengali report (23/23 read)
-[ ] update BOTH files again after every later step
-```
+- [x] `gh pr list` / `gh release view` / `gh run list` observed (no guesses)
+- [x] 5 Android screenshots reproduced at 390×844 in headless Chromium
+- [x] Frame telemetry BEFORE fix: 33.4 ms median / 50.1 ms p95 / 22-22 >32 ms
+- [x] CSS/DOM telemetry: 9 backdrop surfaces, 4 infinite animations,
+      no `env(safe-area-inset-top)`, 26 sub-44px tap targets, clipped text
+- [x] OCR root cause traced to tesseract.js CDN defaults + 20 MP canvas
+- [x] Camera root cause: no Android CAMERA permission + auto-start without gesture
+- [x] Android updater fail-open `.exe` fallback confirmed at `updater.ts:225`
+- [x] Icon parity measured (md5 + pixel diff 0.17/255, 0.63/255)
+- [x] Skills checked read-only: ceorkm SKILL.md, aiuxplayground, skills.sh,
+      Expo skills (framework mismatch); no third-party package installed
 
-## PHASE C — existing invariants (verified; do not regress)
+## PHASE C — V-72…V-79 (test-first RED → GREEN)
 
-```
-[x] fail-closed local-vault.pmv
-[x] real RFC 6238 TOTP (vectors 94287082 / 07081804)
-[x] WebAuthn quick unlock (P-256/ES256, memory-only wrap, zeroisation)
-[x] stable 5 release asset names + ONE combined SHA256SUMS.txt
-[x] fail-closed release.yml (no `|| true`), signed + apksigner-verified APK
-[x] Bengali-only prose: README front matter + typo fixed; emergency-kit now
-    language-aware (V-71, English mode preserved)
-[ ] native .pmv backup
-[ ] Android install UX
-[ ] tokio features=["full"] review
-[ ] SecurityCenter.tsx / VaultHome.tsx physics rollout
-[ ] published GitHub release asset existence
-[ ] absolute <2s .exe cold-start (NOT measured; 284ms is a WebView proxy only)
-```
+- [x] Wrote 4 new harnesses + updated 2 existing ones; observed 29 FAILs (RED)
+- [x] V-72 release contract: MSI mandatory, 5/5 verification, BETA + `--latest`
+      naming, `--target "$GITHUB_SHA"`, idempotent title, README Beta notice
+- [x] V-73 Android updater fails closed (no `.exe`), clear diagnostic
+- [x] V-74 offline OCR: sync script, `predev`/`prebuild`, gitignored WASM,
+      local `workerPath`/`corePath`, no CDN fallback, 2400px canvas cap
+- [x] V-75 Android manifest overlay + fail-closed idempotent patch script +
+      workflow injection; camera user-gesture only, 15 s bound, rAF ref guard
+- [x] V-76 safe-area top/bottom, no clipping, 44px targets, non-draggable lock
+- [x] V-77 blur/animation/pointermove envelope → jitter eliminated
+- [x] V-78 minimal tokio features; air-seal scope untouched
+- [x] V-79 single-source icons, NSIS `installerIcon` + header/sidebar BMPs,
+      GitHub-safe README logo, honest FPS claims, stale paths/typo fixed
+- [x] `tests/vault-mobile-shell.spec.ts` M-01…M-09 → 11/11 pass
+- [x] Re-measured AFTER: 16.7 ms median / p95, 0 frames >32 ms, 0 blur surfaces
+- [x] Offline OCR proof: 606 ms, correct text, zero CDN requests
+- [x] Manifest patch proof: 5 permissions + cleartext, idempotent
 
-## PHASE D — live preview (RESTORED 2026-11-03)
+## PHASE D — gates (local)
 
-```
-[x] inspected existing processes: old pid 7301/7322 served 0.0.0.0:1420
-[x] verified health: HTTP 200, React shell rendered, 0 runtime errors
-[x] verified vite.config.ts host/strictPort/allowedHosts:true (no 403 on *.e2b.app)
-[x] verified no X-Frame-Options / CSP frame-ancestors (iframe OK)
-[x] stopped `vaultzero-dev-server-5f76b3d2` cleanly
-[x] started `website-3326e381` — 0.0.0.0:1420, no preview warnings
-[x] re-verified after restart: HTTP 200 (both hosts), /src/main.tsx 200,
-    /@vite/client 200, Chromium render OK, 0 errors
-```
+- [x] `npx tsc --noEmit` → 0
+- [x] `npm run verify` → 0 (31/31 harness, 23 rustfmt, chunk budget OK)
+- [x] `npx -y node@20 scripts/run-harness.mjs` → 31/31, 0 failed
+- [x] `npm audit --audit-level=high` → 0 vulnerabilities
+- [x] `npx playwright test --workers=2` → **135 passed (6.8 m)**, 0 failed
+- [ ] Commit + push `arena/61b1561a-vaultzero` → watch CI → both `gh pr checks`
+      jobs green (Rust clippy/test verified ONLY by Windows CI)
+- [ ] Publish `v2.6.0-beta.1` via `gh workflow run … --ref …` and verify the
+      five live assets (the actual 404 fix)
+- [ ] Update this file + `checkpoint.md` with the published release result
+- [ ] Final Bengali report (numbers, Big-O/memory, honest caveats)
+- [ ] English master handoff prompt — DELIVER LAST, MUST reference BOTH
+      `checkpoint.md` AND `checklistprogress.md`
 
-## PHASE E — 23-repo external survey (ALL INSPECTED, read-only GitHub)
+## Honest caveats carried forward
 
-```
-[x]  1 Mrlopez62/stash                       REJECT macOS+extension+MCP
-[x]  2 Max-Zit/passzit                       REJECT README-only, "Planned"
-[x]  3 sapientorius/nodePass                 REJECT server can decrypt secrets
-[x]  4 Iamsujithd/VeyraKey                   REJECT Drive BYOS + MV3
-[x]  5 toshost/passvault                     REJECT Go server + Postgres
-[x]  6 clane-ai/clane-vault                  REJECT container + pre-audit
-[x]  7 girishlade111/ls-pass                REJECT native AutofillService
-[x]  8 hmalvee/EnigmaKeep                   REJECT browser; rollback needs Rust
-[x]  9 antoniopelusi/KeyHolder              REJECT AES/ECB
-[x] 10 CyberNilsen/CyberVault               REJECT multiple vaults breaks .pmv
-[x] 11 Chiranth…/vaultx-offline…            REJECT PBKDF2 + deterministic passwords
-[x] 12 TheTallProgrammer/Password-Manager   REJECT custom XOR cipher
-[x] 13 deepakvamsi/kosh                     REJECT audit-log subsystem; ADOPT
-                                             air-seal guard idea as V-69 candidate
-[x] 14 DevsFromHiddenFlame/Qlerky           SKIP no source; next-TOTP unverifiable
-[x] 15 ngankt2/kiwi-password-manager        REJECT KDBX / Minisign infra
-[x] 16 sapthesh/offline-vault               REJECT offline claim vs favicon fetch
-[x] 17 calinux-py/ShieldPass                REJECT readme.md only
-[x] 18 dawei2077/…vapor-vault               REJECT self-declared educational
-[x] 19 aviondb/aviondb-p2p-sync             REJECT 6-year-old Todo demo
-[x] 20 Fundaments-Work/Theorem              REJECT features; ADOPT context files
-[x] 21 mHamzaIqbal1998/VaultPeer-Desktop    REJECT signaling server + KDBX
-[x] 22 karefined-eng/the-mainframe          REJECT now (pre-merge backup candidate)
-[x] 23 lively-community/lively              REJECT WinUI3 wallpaper, out of domain
-```
-
-Result: **0 external features added**, **1 idea approved AND implemented
-(V-69 air-seal guard)**, 1 convention adopted (resumable context files). Rejection classes: (a) server/cloud/extension/OS-native
-dependency breaks the standalone air-gapped invariant, (b) weaker or broken
-crypto, (c) no code / self-declared demo, (d) already implemented in VaultZero,
-(e) not empirically verifiable at the time of review.
-
-```
-[x] V-69: tests/harness/air-seal.test.mjs written; node + node@20 PASS
-[x] V-69 + V-71: `npm run verify` → 27/27 harness files, exit 0
-```
-
-## PHASE F — final deliverables
-
-```
-[ ] Full green CI (`gh pr checks 2` BOTH green)
-[ ] Final Bengali report: verification numbers + Big-O + memory trade-offs +
-    honest caveats (unmeasured .exe cold-start, no local cargo, unverified assets)
-[ ] Gemini 3.8 Flash / Entry Gravity master prompt — DELIVER LAST, in English
-    technical spec, MUST reference BOTH checkpoint.md AND checklistprogress.md
-```
+- No local `cargo`/`rustc`, no MSVC/WebView2, no Android NDK in this sandbox.
+- `<2 s` absolute `.exe` cold-start still NOT measured.
+- Native `.pmv` backup via Rust IPC still NOT implemented (localStorage only).
+- Real-device camera / LAN P2P / 120 Hz jitter NOT verified on hardware.
+- `gh secret list` → 403; Android signing secrets inferred from the successful
+  v2.5.2 signed-APK run, not read.
+- V-69 air-seal covers `crates/vault-core` only; `ui.tsx` external favicons,
+  `src/lib/updater.ts` release check and `src-tauri/src/p2p_lan.rs` are
+  outside its scope. Do not claim global "zero network".

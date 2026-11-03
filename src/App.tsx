@@ -789,7 +789,7 @@ export default function App() {
 
           <main
             className={cn(
-              "thin-scrollbar min-w-0 flex-1 overflow-y-auto overflow-x-hidden px-3 pb-[90px] pt-3 sm:px-4 lg:overflow-hidden lg:px-0 lg:pb-0 lg:pt-0",
+              "thin-scrollbar mobile-safe-bottom mobile-safe-top min-w-0 flex-1 overflow-y-auto overflow-x-hidden px-3 pb-[90px] pt-3 sm:px-4 lg:overflow-hidden lg:px-0 lg:pb-0 lg:pt-0",
               !detailOpen && "xl:pr-0"
             )}
           >

@@ -1,134 +1,174 @@
 # VaultZero — Checkpoint (power-loss resistant)
 
-> Read this file FIRST after any power loss or Antigravity restart. Then read
-> `checklistprogress.md` and resume at the first unchecked item. Both files must
-> be updated after EVERY completed step.
+> Read this file FIRST after any power loss or agent restart. Then read
+> `checklistprogress.md` and resume at the first unchecked item. Both files
+> must be updated after EVERY completed step.
 
 - Repo: `tonmoycoder/VaultZero`
-- Active branch (FIXED, never rename): `arena/907dafa8-vaultzero`
-- Active PR: **#2** — https://github.com/tonmoycoder/VaultZero/pull/2 (OPEN, head `ab2a8ca`)
-- Superseded PR: **#1** (`arena/79f3d1ba-vaultzero` @ `5c98a1f`), OPEN — DO NOT inspect / push
-- Base: `main` @ `53c026c` · tag `v2.5.2` @ `1090a66`
-- Commits: `0758b23` → `ee17368` → `b3a6125` → `c6fe373` → `ab2a8ca`
-- Screenshot: `/tmp/arena-coding-uploads/image-3.png` CURRENT (two open PRs); `image-2.png` STALE
-- Tags/repos conclusion: only `VaultZero` is relevant; all other repos are read-only references
-- Gitignored workspace memory (`.gitignore:41`): `.agent/IMMUTABLE_RULES.md`, `.agent/PROGRESS_LEDGER.md`
+- Active branch (FIXED, never rename): `arena/61b1561a-vaultzero`
+- Base: `main` @ `df048f9d3276c4eaf7b2b0f3220c69ff4b56d800`
+  (`docs(readme): update version badge to v2.5.2`, 2026-11-03 22:53 +0600)
+- PR #2 (V-01…V-71) **MERGED** 2026-11-03T16:54:12Z. Its CI `41568757031`
+  was green on both jobs. PR #1 (`arena/79f3d1ba-vaultzero`, `5c98a1f`) is
+  still **OPEN** and superseded — deliberately NOT inspected, pushed, merged
+  or closed. Ask the user before touching it.
+- Tag `v2.5.2` @ `1090a66`; published assets are BROKEN (see V-72).
+- Language contract: ALL user-facing prose in Bengali; app UI stays bilingual
+  via `lang` / `S("bn","en")`. The master handoff prompt is the only English
+  deliverable and is delivered LAST.
 
-## Live preview (restored 2026-11-03)
+## Phase C — Android/Windows release readiness (V-72…V-79)
 
-- Process `website-3326e381` (`npm run dev -- --host 0.0.0.0 --port 1420`) — RUNNING,
-  listening on `0.0.0.0:1420`. Previous process `vaultzero-dev-server-5f76b3d2` stopped
-  cleanly before restarting (no duplicate port owner).
-- `vite.config.ts` already has `host: "0.0.0.0"`, `strictPort: true`, `allowedHosts: true`
-  (so the per-session `*.e2b.app` host is NOT rejected with 403). `index.html` has no
-  CSP/`X-Frame-Options`, so iframe embedding is allowed.
-- Verified after restart: `HTTP 200` for localhost AND a spoofed
-  `Host: 1420-907dafa8.e2b.app`; `/src/main.tsx` 200; `/@vite/client` 200;
-  headless Chromium renders `VaultZero v2.5.2 LOCAL-ONLY VAULT` shell,
-  `#root` has 1 child, zero page/console errors (expected offline
-  `api.github.com` cert noise filtered). No preview-breaking warnings reported.
+The user supplied five Android screenshots + a defect list: Windows installer
+links 404, installer logo missing, no usable `.exe`, Android UI scattered /
+overlapping / top-aligned, drag handle moves and overlaps, OCR stalls midway,
+camera permission denied and panel closes itself, P2P possibly broken, frame
+jitter despite a "120 FPS" claim, release needs a Beta name, APK vs EXE icon
+parity, desktop regressions, and "check every listed AI skill". All work below
+is empirical: no guesses, no stubs, no fake fallbacks, no half-finished paths.
 
-## Rules (immutable)
+### Audit findings (measured BEFORE the fixes)
+- `gh release view` on live `v2.5.2`: 8 assets, but **only 2 of 5 canonical
+  names** (`SHA256SUMS.txt`, `VaultZero-Android.apk`). Missing
+  `VaultZero-Windows-x64-Setup.exe`, `VaultZero-Windows-x64-Portable.exe`,
+  `VaultZero-Windows-x64.msi`; instead a lowercase
+  `VaultZero-Windows-x64-portable.exe` + `.idsig`/`.manifest`/`.sha256`.
+  Hence README's 3 Windows links 404. Release `prerelease:false`, name
+  does NOT say Beta.
+- `release.yml` already emits the right 5 names, but MSI copy is optional
+  (`if ($msi)`) and publish verification checks only 4 names.
+- `selectDownloadableAsset()` on Android fell back to a Windows `.exe`
+  (`updater.ts:225-227`) → a signed APK-less release installs the wrong file.
+- `src/lib/ocr.ts`: `langPath` local, but `workerPath`/`corePath` default to
+  `cdn.jsdelivr.net` (verified in `tesseract.js/src/worker/browser/defaultOptions.js`
+  and `worker-script/browser/getCore.js`), with a silent CDN fallback on
+  failure → offline Android stalls at "loading tesseract core".
+  `preprocessImageForOcr` allowed a 20 MP canvas (~80 MB `ImageData`) → OOM.
+- `src-tauri/gen/android` is NOT committed; no CAMERA / LAN permissions in
+  the signed APK. `getUserMedia` auto-started on tab change (no user gesture)
+  → immediate "Permission denied", panel appeared to close itself.
+- `src-tauri/Cargo.toml:19` `tokio features=["full"]`; usages need only
+  `rt-multi-thread, macros, sync, time, net, io-util`.
+- `public/vaultzero-logo.png` == `src-tauri/icons/icon.png` (md5
+  `433aa1a2…`); `icon.ico` / `128x128.png` differ by 0.17/255 and 0.63/255
+  mean → APK and EXE icons ARE the same source. BUT `tauri.conf.json` had no
+  `installerIcon`/`headerImage`/`sidebarImage` → generic NSIS wizard.
+- Headless Chromium 390×844 BEFORE fix: lock screen median **33.4 ms**,
+  p95 **50.1 ms**, max **83.4 ms**, **22/22** frames >32 ms; vault median
+  16.7 ms but **17/40** >32 ms. 9 `backdrop-filter` surfaces, 7 blurred
+  layers, 4 infinite ambient animations, `env(safe-area-inset-top)` unused
+  anywhere in `src/index.css`. Sort header / "All items" clipped; bottom nav
+  covered the last text line; 26 tap targets <44px.
+- Skills (read-only): `ceorkm/mobile-app-ui-design` SKILL.md (5-step process,
+  60/30/10, 8pt grid, thumb zone, F-pattern, 44×44pt, "overusing blur" is an
+  anti-pattern), `aiuxplayground.com/prompts` (220+ prompt catalog; UI-polish /
+  motion workflows), `skills.sh` (agent skills directory incl. Antigravity),
+  Expo skills (`expo-ui`, `expo-router`, `eas-simulator` — React Native /
+  EAS cloud; framework mismatch for Tauri+React Web). Third-party packages
+  were NOT installed: dev-only tooling, zero runtime value, external bloat.
+  The RULES were adopted as a test-enforced design contract instead.
 
-User-facing prose/replies/final report MUST be Bengali; technical spec may be English.
-ROPE empirical engineering. No guesses, stubs, fake fallbacks, half-finished tasks or
-over-engineering. Fail-closed native `local-vault.pmv`. Zero regressions. "Make no mistake".
+### Implemented (all test-first: RED → GREEN)
+- **V-72** `release.yml`: MSI mandatory (`throw` if absent), publish
+  verification requires all **5** canonical names, `-beta` tags get
+  `--title "… - BETA (Development Preview)"` + explicit `--latest` and
+  `--target "$GITHUB_SHA"`, idempotent `gh release edit` on re-run.
+  Deliberately NOT `--prerelease`: prereleases are excluded from
+  `/releases/latest`, which would re-break README + the in-app updater.
+  README gained a Bengali "বিটা / ডেভেলপমেন্ট প্রিভিউ" notice.
+- **V-73** `src/lib/updater.ts`: Android returns `info.androidAsset` ONLY;
+  missing APK now **fails closed** with a Bengali-free but actionable
+  diagnostic. `runVerifiedUpdate` stores `platform` once.
+  `tests/harness/update-platform.test.mjs` + `release-contract.test.mjs`
+  updated to assert the fail-closed behaviour.
+- **V-74** `scripts/sync-tesseract-assets.mjs` + `predev`/`prebuild` npm
+  scripts + gitignored `public/tesseract/` (worker.min.js + 2 LSTM WASM
+  variants, ~13 MB, never in Git). `src/lib/ocr.ts` uses absolute local
+  `workerPath`/`corePath`/`langPath`, NO CDN fallback, `finally { terminate() }`,
+  and caps the preprocessing canvas at `MAX_OCR_CANVAS_EDGE = 2400`.
+- **V-75** `src-tauri/android/AndroidManifest.xml` overlay (CAMERA, INTERNET,
+  ACCESS_NETWORK_STATE, ACCESS_WIFI_STATE, CHANGE_WIFI_MULTICAST_STATE,
+  `usesCleartextTraffic="true"`) + `scripts/patch-android-manifest.mjs`
+  (fail-closed, idempotent, verified) injected in `release.yml` AFTER
+  `tauri android init`, BEFORE `tauri android build`. `toolModals.tsx`:
+  camera no longer auto-starts, requires an explicit tap, bounded by a
+  15 s `Promise.race`, `cameraActiveRef` guards the rAF scanner loop,
+  bilingual permission guidance.
+- **V-76** `src/index.css` V-76/77 block: `--safe-top`/`--safe-bottom`,
+  `.mobile-safe-top`, `.vault-shell` status-bar padding,
+  `.mobile-safe-bottom` 96px+gesture bar, `overflow: clip`, hidden
+  decorative orb, 44px nav targets; `LockScreen.tsx` root gained
+  `mobile-safe-top` and is NOT a draggable sheet.
+- **V-77** mobile media query disables `backdrop-filter` and infinite
+  ambient animations; `prefers-reduced-motion` honoured; `Tactile.tsx` and
+  `VaultHome.tsx` limit global `pointermove` to `(pointer: fine)`.
+- **V-78** `src-tauri/Cargo.toml` minimal tokio features; air-seal
+  (`crates/vault-core`) unchanged and network-free.
+- **V-79** `npx tauri icon public/vaultzero-logo.png` in BOTH build jobs;
+  `installerIcon`, `headerImage` (150×57 BMP), `sidebarImage` (164×314 BMP)
+  added to `tauri.conf.json`; README `<img>` → GitHub-safe Markdown image;
+  unmeasured "120fps" claims replaced with measured frame numbers; stale
+  `src/workers/ocr.worker.ts` path corrected; Bengali typo fixed.
+- New guards: `tests/harness/{offline-ocr,android-runtime,mobile-shell,
+  release-beta}.test.mjs` (with positive controls) and
+  `tests/vault-mobile-shell.spec.ts` (M-01…M-09, 11 tests).
 
-Gates: `cargo clippy --all-targets -- -D warnings` (Windows CI; no local cargo/rustc),
-`npx tsc --noEmit`, `npm run verify`, `npx -y node@20 scripts/run-harness.mjs`,
-`npx playwright test`, `npm audit --audit-level=high`, `gh pr checks 2` BOTH green,
-absolute `<2s` `.exe` cold-start (**NOT YET MEASURED** — no MSVC toolchain; the 284 ms
-figure is a headless-Chromium WebView proxy, never claim it satisfies the exe gate).
+### Telemetry AFTER the fixes (same harness, same 390×844 Chromium)
+| Metric | Before | After |
+|:---|:---|:---|
+| Lock median frame | 33.4 ms | **16.7 ms** |
+| Lock p95 / max | 50.1 / 83.4 ms | **16.7 / 16.8 ms** |
+| Lock frames >32 ms | 22 / 22 | **0** |
+| Vault frames >32 ms | 17 / 40 | **0** |
+| `backdrop-filter` surfaces | 9 | **0** |
+| `env(safe-area-inset-top)` | absent | **present** |
 
-## Verified at `ab2a8ca`
+Offline OCR browser proof (all external requests blocked): extracted
+`"USER: demo@vaultzero.local\nPASS: S3cret-42"` in **606 ms**, zero CDN
+calls. Manifest patch: 5 permissions + cleartext, idempotent on 2nd run.
 
-```
-npx tsc --noEmit                       PASS
-npm run verify                         PASS  25/25 harness · 23 Rust formatted · bundle budget OK
-npx -y node@20 scripts/run-harness.mjs  PASS  25/25
-npx playwright test --workers=1        PASS  124/124 (9.3m)
-npx playwright test (CI workers:2)     PASS  124/124 (6.4m)  [local only]
-npm audit --audit-level=high           PASS  0
-CI 41544347392 / 41555106402           PASS  both jobs green
-cold-start proxy                       TTFB 3ms · DCL 72ms · paint 52–64ms · React shell 284ms
-```
+### Gate results (local, 2026-11-04)
+- `npx tsc --noEmit` → 0
+- `npm run verify` → 0; **31/31 harness**, 23 rustfmt, chunk budget OK
+- `npx -y node@20 scripts/run-harness.mjs` → 31/31, 0 failed
+- `npm audit --audit-level=high` → 0 vulnerabilities
+- `npx playwright test --workers=2` → **135 passed (6.8 m)**, 0 failed
+  (124 existing + 11 new mobile tests), zero regressions
+- `tests/vault-mobile-shell.spec.ts` alone → 11 passed (27.5 s)
+- No local `cargo`/`rustc`, no MSVC toolchain → Rust is verified by the
+  Windows CI job only. `gh secret list` returns 403 (integration token lacks
+  secrets scope); v2.5.2's successful signed APK run implies the Android
+  signing secrets were configured, but this is an inference, not a read.
 
-## ✅ V-70 — CI 41558464980 root cause FOUND and fixed (2026-11-03)
+### Environment notes
+- Fresh sandbox: `npm ci` (0 vulnerabilities), no Playwright CDN access
+  (`ECONNRESET` on cdn.playwright.dev). Browser obtained from the allowed
+  npm registry via `@sparticuz/chromium@153.0.0` → `/tmp/chromium`
+  (209 MB), NSS libs from bundled `al2023.tar.br` → `/tmp/chromium-libs/lib`.
+  Run tests with:
+  `env -u FONTCONFIG_FILE LD_LIBRARY_PATH=/tmp/chromium-libs/lib VAULTZERO_CHROMIUM=/tmp/chromium npx playwright test --workers=2`
+- Dev server: `website-0d4b85fc`, `npm run dev -- --host 0.0.0.0 --port 1420`,
+  HTTP 200 on `127.0.0.1:1420` and the e2b preview host.
+- `public/tesseract/` and `.artifacts/` are gitignored; `.agent/` is
+  gitignored and local-only. `docs/FINAL-REPORT-2026-11.md` from the previous
+  phase is NOT tracked in this checkout.
 
-`blob.core.windows.net` is not in the sandbox allowlist, so
-`gh run download 41558464980` ended in EOF. The authenticated job-log redirect
-was captured WITHOUT following it (`curl -D` on `actions/jobs/125663019229/logs`
-→ 302 to a signed plain-text Azure URL) and the plain-text log was read with
-`fetch_page` (different network). **8 chunks**; chunk 6/7 contain:
-
-```
-1) tests/vault-architecture.spec.ts:97:3 › ... › Multi-select checkboxes trigger Floating Bulk Actions Bar
-   Error: expect(locator).toBeVisible() failed
-   Locator: getByRole('button', { name: 'Delete selected' })
-   Expected: visible / Timeout: 7000ms / Error: element(s) not found
-   at tests/vault-architecture.spec.ts:106:73
-   123 passed (6.5m) · 1 failed
-```
-
-Root cause: `checkbox.click({ force: true })` bypasses Playwright's stability +
-hit-target checks while `VaultHome.tsx` renders the card with
-`whileHover={{ y: -4 }}` bouncy spring. Under `workers: 2` load the force-click
-lands on the moving card body (opening the inspector) instead of the 16px
-checkbox, so `checkedIds` stays empty and the bulk bar never mounts. Language
-hypothesis RULED OUT (`readStoredLanguage()` defaults to `en`, `beforeEach`
-clears localStorage). Fix = `card.hover()` + normal `checkbox.click()` +
-`expect(checkbox).toHaveAttribute("aria-checked", "true")` before asserting the
-bar. Verified targeted `--repeat-each=20 --workers=2` → **20/20 passed**.
-
-## ✅ Completed this step
-
-- V-69 `tests/harness/air-seal.test.mjs` WRITTEN and PASS (7 positive controls,
-  19 `crates/vault-core/src/*.rs` files + `Cargo.toml` guarded), Node 20 parity OK.
-- V-71 `tests/harness/bengali-kit.test.mjs` WRITTEN and PASS (Node 20 parity OK):
-  `EmergencyKitModal` now takes `lang`, every visible kit string goes through
-  `S("bn","en")`, printed HTML has `lang` + Bengali fonts, and the JSX preview's
-  literal `${documentId}` bug is fixed to `{documentId}`. English mode intact.
-- README lines 6–165 converted to Bengali prose (all 10 stable asset links,
-  tables, code blocks, labelled "English Documentation" section preserved);
-  `এম্যানুয়ালিভাবেও` typo fixed to `থেকেও ম্যানুয়ালিভাবেও`.
-- `npx tsc --noEmit` PASS after all source edits.
-
-## ✅ Full gate set on the new working tree (before push)
-
-```
-npx tsc --noEmit                          PASS
-npm run verify                            PASS  27/27 harness · 23 rustfmt · bundle OK
-npx -y node@20 scripts/run-harness.mjs    PASS  27/27
-V-70 targeted --repeat-each=20 --workers=2 PASS 20/20 (2.0m)
-npx playwright test (exact CI config)     PASS  124/124 (6.4m)
-npm audit --audit-level=high              PASS  0
-```
-
-`docs/AUDIT-2026-11.md` Follow-up 6 documents V-69/V-70/V-71;
-`docs/EXTERNAL-REPO-SURVEY.md` V-69 status is now IMPLEMENTED.
-
-## ⚠ STILL OPEN — resume here
-
-1. Commit + push `arena/907dafa8-vaultzero` and require `gh pr checks 2` BOTH
-   green on the NEW run. Do NOT claim CI green until observed.
-2. Still open: native `.pmv` backup, Android install UX, `tokio features=["full"]`,
-   `SecurityCenter.tsx`/`VaultHome.tsx` physics rollout, published release asset
-   existence, absolute `<2s` `.exe` cold-start (NOT measured), no local cargo.
-4. Deliver the final Bengali report (verification numbers + Big-O + memory
-   trade-offs + honest caveats), THEN the Gemini 3.8 Flash / Entry Gravity master
-   prompt LAST, referencing BOTH this file and `checklistprogress.md`.
-
-## Environment notes
-
-- Chromium: `VAULTZERO_CHROMIUM=/tmp/chromium/chromium`,
-  `LD_LIBRARY_PATH=/tmp/chromium-libs/lib:/tmp/chromium`, **unset** `FONTCONFIG_FILE`.
-- Node locally 22.22.3; CI Node 20 (use `npx -y node@20` for parity).
-- No `cargo`/`rustc` locally → Rust gates only verified in Windows CI;
-  rustfmt via WASM `scripts/check-rust-format.mjs`.
-- `gh pr edit 2 --title` fails (Projects classic deprecation); use
-  `gh api -X PATCH repos/tonmoycoder/VaultZero/pulls/2`.
-- Never `pkill -9 -f "node.*1420"` (it once deleted `node_modules`); never
-  `npm run verify 2>&1 | tail` as a success check (that exit code is tail's).
-- 2026-11-03: E2B workspace was DOWN for two full turns; that outage is now over.
-  No commits were made during it. This turn restored the preview and wrote the
-  three previously blocked documents. No commit/push yet.
+### Still open (needs a decision / cannot be done locally)
+1. Publish a **Beta** release via
+   `gh workflow run "Release (Windows Installer & Android APK)" --ref arena/61b1561a-vaultzero -f tag_name=v2.6.0-beta.1`
+   AFTER this branch is pushed and CI is green. This is the ONLY way to put
+   real Windows binaries on `/releases/latest` and end the 404s; the local
+   sandbox has no MSVC/WebView2/Android NDK. Watch the run and verify all 5
+   assets with `gh release view`. If Android signing secrets are missing the
+   Android job will fail closed (that is by design).
+2. Absolute `<2 s` Windows `.exe` cold start is STILL NOT MEASURED (no MSVC).
+   The 284 ms figure from the previous phase is a WebView proxy only.
+3. Native fail-closed `.pmv` backup/restore via Rust IPC is STILL NOT
+   IMPLEMENTED; `PRE_UPDATE_BACKUP_KEY` remains a localStorage snapshot
+   (`src/lib/updater.ts`). Do not describe it as native.
+4. Real-device Android verification (camera on a physical WebView, LAN P2P
+   bind, 120 Hz jitter) cannot be done here. CI + manifest patch + Playwright
+   UA simulation cover the code paths, not the hardware.
+5. PR #1 remains OPEN/superseded — ask before closing or merging.
+6. `ui.tsx:211-213` still fetches Google/DuckDuckGo favicons; V-69 air-seal
+   scope is only `crates/vault-core`. Not a global "zero network" guarantee.

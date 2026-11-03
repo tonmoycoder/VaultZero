@@ -6,6 +6,8 @@
 
 export const MAX_OCR_FILE_SIZE = 12 * 1024 * 1024; // 12 MiB
 export const MAX_OCR_PIXELS = 20_000_000; // 20 Megapixels
+/** V-74: hard cap on the longest canvas edge (Android WebView ImageData OOM). */
+export const MAX_OCR_CANVAS_EDGE = 2400;
 
 export interface ExtractedCredentials {
   title?: string;
@@ -153,10 +155,15 @@ export async function preprocessImageForOcr(file: File): Promise<Blob | File> {
           return;
         }
 
-        // Upscale if small for sharper OCR line recognition
-        const scale = img.naturalWidth < 1200 ? Math.min(2, 1200 / img.naturalWidth) : 1;
-        canvas.width = Math.round(img.naturalWidth * scale);
-        canvas.height = Math.round(img.naturalHeight * scale);
+        // Upscale small images for sharper line recognition, but ALWAYS cap
+        // the longest edge. A 6000x3333 camera photo would otherwise create
+        // ~80 MB of RGBA ImageData and stall Android mid-recognition.
+        const upscale = img.naturalWidth < 1200 ? Math.min(2, 1200 / img.naturalWidth) : 1;
+        const longest = Math.max(img.naturalWidth, img.naturalHeight) * upscale;
+        const downscale = longest > MAX_OCR_CANVAS_EDGE ? MAX_OCR_CANVAS_EDGE / longest : 1;
+        const scale = upscale * downscale;
+        canvas.width = Math.max(1, Math.round(img.naturalWidth * scale));
+        canvas.height = Math.max(1, Math.round(img.naturalHeight * scale));
 
         ctx.imageSmoothingEnabled = true;
         ctx.imageSmoothingQuality = "high";
@@ -219,44 +226,43 @@ export async function runLocalOcr(
   if (onProgress) onProgress(25);
 
   let rawText = "";
+  let worker: Awaited<ReturnType<typeof import("tesseract.js").createWorker>> | undefined;
   try {
     const { createWorker } = await import("tesseract.js");
-    const langPath =
-      typeof window !== "undefined" && window.location.origin
-        ? `${window.location.origin}/tessdata`
-        : "/tessdata";
 
-    let worker;
-    try {
-      worker = await createWorker(ocrLang, 1, {
-        langPath,
-        gzip: false,
-        logger: (m) => {
-          if (m.status === "recognizing text" && onProgress && typeof m.progress === "number") {
-            onProgress(Math.min(99, Math.round(25 + m.progress * 70)));
-          }
-        },
-      });
-    } catch (langPathErr) {
-      console.warn("Local /tessdata path fallback:", langPathErr);
-      worker = await createWorker(ocrLang, 1, {
-        logger: (m) => {
-          if (m.status === "recognizing text" && onProgress && typeof m.progress === "number") {
-            onProgress(Math.min(99, Math.round(25 + m.progress * 70)));
-          }
-        },
-      });
-    }
+    // V-74: every asset is served from this app's own origin. Absolute URLs
+    // are required because tesseract.js wraps the worker in a Blob URL, and
+    // a Blob worker cannot resolve root-relative paths. There is NO network
+    // fallback: an air-gapped vault must fail closed, never hang on a CDN.
+    const origin = typeof window !== "undefined" && window.location?.origin
+      ? window.location.origin
+      : "";
+    const local = (path: string) => `${origin}${path}`;
+
+    worker = await createWorker(ocrLang, 1, {
+      workerPath: local("/tesseract/worker.min.js"),
+      corePath: local("/tesseract"),
+      langPath: local("/tessdata"),
+      gzip: false,
+      logger: (m) => {
+        if (m.status === "recognizing text" && onProgress && typeof m.progress === "number") {
+          onProgress(Math.min(99, Math.round(25 + m.progress * 70)));
+        }
+      },
+    });
 
     const ret = await worker.recognize(processedBlob);
-    await worker.terminate();
     rawText = (ret.data?.text || "").trim();
   } catch (err: any) {
-    console.error("Local OCR recognition error:", err);
+    console.error("Offline OCR recognition error:", err);
     throw new Error(
-      err?.message ||
-        "Could not extract text from this image. Please ensure the screenshot has readable text."
+      "অফলাইন OCR শুরু করা যায়নি / Offline OCR engine could not start. " +
+        "Reinstall the current build so /tesseract and /tessdata are bundled. " +
+        (err?.message ? `Detail: ${err.message}` : "")
     );
+  } finally {
+    // A stuck worker must never survive a failed recognition.
+    try { await worker?.terminate(); } catch { /* already stopped */ }
   }
 
   if (onProgress) onProgress(100);

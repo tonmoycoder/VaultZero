@@ -1,9 +1,9 @@
 <div align="center">
 
-<img src="./public/vaultzero-logo.png" width="160" alt="VaultZero Official Logo" style="border-radius: 36px; box-shadow: 0 16px 40px rgba(124, 107, 255, 0.35);" />
+![VaultZero Official Logo](./public/vaultzero-logo.png)
 
 # 🔒 VaultZero (ভল্টজিরো)
-### ColorOS 17 "Living Flow Design" · ১২০fps GPU-ত্বরিত · ১০০% অফলাইন জিরো-নলেজ দুর্গ
+### ColorOS 17 "Living Flow Design" · মোবাইলে স্থিতিশীল ফ্রেম বাজেট · ১০০% অফলাইন জিরো-নলেজ দুর্গ
 
 **Rust, Tauri 2 ও React 19 দিয়ে তৈরি অতি-দ্রুত, শূন্য-টেলিমেট্রি ডেস্কটপ ও মোবাইল পাসওয়ার্ড ম্যানেজার।**  
 *XChaCha20-Poly1305 ও Argon2id এনক্রিপশন · সার্ভার-বিহীন P2P LAN সিঙ্ক · মাস্টার পাসওয়ার্ড রিকভারি উইজার্ড · অফলাইন OCR স্ক্যানার (ইংরেজি + বাংলা) · RFC 6238 2FA TOTP অথেনটিকেটর · ডিজাইনেই এয়ার-গ্যাপড · প্রোসিজিওরাল Lo-Fi সাউন্ডস্কেপ · সম্পূর্ণ English ও বাংলা (নেটিভ বাংলা)।*
@@ -26,6 +26,10 @@
 </div>
 
 ---
+
+## ⚠️ বর্তমান অবস্থা: বিটা / ডেভেলপমেন্ট প্রিভিউ
+
+ভল্টজিরো এখনো **ডেভেলপমেন্ট পর্যায়ে** আছে; প্রকাশিত বিল্ডগুলো **Beta** — প্রোডাকশন রিলিজ নয়। নিচের লিংকগুলো সবসময় `latest` রিলিজের দিকে ইঙ্গিত করে। পুরনো `v2.5.2` রিলিজে Windows ইনস্টলারের তিনটি ফাইল অনুপস্থিত ছিল (তাই 404 হতো); বর্তমান release workflow সব ৫টি অ্যাসেট বাধ্যতামূলকভাবে তৈরি ও যাচাই করে। কোনো অ্যাসেট না থাকলে অ্যাপ **fail closed** করে — কখনোই অযাচাইকৃত ফাইল ইনস্টল করে না।
 
 ## 📥 সরাসরি ডাউনলোড লিংক
 
@@ -134,15 +138,15 @@ VaultZero operates on an unhackable **Fail-Closed Air-Gapped Security Architectu
 *   **Encrypted Payload:** The vault snapshot is sealed with XChaCha20-Poly1305 (direction-separated keys) *before* it reaches the socket. Plaintext never crosses the wire.
 *   **Encrypted-Only Transmission:** Plaintext never crosses the network wire; only authenticated, encrypted `.pmv` payloads are transferred.
 
-### 2. 🎨 ColorOS 17 "Living Flow Design" (120fps UI)
-*   **Lag-Free 120Hz Animations:** GPU-accelerated fluid cubic-bezier curves (`--ease-out-fluid`, `--ease-in-out-flow`).
+### 2. 🎨 ColorOS 17 "Living Flow Design" (measured frame budget)
+*   **Measured Frame Budget:** fluid cubic-bezier curves (`--ease-out-fluid`, `--ease-in-out-flow`). On mobile, heavy `backdrop-filter` and infinite ambient animations are disabled; headless Chromium at 390×844 now reports a 16.7 ms median frame with **0** frames over 32 ms (before the fix: 33.4 ms median / 50.1 ms p95). 120 Hz hardware has **not** been measured.
 *   **Isolated TOTP Ticker (`React.memo`):** Micro-component countdown boundaries isolate 1-second interval updates, preventing dashboard re-renders and frame drops.
 *   **Tactile Micro-Haptics:** Interactive scale springs (`whileHover: scale 1.012`, `whileTap: scale 0.965`).
 *   **Canvas Throttling:** 30fps background audio visualizer throttler with automatic tab pause guard.
 
 ### 3. 🔍 Zero-API Offline OCR (Tesseract in Web Worker)
 *   **100% Offline Credential Extraction:** Bundled `eng.traineddata` (English) and `ben.traineddata` (বাংলা) directly inside `public/tessdata/`.
-*   **Off-Thread Web Worker:** Executes image recognition in a background worker thread (`src/workers/ocr.worker.ts`), keeping the UI responsive at 120fps.
+*   **Off-Thread Web Worker:** `src/lib/ocr.ts` runs Tesseract in a Web Worker using the bundled `/tesseract/worker.min.js` and local LSTM WASM cores. No CDN is contacted; a blocked-network browser test extracts `demo@vaultzero.local` in ~600 ms.
 *   **Smart Regex Entity Classification:** Automatically parses and assigns URLs, usernames, passwords, and 2FA secrets without external API calls.
 
 ### 4. 🔑 Master Password Recovery & Keyfile Wizard
@@ -160,7 +164,7 @@ VaultZero operates on an unhackable **Fail-Closed Air-Gapped Security Architectu
 ```mermaid
 flowchart TD
     subgraph Client ["🖥️ ColorOS 17 Fluid UI (React 19)"]
-        UI["🎨 Presentation Layer (120fps)"]
+        UI["🎨 Presentation Layer (60Hz measured)"]
         MEM["🧠 Ephemeral React Memory State"]
         WORKER["⚡ Off-Thread OCR Worker (Tesseract)"]
     end
@@ -236,9 +240,9 @@ npx tauri build
    - ৬-ডিজিটের এফিমোরাল পিন এবং কনস্ট্যান্ট-টাইম অথেন্টিকেশনের মাধ্যমে ম্যান-ইন-দ্য-মিডল অ্যাটাক থেকে সম্পূর্ণ নিরাপদ।
    - নেটওয়ার্কে কখনোই প্লেইনটেক্সট পাঠানো হয় না; শুধুমাত্র এনক্রিপ্টেড `.pmv` পেলোড আদান-প্রদান করা হয়।
 
-2. **ColorOS 17 "লিভিং ফ্লো ডিজাইন" (১২০fps UI):**
-   - স্প্রিং ফিজিক্স ও ফ্লুইড অ্যানিমেশন।
-   - প্রতি সেকেন্ডের কাউন্টডাউন টিক ড্যাশবোর্ডকে রি-রেন্ডার করে না, ফলে ১২০ হার্টজ রিফ্রেশ রেটেও একটানা মসৃণ পারফরম্যান্স পাওয়া যায়।
+2. **ColorOS 17 "লিভিং ফ্লো ডিজাইন" (পরিমাপকৃত ফ্রেম বাজেট):**
+   - স্প্রিং ফিজিক্স ও ফ্লুইড অ্যানিমেশন; প্রতি সেকেন্ডের কাউন্টডাউন টিক ড্যাশবোর্ডকে রি-রেন্ডার করে না।
+   - 390×844 মোবাইল ভিউপোর্টে V-77-এর আগে লক স্ক্রিনের median ফ্রেম ছিল ৩৩.৪ ms (p95 ৫০.১ ms, ২২/২২ ফ্রেম >৩২ ms)। মোবাইলে `backdrop-filter` ও অ্যাম্বিয়েন্ট অ্যানিমেশন বন্ধ করার পর median **১৬.৭ ms**, p95 **১৬.৭ ms**, >৩২ ms ফ্রেম **০** — হেডলেস Chromium-এ ৬০ Hz। ১২০ Hz ডিভাইসে এখনো পরিমাপ করা হয়নি, তাই সেখানে FPS দাবি করা হয় না।
 
 3. **জিরো-এপিআই অফলাইন ওসিআর (OCR):**
    - ইংরেজি এবং বাংলা উভয় ভাষার জন্য লোকাল ডেটা ফাইল (`eng.traineddata` ও `ben.traineddata`) সরাসরি অ্যাপে অন্তর্ভুক্ত।
@@ -273,7 +277,7 @@ npx tauri build
 
 ## 🔄 আপডেট ও ডেটা নিরাপত্তা (বাংলা)
 
-নতুন রিলিজ বের হলে অ্যাপ নিজে GitHub থেকে জানায়; **সেটিংস → Check for Updates** থেকেও ম্যানুয়ালিভাবেও চেক করা যায়। ডাউনলোডযোগ্য ফাইলটি `SHA256SUMS.txt` দিয়ে যাচাই না হওয়া পর্যন্ত ইনস্টল হয় না। উইন্ডোজে ইনস্টলার শেষ হলে অ্যাপ নিজে আবার চালু হয়; অ্যান্ড্রয়েডে যাচাইকৃত APK অ্যাপের ডেটা ফোল্ডারে সংরক্ষিত হয় (অ্যান্ড্রয়েড নীরবে APK ইনস্টল করতে দেয় না)।
+নতুন রিলিজ বের হলে অ্যাপ নিজে GitHub থেকে জানায়; **সেটিংস → Check for Updates** থেকেও ম্যানুয়ালিভাবে চেক করা যায়। ডাউনলোডযোগ্য ফাইলটি `SHA256SUMS.txt` দিয়ে যাচাই না হওয়া পর্যন্ত ইনস্টল হয় না। উইন্ডোজে ইনস্টলার শেষ হলে অ্যাপ নিজে আবার চালু হয়; অ্যান্ড্রয়েডে যাচাইকৃত APK অ্যাপের ডেটা ফোল্ডারে সংরক্ষিত হয় (অ্যান্ড্রয়েড নীরবে APK ইনস্টল করতে দেয় না)।
 
 আপনার ভল্ট `local-vault.pmv` ফাইলে **অ্যাপ ডেটা ফোল্ডারে** থাকে, ইনস্টল ফোল্ডারে নয় — তাই আপডেট কখনোই পুরনো ডেটা মুছে দেয় না। আপডেটের আগে আরও একটি এনক্রিপ্টেড স্ন্যাপশট নেওয়া হয়; কোনো কারণে ভল্ট পড়া না গেলে পরের চালুতে সেটি স্বয়ংক্রিয়ভাবে ফেরত আনা হয়, এবং **সফল আনলকের পরেই** কেবল স্ন্যাপশট মোছা হয়।
 

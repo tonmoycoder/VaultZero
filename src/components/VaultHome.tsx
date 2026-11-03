@@ -308,6 +308,14 @@ const ItemCard = memo(function ItemCard({
         }
       }}
       onPointerMove={(e) => {
+        // V-77: the card spotlight is a mouse-only affordance. On touch
+        // devices getBoundingClientRect + two CSS variable writes on every
+        // pointer frame cause layout thrash and visible frame drops.
+        if (
+          typeof window !== "undefined" &&
+          typeof window.matchMedia === "function" &&
+          !window.matchMedia("(pointer: fine)").matches
+        ) return;
         const el = e.currentTarget;
         const rect = el.getBoundingClientRect();
         el.style.setProperty("--mx", `${e.clientX - rect.left}px`);
@@ -1032,7 +1040,7 @@ export default function VaultHome({
       <BrandFilters items={allItems} active={brandFilter} onChange={onBrandFilter} lang={lang} />
 
       {/* Grid heading, select all, and sorting controls */}
-      <div className="mb-2 flex shrink-0 items-center justify-between px-0.5">
+      <div className="mb-2 flex shrink-0 flex-col items-stretch gap-2 px-0.5 sm:flex-row sm:items-center sm:justify-between">
         <div className="flex items-center gap-2.5">
           {items.length > 0 && (
             <button
@@ -1062,8 +1070,8 @@ export default function VaultHome({
         </div>
 
         {/* Sort Controls */}
-        <div className="flex items-center gap-2 text-[8px] text-faint">
-          <div className="flex items-center gap-1 rounded-full border border-[var(--border-soft)] bg-[var(--glass-soft)] p-0.5">
+        <div className="flex min-w-0 items-center gap-2 text-[8px] text-faint">
+          <div className="flex max-w-full flex-wrap items-center justify-center gap-1 rounded-2xl border border-[var(--border-soft)] bg-[var(--glass-soft)] p-0.5 sm:flex-nowrap sm:rounded-full">
             {(
               [
                 { id: "recent", label: t(lang, "sortRecent") },
@@ -1077,7 +1085,7 @@ export default function VaultHome({
                 type="button"
                 onClick={() => setSortMode(s.id)}
                 className={cn(
-                  "rounded-full px-2 py-0.5 text-[7.5px] font-semibold transition-all",
+                  "shrink-0 whitespace-nowrap rounded-full px-2 py-0.5 text-[7.5px] font-semibold transition-all",
                   sortMode === s.id
                     ? "bg-[var(--accent)] text-white shadow-xs"
                     : "text-muted hover:text-main"

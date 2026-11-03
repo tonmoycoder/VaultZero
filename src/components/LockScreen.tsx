@@ -234,7 +234,7 @@ export default function LockScreen({
 
   return (
     <div
-      className="fixed inset-0 z-[300] flex items-center justify-center overflow-y-auto px-4 py-8 animate-fade"
+      className="mobile-safe-top fixed inset-0 z-[300] flex items-center justify-center overflow-y-auto px-4 py-8 animate-fade"
       style={{
         background:
           "radial-gradient(ellipse 70% 60% at 50% 0%, color-mix(in srgb, var(--accent) 22%, transparent), transparent 62%), var(--app-base)",

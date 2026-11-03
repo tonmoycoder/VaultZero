@@ -64,6 +64,9 @@ jobs:
       - name: Build Web Application
         run: npm run build
 
+      - name: Regenerate installer icons from the single canonical source
+        run: npx tauri icon public/vaultzero-logo.png
+
       - name: Build Tauri Windows Installer & Executable
         run: npx tauri build
 
@@ -81,10 +84,9 @@ jobs:
 
           $msi = Get-ChildItem -Path "**/bundle/msi/*.msi" -Recurse -ErrorAction SilentlyContinue |
                  Select-Object -First 1
-          if ($msi) {
-            Copy-Item $msi.FullName -Destination "release-assets-windows/VaultZero-Windows-x64.msi" -Force
-            Write-Host "MSI installer -> VaultZero-Windows-x64.msi ($($msi.Name))"
-          }
+          if (-not $msi) { throw "MSI installer was not produced by tauri build." }
+          Copy-Item $msi.FullName -Destination "release-assets-windows/VaultZero-Windows-x64.msi" -Force
+          Write-Host "MSI installer -> VaultZero-Windows-x64.msi ($($msi.Name))"
 
           $portable = $null
           if (Test-Path "target/release/vaultzero-app.exe") {
@@ -184,12 +186,21 @@ jobs:
           # V-64: `tauri android init` FAILS when gen/android already exists.
           # The old `|| true` hid both that harmless error AND real init
           # failures. Only run it when the project is genuinely uninitialised.
+          # V-79: Tauri generates Android launcher icons from src-tauri/icons.
+          # Regenerating them from the SAME file as the Windows .ico keeps the
+          # APK and the .exe visually identical.
+          npx tauri icon public/vaultzero-logo.png
           if [ ! -d src-tauri/gen/android ]; then
             echo "Initializing Tauri Android target..."
             npx tauri android init --ci
           else
             echo "Tauri Android target already initialised; skipping init."
           fi
+
+          # V-75: the generated project is recreated on every CI run. Inject
+          # CAMERA + local-LAN permissions into its manifest before building;
+          # without them getUserMedia is denied and P2P discovery cannot bind.
+          node scripts/patch-android-manifest.mjs
 
           mkdir -p release-assets-android
           echo "Building signed Android release APK for aarch64..."
@@ -274,6 +285,7 @@ jobs:
           for required in \
             "VaultZero-Windows-x64-Setup.exe" \
             "VaultZero-Windows-x64-Portable.exe" \
+            "VaultZero-Windows-x64.msi" \
             "VaultZero-Android.apk"; do
             if [ ! -f "release-dist/$required" ]; then
               echo "::error::Required release asset is missing: $required"
@@ -308,8 +320,25 @@ jobs:
           fi
           echo "Publishing release for tag: $TAG"
 
+          # V-72: this project is still in development, so a `-beta` tag is
+          # published as a clearly named BETA preview. It deliberately stays
+          # on the `latest` channel (the prerelease flag is NOT set) because README and the
+          # in-app updater both resolve `/releases/latest/download/<name>`;
+          # marking it prerelease would make those links 404 again.
           if ! gh release view "$TAG" >/dev/null 2>&1; then
-            gh release create "$TAG" --title "VaultZero $TAG" --generate-notes
+            if [[ "$TAG" == *beta* ]]; then
+              gh release create "$TAG" \
+                --title "VaultZero $TAG - BETA (Development Preview)" \
+                --notes "BETA / development preview - not a production release. Windows installers and the signed Android APK are built from this exact commit and verified against SHA256SUMS.txt. Expect rough edges; report issues on the repository." \
+                --target "$GITHUB_SHA" --latest
+            else
+              gh release create "$TAG" --title "VaultZero $TAG" --generate-notes --target "$GITHUB_SHA" --latest
+            fi
+          else
+            # Idempotency: a re-run of an existing beta tag must keep the BETA label.
+            if [[ "$TAG" == *beta* ]]; then
+              gh release edit "$TAG" --title "VaultZero $TAG - BETA (Development Preview)"
+            fi
           fi
 
           for file in release-dist/*; do
@@ -331,6 +360,7 @@ jobs:
           for required in \
             "VaultZero-Windows-x64-Setup.exe" \
             "VaultZero-Windows-x64-Portable.exe" \
+            "VaultZero-Windows-x64.msi" \
             "VaultZero-Android.apk" \
             "SHA256SUMS.txt"; do
             if ! echo "$names" | grep -Fxq "$required"; then

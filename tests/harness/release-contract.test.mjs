@@ -63,8 +63,8 @@ t("updater looks for the same manifest name", /CHECKSUM_MANIFEST_NAME\s*=\s*"SHA
 
 console.log("=== updater / native update / data safety ===");
 t("updater is platform aware", updater.includes("export function detectUpdatePlatform"));
-t("runVerifiedUpdate passes the detected platform", /selectDownloadableAsset\(info, detectUpdatePlatform\(\)\)/.test(updater));
-t("Android selector prefers the APK", /platform === "android"[\s\S]{0,160}info\.androidAsset \|\| info\.installerAsset/.test(updater));
+t("runVerifiedUpdate passes the detected platform", /const platform = detectUpdatePlatform\(\)/.test(updater) && /selectDownloadableAsset\(info, platform\)/.test(updater));
+t("Android selector accepts the APK only (V-73 fail-closed)", /platform === "android"[\s\S]{0,500}return info\.androidAsset\s*;/.test(updater) && !/androidAsset \|\| installerAsset/.test(updater));
 t("pre-update snapshot can be restored", updater.includes("export function restorePreUpdateBackupIfNeeded"));
 t("snapshot is NOT cleared at startup", !/useEffect\(\(\) => \{\s*clearPreUpdateBackup\(\);\s*\}/.test(app));
 t("snapshot is cleared only after a successful unlock", /onUnlocked=\{\(newSession\) => \{[\s\S]{0,220}clearPreUpdateBackup\(\)/.test(app));
