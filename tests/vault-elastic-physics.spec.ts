@@ -103,7 +103,14 @@ test("a gentle partial pull rebounds; a fast pull dismisses the sheet", async ({
   await expect(inspector(page)).toHaveAttribute("data-last-rebound", /gentle|balanced|firm/);
   await expect(inspector(page)).toHaveCount(1);
   await settleSheet(page);
-  expect(await inspector(page).evaluate((element) => element.style.scale)).toBe("");
+  // V-68: the position spring and the scale spring are two separate
+  // animations. `settleSheet()` only waits for the position (m42) to come
+  // to rest; under `workers: 2` the scale spring can still be a frame or
+  // two behind (`"1.0025 0.995"`). Poll for the final cleanup instead of
+  // sampling one arbitrary instant — the invariant is "no residue after
+  // the rebound finishes", not "no residue at this exact millisecond".
+  await expect.poll(() => inspector(page).evaluate((element) => element.style.scale)).toBe("");
+  await expect.poll(() => inspector(page).getAttribute("data-elastic-state")).toBeNull();
 
   // Fast, long flick: momentum carries the sheet off screen.
   const box2 = (await handle.boundingBox())!;
