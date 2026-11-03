@@ -116,11 +116,12 @@ export default function UpdateModal({
     setStage("snapshot");
 
     try {
-      const verified = await runVerifiedUpdate(info, (update: UpdateProgress) => {
-        setStage(update.stage);
-        setProgress(update.percent);
-      });
-
+      /*
+       * V-63: take the encrypted snapshot BEFORE any byte is downloaded or
+       * any installer is launched. Saving it afterwards is useless: the
+       * native command has already opened (and on Windows, is waiting on)
+       * the installer by the time `runVerifiedUpdate` resolves.
+       */
       const backupKey = createPreUpdateBackup();
       if (backupKey) {
         onNotify?.(
@@ -129,6 +130,11 @@ export default function UpdateModal({
             : `Pre-update safety snapshot saved: ${backupKey}`
         );
       }
+
+      const verified = await runVerifiedUpdate(info, (update: UpdateProgress) => {
+        setStage(update.stage);
+        setProgress(update.percent);
+      });
 
       setProgress(100);
       setStage("done");
@@ -143,8 +149,8 @@ export default function UpdateModal({
 
       onNotify?.(
         lang === "bn"
-          ? "আপডেট প্যাকেজ যাচাই করা হয়েছে। ইনস্টল শেষে পুনরায় চালু করুন।"
-          : "Update package verified against its published checksum. Complete the installer to apply changes."
+          ? "আপডেট যাচাই সম্পন্ন। উইন্ডোজে ইনস্টল শেষে অ্যাপ নিজে পুনরায় চালু হবে; অ্যান্ড্রয়েডে সংরক্ষিত APK খুলুন।"
+          : "Update verified against its published checksum. Windows restarts automatically; on Android open the saved APK."
       );
     } catch (error: any) {
       setProgress(0);

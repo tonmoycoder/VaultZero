@@ -25,7 +25,7 @@ import { exportVaultToCsv } from "./lib/csv";
 import { Avatar, Modal, Toggle, Tooltip } from "./components/ui";
 import TextSizeControl, { DEFAULT_TEXT_STEP, TEXT_STEPS, getEffectiveScale, stepLabel } from "./components/TextSize";
 import AutoLockControl from "./components/AutoLockControl";
-import LofiPlayer from "./components/LofiPlayer";
+
 import VaultHome from "./components/VaultHome";
 import UpdateBanner from "./components/UpdateBanner";
 
@@ -40,8 +40,12 @@ const SecurityCenterModal = lazy(() => import("./components/SecurityCenter"));
 const CsvImportModal = lazy(() => import("./components/CsvImportModal").then((m) => ({ default: m.CsvImportModal })));
 const UserProfileModal = lazy(() => import("./components/UserProfileModal"));
 const UpdateModal = lazy(() => import("./components/UpdateModal"));
+// PERFORMANCE (V-63): the Web Audio engine is only needed in zen mode. It
+// used to be parsed on every cold start even though 99% of sessions never
+// open that panel.
+const LofiPlayer = lazy(() => import("./components/LofiPlayer"));
 import { APP_VERSION, compareSemver } from "./lib/version";
-import { clearPreUpdateBackup } from "./lib/updater";
+import { clearPreUpdateBackup, restorePreUpdateBackupIfNeeded } from "./lib/updater";
 import { readTestSeed, testSeedEnabled } from "./lib/testSeed";
 import {
   checkGitHubUpdate,
@@ -61,6 +65,7 @@ import {
 } from "./lib/vault";
 import { cn } from "./utils/cn";
 import { useMediaQuery } from "./lib/motion";
+import { mergeVaultItems } from "./lib/p2pMerge";
 import { createAutoLock, readAutoLockMinutes, writeAutoLockMinutes, type AutoLockController } from "./lib/autoLock";
 import { clearClipboardWipe } from "./lib/clipboard";
 
@@ -201,7 +206,13 @@ function MobileNav({
 }
 
 export default function App() {
-  const activeSession = useMemo(() => getActiveSession(), []);
+  const activeSession = useMemo(() => {
+    // V-63: a failed update must never cost the user their vault. If the
+    // encrypted container is missing but the pre-update snapshot survives,
+    // put it back *before* the app decides whether a vault exists.
+    restorePreUpdateBackupIfNeeded();
+    return getActiveSession();
+  }, []);
   const [session, setSession] = useState<UnlockedSession | null>(activeSession);
   /*
    * The end-to-end suite seeds the vault through `lib/testSeed.ts`.
@@ -251,24 +262,40 @@ export default function App() {
   }, []);
 
   useEffect(() => {
-    checkGitHubUpdate(APP_VERSION).then((res) => {
-      if (res?.hasUpdate && res.latestVersion && compareSemver(res.latestVersion, APP_VERSION) > 0) {
-        notify(`Update available: ${res.latestVersion}`);
-      }
-    });
+    // PERFORMANCE (V-63): the release check is network-bound and must not
+    // compete with first paint. It runs when the main thread is idle (or
+    // after a short fallback delay), while the shared cache in `updater.ts`
+    // still deduplicates it against the banner's own check.
+    const runCheck = () => {
+      checkGitHubUpdate(APP_VERSION).then((res) => {
+        if (res?.hasUpdate && res.latestVersion && compareSemver(res.latestVersion, APP_VERSION) > 0) {
+          notify(`Update available: ${res.latestVersion}`);
+        }
+      });
+    };
+    const idle = (window as unknown as { requestIdleCallback?: (cb: () => void, opts?: { timeout: number }) => number }).requestIdleCallback;
+    const cancelIdle = (window as unknown as { cancelIdleCallback?: (id: number) => void }).cancelIdleCallback;
+    if (typeof idle === "function") {
+      const id = idle(runCheck, { timeout: 2000 });
+      return () => { if (typeof cancelIdle === "function") cancelIdle(id); };
+    }
+    const timer = window.setTimeout(runCheck, 800);
+    return () => window.clearTimeout(timer);
+  }, [notify]);
+
+  useEffect(() => {
     if (isTauri()) {
       invokeTauri("set_screen_protection", { enabled: true });
     }
-  }, [notify]);
-
-  // SECURITY / STORAGE (V-39): the pre-update snapshot exists to make an
-  // update recoverable. Once the new build is running it has no purpose,
-  // and keeping it leaves a full copy of the encrypted vault in storage.
-  // It is dropped on the next start, so a failed update is still
-  // recoverable for exactly one session.
-  useEffect(() => {
-    clearPreUpdateBackup();
   }, []);
+
+  /*
+   * V-63: the pre-update snapshot is NOT deleted at startup any more.
+   * Deleting it on the very first launch of the *new* build meant that a
+   * partially failed update (the new build starts, but its vault cannot be
+   * read) destroyed the only recoverable copy before the user could act.
+   * It is cleared only after a successful unlock proves the vault is sound.
+   */
 
   useEffect(() => {
     document.documentElement.setAttribute("data-theme", theme);
@@ -497,6 +524,14 @@ export default function App() {
       });
     },
     [session, vaultWriter]
+  );
+
+  /** V-52: merge a validated peer snapshot into the live, persisted vault. */
+  const handleP2PMerge = useCallback(
+    (remote: VaultItem[]) => {
+      mutateVault((current) => mergeVaultItems(current, remote));
+    },
+    [mutateVault]
   );
 
   const handleFavorite = (item: VaultItem) => {
@@ -868,7 +903,15 @@ export default function App() {
               onOpenAuthenticator={() => setModal("authenticator")}
             />
           )}
-          {modal === "sync" && <SyncModal key="sync" onClose={() => setModal(null)} onNotify={notify} />}
+          {modal === "sync" && (
+            <SyncModal
+              key="sync"
+              onClose={() => setModal(null)}
+              onNotify={notify}
+              items={items}
+              onMerge={handleP2PMerge}
+            />
+          )}
           {modal === "emergency" && (
             <EmergencyKitModal key="emergency" onClose={() => setModal(null)} onNotify={notify} />
           )}
@@ -895,6 +938,7 @@ export default function App() {
             <Modal
               key="mobile-menu"
               onClose={() => setModal(null)}
+              pullDown
               title="Quick access"
               subtitle="Your vault, tools and local privacy — in one place."
               icon={<Sparkle size={20} weight="duotone" />}
@@ -962,7 +1006,7 @@ export default function App() {
                     <p className="flex items-center gap-1.5 text-[8px] font-bold uppercase tracking-[0.13em] text-faint">
                       Soundscape
                     </p>
-                    <LofiPlayer active onNotify={notify} />
+                    <Suspense fallback={null}><LofiPlayer active onNotify={notify} /></Suspense>
                   </div>
                 )}
                 <div className="mb-2.5 flex items-center justify-between">
@@ -1056,6 +1100,9 @@ export default function App() {
           <LockScreen
             lang={lang}
             onUnlocked={(newSession) => {
+              // Only now is the vault proven readable. The snapshot has
+              // served its purpose and can be dropped (V-39 / V-63).
+              clearPreUpdateBackup();
               setSession(newSession);
               setItems(newSession.items);
               setLocked(false);

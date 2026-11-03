@@ -67,11 +67,8 @@ export default function UpdateBanner({
     setStage("snapshot");
 
     try {
-      const verified = await runVerifiedUpdate(updateInfo, (update: UpdateProgress) => {
-        setStage(update.stage);
-        setProgress(update.percent);
-      });
-
+      // V-63: snapshot first; the native installer is launched inside
+      // `runVerifiedUpdate` and must never run before the vault is safe.
       const backupKey = createPreUpdateBackup();
       if (backupKey) {
         onNotify?.(
@@ -80,6 +77,11 @@ export default function UpdateBanner({
             : `Pre-update safety snapshot saved: ${backupKey}`
         );
       }
+
+      const verified = await runVerifiedUpdate(updateInfo, (update: UpdateProgress) => {
+        setStage(update.stage);
+        setProgress(update.percent);
+      });
 
       setProgress(100);
       setStage("done");
@@ -93,8 +95,8 @@ export default function UpdateBanner({
 
       onNotify?.(
         lang === "bn"
-          ? "আপডেট প্যাকেজ যাচাই করা হয়েছে। ইনস্টল শেষে পুনরায় চালু করুন।"
-          : "Update package verified against its published checksum. Relaunch after installation completes."
+          ? "আপডেট যাচাই সম্পন্ন। উইন্ডোজে ইনস্টল শেষে অ্যাপ নিজে পুনরায় চালু হবে; অ্যান্ড্রয়েডে সংরক্ষিত APK খুলুন।"
+          : "Update verified against its published checksum. Windows restarts automatically; on Android open the saved APK."
       );
     } catch (err: any) {
       setProgress(0);

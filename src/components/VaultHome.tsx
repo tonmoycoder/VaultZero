@@ -44,6 +44,7 @@ import BrandFilters from "./BrandFilters";
 import GlassSelection from "./GlassSelection";
 import { useMotionSettings } from "./Tactile";
 import { colorOsBouncySpring, softSpring } from "../lib/motion";
+import { LiveTotpCode } from "./LiveTotp";
 
 const themeOptions: { id: Theme; label: string; icon: typeof Sun }[] = [
   { id: "light", label: "Liquid glass · Light", icon: Sun },
@@ -563,9 +564,7 @@ const ItemCard = memo(function ItemCard({
             </div>
             <div className="mt-1.5 flex items-center gap-2">
               <LocalTotpRing size={27} stroke={2.2} />
-              <span className="font-mono text-[14px] font-semibold tracking-[0.09em] text-main">
-                {item.totp ?? "— — —"}
-              </span>
+              <LiveTotpCode secret={item.totp} />
             </div>
             <p className="mt-2 flex items-center gap-1 border-t border-[var(--border-soft)] pt-1.5 text-[7px] text-muted">
               <Sparkle size={8} weight="fill" style={{ color: "var(--accent)" }} /> Local-only · no server

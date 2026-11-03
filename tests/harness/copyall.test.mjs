@@ -63,5 +63,13 @@ t("NO Setup Key label", !copied.includes("Setup Key"));
 t("NO Recovery Codes label", !copied.includes("Recovery Codes"));
 t("NO old password from the history", !copied.includes("old-password"));
 
+// V-60: when no live code has been generated (offline clock, invalid
+// secret, or a component that forgot to compute one) Copy All must NOT
+// silently fall back to the permanent setup secret.
+const withoutCode = v.buildFormattedQuickCopy(item);
+t("NO 2FA line when there is no live code", !withoutCode.includes("2FA Code (TOTP)"));
+t("NO setup secret in the fallback path", !withoutCode.includes("JBSWY3DPEHPK3PXP"));
+t("other fields still copy without a live code", withoutCode.includes("s3cret") && withoutCode.includes("GitHub"));
+
 console.log(`\nRESULT: ${failures === 0 ? "all passed" : failures + " failed"}`);
 process.exit(failures === 0 ? 0 : 1);

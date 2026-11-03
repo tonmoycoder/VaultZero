@@ -45,7 +45,13 @@ export default defineConfig({
           "vendor-icons": ["@phosphor-icons/react"],
           "vendor-motion": ["framer-motion"],
           "vendor-ocr": ["tesseract.js"],
-          "lib-totp": ["src/lib/totp.ts"],
+          // V-66: `lib/totp.ts` is no longer a lazy-only module. The live
+          // RFC 6238 code is rendered by the inspector and the home card on
+          // first paint, so keeping it in a separate chunk forced an extra
+          // `modulepreload` round-trip on every cold start. It is small
+          // (about 3.5 kB) and is folded into the main chunk instead. The
+          // OCR payload still stays in its own chunk, so the original
+          // reason for this split is preserved.
           "lib-wordlist": ["src/lib/wordlist.ts"],
         },
       },

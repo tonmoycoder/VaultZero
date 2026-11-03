@@ -31,6 +31,10 @@ const targets = [
   { entry: "src/lib/wordlist.ts", out: "wordlist-built.mjs" },
   { entry: "src/lib/url.ts", out: "url-built.mjs" },
   { entry: "src/lib/autoLock.ts", out: "autoLock-built.mjs" },
+  { entry: "src/lib/gesturePhysics.ts", out: "gesture-built.mjs" },
+  { entry: "src/lib/p2pMerge.ts", out: "p2pMerge-built.mjs" },
+  { entry: "src/lib/quickUnlock.ts", out: "quickUnlock-built.mjs" },
+  { entry: "src/lib/totp.ts", out: "totp-built.mjs" },
 ];
 
 for (const target of targets) {

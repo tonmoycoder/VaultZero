@@ -12,7 +12,7 @@
   "app": {
     "withGlobalTauri": true,
     "security": {
-      "csp": "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self' data:; connect-src 'self'; object-src 'none'; base-uri 'self'; frame-ancestors 'none'; form-action 'none'"
+      "csp": "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self' data:; connect-src 'self' https://api.github.com https://github.com https://objects.githubusercontent.com; object-src 'none'; base-uri 'self'; frame-ancestors 'none'; form-action 'none'"
     },
     "windows": [
       {
@@ -23,7 +23,11 @@
         "minHeight": 640,
         "center": true,
         "decorations": true,
-        "transparent": false
+        "transparent": false,
+        "visible": true,
+        "resizable": true,
+        "shadow": true,
+        "dragDropEnabled": false
       }
     ]
   },

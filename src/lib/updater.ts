@@ -5,7 +5,7 @@
  */
 
 import { APP_VERSION } from "./version";
-import { invokeTauri, isTauri } from "./vault";
+import { invokeTauri, isTauri, VAULT_STORAGE_KEY } from "./vault";
 
 export const CURRENT_APP_VERSION = APP_VERSION;
 export const GITHUB_REPO = "tonmoycoder/VaultZero";
@@ -200,8 +200,31 @@ export interface UpdateInfo {
  * links to several files, so it cannot be checksum-verified and must never
  * be used as a download target.
  */
-export function selectDownloadableAsset(info: UpdateInfo | null | undefined): GitHubAsset | undefined {
+export type UpdatePlatform = "windows" | "android" | "desktop" | "browser";
+
+/**
+ * V-63: an Android install must never be offered a Windows .exe. The old
+ * selector always preferred the installer, so the mobile app downloaded a
+ * desktop binary and could not install it.
+ */
+export function detectUpdatePlatform(userAgent?: string): UpdatePlatform {
+  const ua = userAgent ?? (typeof navigator !== "undefined" ? navigator.userAgent : "");
+  if (/android/i.test(ua)) return "android";
+  if (/windows/i.test(ua)) return "windows";
+  return typeof navigator === "undefined" ? "browser" : "desktop";
+}
+
+export function selectDownloadableAsset(
+  info: UpdateInfo | null | undefined,
+  platform?: UpdatePlatform
+): GitHubAsset | undefined {
   if (!info) return undefined;
+  if (platform === "android") {
+    return info.androidAsset || info.installerAsset || info.portableAsset;
+  }
+  if (platform === "windows" || platform === "desktop" || platform === "browser" || platform === undefined) {
+    return info.installerAsset || info.portableAsset || info.androidAsset;
+  }
   return info.installerAsset || info.portableAsset || info.androidAsset;
 }
 
@@ -493,6 +516,31 @@ export function createPreUpdateBackup(): string {
  * leaves a full copy of the encrypted vault in storage that no longer has
  * a purpose, so it is dropped as soon as the application starts.
  */
+/**
+ * V-63 — update data safety.
+ *
+ * `createPreUpdateBackup()` copies the encrypted vault container aside
+ * before an update. If the update leaves the main container missing or
+ * unreadable, put the snapshot back before the app decides the user has no
+ * vault. The snapshot is deliberately NOT cleared here: it is removed only
+ * after a successful unlock (`App.tsx`).
+ */
+export function restorePreUpdateBackupIfNeeded(): boolean {
+  if (typeof window === "undefined") return false;
+  try {
+    const storage = window.localStorage;
+    if (storage.getItem(VAULT_STORAGE_KEY)) return false;
+    const backup = storage.getItem(PRE_UPDATE_BACKUP_KEY);
+    if (!backup) return false;
+    const parsed = JSON.parse(backup);
+    if (!parsed || typeof parsed !== "object") return false;
+    storage.setItem(VAULT_STORAGE_KEY, backup);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 export function clearPreUpdateBackup(): void {
   if (typeof window === "undefined") return;
   try {
@@ -566,7 +614,7 @@ export async function runVerifiedUpdate(
 
   report({ stage: "snapshot", percent: 0 });
 
-  const asset = selectDownloadableAsset(info);
+  const asset = selectDownloadableAsset(info, detectUpdatePlatform());
   if (!asset) {
     const reason = "This release does not contain an installer for this platform.";
     report({ stage: "failed", percent: 0, reason });

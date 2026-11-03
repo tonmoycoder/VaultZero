@@ -123,7 +123,22 @@ console.log("totp chunk carries the OCR table:", totpChunkHasOcrTable);
 console.log("jsQR chunk:", jsQrChunk ?? "(none)", "preloaded:", jsQrPreloaded);
 console.log("initial download:", (initialBytes / 1024).toFixed(1), "kB uncompressed");
 
-const totpChunkIsSmall = totpChunkBytes <= 32 * 1024;
+/*
+ * V-66: the live RFC 6238 code is now rendered by the inspector and the
+ * home card on first paint, so `lib/totp.ts` is deliberately folded into
+ * the main app chunk. A separate chunk forced an extra `modulepreload`
+ * round-trip on every cold start.
+ *
+ * The invariant therefore is no longer "a small TOTP chunk": it is that
+ * the TOTP decoder must NEVER drag one of the heavy lazy payloads (the OCR
+ * Shift-JIS table, the Argon2 WASM blob, or the passphrase wordlist) into
+ * the critical path. That was the original bug this harness caught.
+ */
+const totpChunkSource = totpChunk
+  ? readFileSync(join(assetsDir, totpChunk), "utf8").replace(/\s+/g, "")
+  : "";
+const totpChunkHasHeavyPayload = /shiftJISTable|AGFzbQ|abdominal/.test(totpChunkSource);
+const totpChunkIsClean = !!totpChunk && !totpChunkHasOcrTable && !totpChunkHasHeavyPayload;
 const jsQrIsLazy = !jsQrPreloaded;
 
 const ok =
@@ -132,7 +147,7 @@ const ok =
   hasWordlist &&
   !argonPreloaded &&
   !wordlistPreloaded &&
-  totpChunkIsSmall &&
+  totpChunkIsClean &&
   !totpChunkHasOcrTable &&
   jsQrIsLazy;
 if (!ok) {
@@ -144,9 +159,9 @@ if (!ok) {
   if (argonPreloaded) console.error("FAIL: the Argon2id chunk is preloaded, so it is on the critical path.");
   if (wordlistPreloaded) console.error("FAIL: the wordlist chunk is preloaded, so it is on the critical path.");
   if (!totpChunk) console.error("FAIL: no chunk carries the TOTP decoder.");
-  else if (!totpChunkIsSmall) {
+  else if (!totpChunkIsClean) {
     console.error(
-      `FAIL: the TOTP chunk is ${(totpChunkBytes / 1024).toFixed(1)} kB. It must stay small.`
+      `FAIL: the TOTP chunk (${(totpChunkBytes / 1024).toFixed(1)} kB) drags a heavy lazy payload or the OCR table into the critical path.`
     );
   }
   if (totpChunkHasOcrTable) {

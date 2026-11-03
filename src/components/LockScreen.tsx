@@ -31,6 +31,12 @@ import {
   type Language,
   type UnlockedSession,
 } from "../lib/vault";
+import {
+  clearQuickUnlock,
+  enrollQuickUnlock,
+  isQuickUnlockAvailable,
+  quickUnlock,
+} from "../lib/quickUnlock";
 
 export default function LockScreen({
   onUnlocked,
@@ -50,7 +56,9 @@ export default function LockScreen({
   const [keyfileName, setKeyfileName] = useState<string | null>(null);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
-  const [biometric, setBiometric] = useState(false);
+  const [quickBusy, setQuickBusy] = useState(false);
+  const [quickAvailable, setQuickAvailable] = useState(() => isQuickUnlockAvailable());
+  const [enableQuickUnlock, setEnableQuickUnlock] = useState(false);
   const [showRecovery, setShowRecovery] = useState(false);
   const [profileName, setProfileName] = useState(() => {
     if (typeof window !== "undefined") {
@@ -77,6 +85,7 @@ export default function LockScreen({
 
   useEffect(() => {
     const timeout = window.setTimeout(() => inputRef.current?.focus(), 400);
+    setQuickAvailable(isQuickUnlockAvailable());
     return () => window.clearTimeout(timeout);
   }, [isSetup]);
 
@@ -140,6 +149,10 @@ export default function LockScreen({
     setLoading(true);
     try {
       const session = await unlockVault(pwd, keyfileBytes ?? undefined);
+      // V-50: enrolment is opt-in and real. If this platform has no
+      // authenticator the call simply returns false and quick unlock stays
+      // unavailable — no fake success and no hardcoded fallback password.
+      if (enableQuickUnlock) void enrollQuickUnlock(pwd);
       hapticSuccess();
       onUnlocked(session);
     } catch (err: any) {
@@ -163,6 +176,9 @@ export default function LockScreen({
     }
 
     setLoading(true);
+    // A newly created vault has a different master password; any enrolment
+    // from a previous vault must not linger in memory.
+    clearQuickUnlock();
     try {
       const session = await createNewVault(
         password,
@@ -170,6 +186,7 @@ export default function LockScreen({
         keyfileBytes ?? undefined,
         duressPassword.trim() || undefined
       );
+      if (enableQuickUnlock) void enrollQuickUnlock(password);
       hapticSuccess();
       onUnlocked(session);
     } catch (err: any) {
@@ -179,28 +196,40 @@ export default function LockScreen({
     }
   };
 
-  const handleBiometric = () => {
-    setBiometric(true);
-    setLoading(true);
-    hapticSuccess();
-    window.setTimeout(async () => {
-      // Demo biometric unlock or stored fallback
-      try {
-        if (!isVaultConfigured()) {
-          const session = await createNewVault("MasterPass2026!", initialItems);
-          onUnlocked(session);
-        } else {
-          // If vault exists, attempt quick unlock with default pass or prompt
-          const session = await unlockVault("MasterPass2026!", keyfileBytes ?? undefined);
-          onUnlocked(session);
-        }
-      } catch {
-        setError(lang === "bn" ? "বায়োমেট্রিক আনলক ব্যর্থ। পাসওয়ার্ড দিন।" : "Biometric check failed. Enter master password.");
-      } finally {
-        setBiometric(false);
-        setLoading(false);
+  /**
+   * V-50: real WebAuthn-gated quick unlock. `quickUnlock()` verifies a
+   * platform-authenticator assertion (challenge, origin, ECDSA signature)
+   * before releasing the wrapped master password. Failures are fail-closed:
+   * the user is asked for the master password, never unlocked with a demo
+   * credential.
+   */
+  const handleQuickUnlock = async () => {
+    if (!isQuickUnlockAvailable()) {
+      setError(lang === "bn"
+        ? "এই সেশনে দ্রুত আনলক নেই। মাস্টার পাসওয়ার্ড দিন।"
+        : "Quick unlock is not enrolled in this session. Enter your master password.");
+      return;
+    }
+    setError("");
+    setQuickBusy(true);
+    try {
+      const pwd = await quickUnlock();
+      if (!pwd) {
+        setError(lang === "bn"
+          ? "বায়োমেট্রিক যাচাই ব্যর্থ বা বাতিল। মাস্টার পাসওয়ার্ড দিন।"
+          : "Biometric check failed or was cancelled. Enter your master password.");
+        return;
       }
-    }, 850);
+      const session = await unlockVault(pwd, keyfileBytes ?? undefined);
+      hapticSuccess();
+      onUnlocked(session);
+    } catch {
+      setError(lang === "bn"
+        ? "দ্রুত আনলক ব্যর্থ। মাস্টার পাসওয়ার্ড দিন।"
+        : "Quick unlock failed. Enter your master password.");
+    } finally {
+      setQuickBusy(false);
+    }
   };
 
   return (
@@ -424,7 +453,7 @@ export default function LockScreen({
               disabled={loading}
               className="primary-button relative mt-2 flex min-h-[48px] w-full items-center justify-center gap-2.5 rounded-[16px] px-6 py-3.5 text-[12px] font-semibold shadow-md transition-all active:scale-[0.985] disabled:opacity-80"
             >
-              {loading && !biometric ? (
+              {loading ? (
                 <div className="flex w-full items-center justify-center gap-2">
                   <span className="h-4 w-4 animate-spin rounded-full border-2 border-white/35 border-t-white" />
                   <span>{isSetup ? "Sealing vault with Argon2id…" : "Deriving vault key…"}</span>
@@ -452,49 +481,74 @@ export default function LockScreen({
             </div>
           )}
 
-          {/* Quick Biometric Simulation */}
-          {!isSetup && (
-            <>
-              <div className="my-2.5 flex w-full items-center gap-2">
-                <span className="h-px flex-1" style={{ background: "var(--border-soft)" }} />
-                <span className="text-[7.5px] font-semibold uppercase tracking-[0.14em] text-faint">or</span>
-                <span className="h-px flex-1" style={{ background: "var(--border-soft)" }} />
-              </div>
+          {/* V-50: real WebAuthn quick unlock — no simulation, no fallback password. */}
+          <div className="my-2.5 flex w-full items-center gap-2">
+            <span className="h-px flex-1" style={{ background: "var(--border-soft)" }} />
+            <span className="text-[7.5px] font-semibold uppercase tracking-[0.14em] text-faint">or</span>
+            <span className="h-px flex-1" style={{ background: "var(--border-soft)" }} />
+          </div>
 
-              <button
-                type="button"
-                onClick={handleBiometric}
-                disabled={loading}
-                className="secondary-button flex min-h-[46px] w-full items-center justify-center gap-3 rounded-[15px] px-6 py-3 text-[11px] font-semibold"
-              >
-                <span
-                  className="flex h-6 w-6 items-center justify-center rounded-full"
-                  style={{
-                    color: "var(--accent)",
-                    background: "var(--accent-soft)",
-                    animation: biometric ? "glow-pulse .7s ease-in-out infinite" : undefined,
-                  }}
-                >
-                  <Fingerprint size={14} weight="duotone" />
-                </span>
-                {biometric ? "Verifying local biometrics…" : "Quick unlock (Touch ID / Biometric)"}
-              </button>
-            </>
-          )}
+          <label className="mb-2 flex w-full cursor-pointer items-start gap-2 text-[9px] leading-relaxed text-muted">
+            <input
+              type="checkbox"
+              checked={enableQuickUnlock}
+              onChange={(event) => setEnableQuickUnlock(event.target.checked)}
+              className="mt-0.5 h-3 w-3 shrink-0 accent-[var(--accent)]"
+              aria-label="Enable quick unlock for this session"
+            />
+            <span>
+              {lang === "bn"
+                ? "আনলকের পর এই সেশনের জন্য ডিভাইস বায়োমেট্রিক দ্রুত আনলক চালু করুন (ঐচ্ছিক)।"
+                : "Enable device biometric quick unlock for this session after unlocking (optional)."}
+            </span>
+          </label>
 
-          {/* Toggle between Setup and Unlock if testing */}
-          <div className="mt-3 flex items-center justify-center gap-2 text-[8px] text-faint">
+          {quickAvailable ? (
             <button
               type="button"
-              onClick={() => {
-                setIsSetup((v) => !v);
-                setError("");
-              }}
-              className="hover:text-main underline decoration-dotted"
+              onClick={handleQuickUnlock}
+              disabled={loading || quickBusy}
+              className="secondary-button flex min-h-[46px] w-full items-center justify-center gap-3 rounded-[15px] px-6 py-3 text-[11px] font-semibold"
             >
-              {isSetup ? "Already have a vault? Switch to unlock" : "Need a fresh vault? Switch to setup"}
+              <span
+                className="flex h-6 w-6 items-center justify-center rounded-full"
+                style={{
+                  color: "var(--accent)",
+                  background: "var(--accent-soft)",
+                  animation: quickBusy ? "glow-pulse .7s ease-in-out infinite" : undefined,
+                }}
+              >
+                <Fingerprint size={14} weight="duotone" />
+              </span>
+              {quickBusy
+                ? (lang === "bn" ? "ডিভাইস যাচাই করা হচ্ছে…" : "Verifying with your device…")
+                : (lang === "bn" ? "দ্রুত আনলক (ডিভাইস বায়োমেট্রিক)" : "Quick unlock (device biometric)")}
             </button>
-          </div>
+          ) : (
+            <p className="rounded-[12px] border border-dashed px-3 py-2 text-center text-[8.5px] leading-relaxed text-faint" style={{ borderColor: "var(--border-soft)" }}>
+              {lang === "bn"
+                ? "এই সেশনে দ্রুত আনলক এখনো নেই। উপরের অপশনটি চেক করে মাস্টার পাসওয়ার্ড দিয়ে আনলক করলে ডিভাইসে প্ল্যাটফর্ম অথেনটিকেটর থাকলে এটি চালু হবে।"
+                : "Quick unlock is not enrolled yet. Tick the option above and unlock with your master password; it appears here when a platform authenticator is available."}
+            </p>
+          )}
+
+          {/* V-53: the old "switch to setup if testing" toggle could overwrite
+              an existing vault container. Only offer a setup/unlock switch
+              when no vault is actually configured. */}
+          {!isVaultConfigured() && (
+            <div className="mt-3 flex items-center justify-center gap-2 text-[8px] text-faint">
+              <button
+                type="button"
+                onClick={() => {
+                  setIsSetup((v) => !v);
+                  setError("");
+                }}
+                className="hover:text-main underline decoration-dotted"
+              >
+                {isSetup ? "Already have a vault? Switch to unlock" : "Need a fresh vault? Switch to setup"}
+              </button>
+            </div>
+          )}
 
           <div className="mt-3 flex w-full items-center justify-between gap-2 border-t pt-3" style={{ borderColor: "var(--border-soft)" }}>
             <button

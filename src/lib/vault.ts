@@ -164,14 +164,23 @@ export const buildFormattedQuickCopy = (item: VaultItem, currentTotpCode?: strin
     safeUrl ? `Website: ${safeUrl}` : "",
     item.username ? `Username / Email: ${item.username}` : "",
     item.password ? `Password: ${item.password}` : "",
-    currentTotpCode || item.totp ? `2FA Code (TOTP): ${currentTotpCode || item.totp}` : "",
+    // V-60: `item.totp` is the permanent 2FA SETUP SECRET. Only a freshly
+    // computed, short-lived code may be copied; falling back to the secret
+    // would hand an attacker a permanent 2FA bypass with one clipboard copy.
+    currentTotpCode ? `2FA Code (TOTP): ${currentTotpCode}` : "",
     item.note || (item as any).notes ? `Notes: ${item.note || (item as any).notes}` : "",
     item.folder ? `Folder: ${item.folder}` : "",
   ].filter(Boolean);
   return lines.join("\n");
 };
 
-// Clean default state: exactly 1 deletable Demo Account.
+/**
+ * V-51: the default state contains exactly ONE credential — a single,
+ * deletable demo password. The demo entry used to also seed a second
+ * password in `passwordHistory`, which meant a "clean" vault actually
+ * shipped two demo passwords. History now starts empty and is populated
+ * only by real password changes the user makes.
+ */
 export const initialItems: VaultItem[] = [
   {
     id: "demo-account",
@@ -185,14 +194,11 @@ export const initialItems: VaultItem[] = [
     strength: "strong",
     score: 4,
     modified: "Just now",
-    totp: "839 201",
     recoveryCodes: ["VZ01-DEMO-9942", "VZ02-DEMO-8831", "VZ03-DEMO-7720", "VZ04-DEMO-6619"],
     tags: ["Demo", "Deletable"],
     folder: "Personal",
     note: "This is a single demo entry. You can edit, copy, inspect history, or delete it anytime. Deleting it leaves your vault 100% empty.",
-    passwordHistory: [
-      { password: "V0-InitialDemo123!", changedAt: "Yesterday" },
-    ],
+    passwordHistory: [],
   },
 ];
 

@@ -29,6 +29,7 @@ import {
   passwordStrength,
 } from "../lib/generate";
 import { brands, type BrandKey, type Category, type VaultItem } from "../lib/vault";
+import { isValidTotpSecret } from "../lib/totp";
 import { cn } from "../utils/cn";
 import { BrandMark, CopyButton, GlassCheck, Modal, StrengthDots, Tooltip } from "./ui";
 import OcrCopyPad, { type OcrField } from "./OcrCopyPad";
@@ -588,7 +589,7 @@ export function OcrModal({
       password: assignedPassword || parsed.password,
       url: assignedUrl || parsed.url,
       note: extracted,
-      totp: detectedTotp?.secret || parsed.totp,
+      totp: isValidTotpSecret(detectedTotp?.secret) ? detectedTotp!.secret : (isValidTotpSecret(parsed.totp) ? parsed.totp : undefined),
     });
     onNotify(lang === "bn" ? "ওসিআর তথ্য অ্যাড ফর্মে প্রস্তুত — রিভিউ করে সেভ করুন" : "Scanned details ready — review before saving");
   };
@@ -857,7 +858,7 @@ export function OcrModal({
                     strength: "strong",
                     score: 4,
                     modified: "Just now",
-                    totp: detectedTotp.secret,
+                    totp: isValidTotpSecret(detectedTotp.secret) ? detectedTotp.secret : undefined,
                     tags: ["2FA", "Scanned"],
                     folder: "Work",
                   });

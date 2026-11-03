@@ -51,9 +51,10 @@ import {
 } from "../lib/generate";
 import { cn } from "../utils/cn";
 import { BrandMark, Modal, Toggle, Tooltip, TotpRing, useCountdown } from "./ui";
-import { generateTotp, validateGoogleAuthSecret } from "../lib/totp";
+import { generateTotp, isValidTotpSecret, resolveTotpConfig, validateGoogleAuthSecret } from "../lib/totp";
 import { copySecure } from "../lib/clipboard";
 import { invokeNativeCommand } from "../lib/platform";
+import { mergeSummary, parsePeerInput, parsePeerVaultPayload } from "../lib/p2pMerge";
 
 type Notify = (message: string) => void;
 
@@ -326,7 +327,7 @@ export function AuthenticatorModal({
 }) {
   const { remaining, progress } = useCountdown();
   const accounts = useMemo<AuthAccount[]>(
-    () => items.filter((item) => item.totp).map((item) => ({ id: item.id, title: item.title, brand: item.brand, code: item.totp! })),
+    () => items.filter((item) => isValidTotpSecret(item.totp)).map((item) => ({ id: item.id, title: item.title, brand: item.brand, code: item.totp! })),
     [items],
   );
   const [extra, setExtra] = useState<AuthAccount[]>([]);
@@ -339,17 +340,18 @@ export function AuthenticatorModal({
   useEffect(() => {
     let cancelled = false;
     const allAccounts = [
-      ...items.filter((item) => item.totp).map((item) => ({ id: item.id, secret: item.totp! })),
+      ...items.filter((item) => isValidTotpSecret(item.totp)).map((item) => ({ id: item.id, secret: item.totp! })),
       ...extra.map((acc) => ({ id: acc.id, secret: acc.code })),
     ];
 
     Promise.all(
       allAccounts.map(async (acc) => {
         try {
-          const res = await generateTotp(acc.secret);
+          const res = await generateTotp(resolveTotpConfig(acc.secret));
           return { id: acc.id, code: res.code };
         } catch {
-          return { id: acc.id, code: acc.secret };
+          // Never display the setup secret as if it were a one-time code.
+          return { id: acc.id, code: "••• •••" };
         }
       })
     ).then((results) => {
@@ -492,11 +494,17 @@ export function AuthenticatorModal({
 // ————————————————————————————————— Security center —————————————————————————————————
 export { default as SecurityCenterModal } from "./SecurityCenter";
 
-export function SyncModal({ onClose, onNotify }: { onClose: () => void; onNotify: Notify }) {
+export function SyncModal({ onClose, onNotify, items, onMerge }: {
+  onClose: () => void;
+  onNotify: Notify;
+  items: VaultItem[];
+  onMerge: (remote: VaultItem[]) => void;
+}) {
   const [tab, setTab] = useState<"host" | "scan">("host");
   const [status, setStatus] = useState<"waiting" | "connected">("waiting");
   const [connectedPeer, setConnectedPeer] = useState<string | null>(null);
   const [manualCode, setManualCode] = useState("");
+  const [peerPin, setPeerPin] = useState<string | null>(null);
   const [cameraActive, setCameraActive] = useState(false);
   const [cameraError, setCameraError] = useState("");
   const [transferring, setTransferring] = useState(false);
@@ -550,17 +558,26 @@ export function SyncModal({ onClose, onNotify }: { onClose: () => void; onNotify
     return digits.join("");
   });
 
-  const hostPayload = useMemo(() => {
-    const host = typeof window !== "undefined" ? window.location.hostname || "192.168.1.103" : "192.168.1.103";
-    return JSON.stringify({
-      app: "vaultzero",
-      version: 2,
-      ip: host,
-      port: hostPort ?? 1420,
-      code: hostPin ?? localPin,
-      protocol: "pake-xchacha20-v2",
-    });
-  }, [hostPort, hostPin, localPin]);
+  /**
+   * V-52: the QR used to advertise a hardcoded LAN address and port 1420 before the
+   * native host had even started. The real host binds an ephemeral port, so
+   * the QR is only meaningful once `start_p2p_host` returns its live port.
+   * When the app runs inside Tauri the hostname is a loopback alias and is
+   * deliberately left empty: the other device must use Discover Peers.
+   */
+  const lanHost = useMemo(() => {
+    const hostname = typeof window !== "undefined" ? window.location.hostname : "";
+    const localOnly = !hostname || /^(localhost|tauri\.localhost|127\.0\.0\.1|::1|0\.0\.0\.0)$/i.test(hostname);
+    return localOnly ? "" : hostname;
+  }, []);
+  const hostPayload = useMemo(() => JSON.stringify({
+    app: "vaultzero",
+    version: 2,
+    ip: lanHost,
+    port: hostPort ?? 0,
+    code: hostPin ?? localPin,
+    protocol: "pake-xchacha20-v2",
+  }), [lanHost, hostPort, hostPin, localPin]);
 
   /**
    * Starts the real Rust P2P host. The vault payload is encrypted by the
@@ -573,7 +590,7 @@ export function SyncModal({ onClose, onNotify }: { onClose: () => void; onNotify
     try {
       const info = await invokeNativeCommand<{ port: number; pin: string; device_name: string }>(
         "start_p2p_host",
-        { pin: localPin, payload: "", deviceName: "VaultZero-Peer" },
+        { pin: localPin, deviceName: "VaultZero-Peer" },
       );
       setHostPort(info.port);
       setHostPin(info.pin);
@@ -696,14 +713,18 @@ export function SyncModal({ onClose, onNotify }: { onClose: () => void; onNotify
       const parsed = JSON.parse(text);
       if (parsed.app === "vaultzero" || parsed.ip) {
         stopCamera();
-        // V-17: a scanned QR is a *peer selection*, not a completed
-        // connection. The authenticated handshake only succeeds when the
-        // transfer actually runs, so we do not claim "connected" yet.
-        setConnectedPeer(`${parsed.ip}:${parsed.port || 1420}`);
-        if (typeof parsed.code === "string" && parsed.code) {
-          setManualCode(parsed.code);
-        }
-        onNotify(`Peer selected: ${parsed.ip} — start the transfer to authenticate.`);
+        // V-17 / V-52: a scanned QR is a *peer selection*, not a completed
+        // connection. Capture BOTH the address and the host's pairing PIN —
+        // the old code put the PIN into the address field and authenticated
+        // with this device's own local PIN, so remote connections always
+        // failed the handshake.
+        const peer = parsePeerInput(text);
+        const address = peer.address ?? (parsed.ip ? `${parsed.ip}${parsed.port ? `:${parsed.port}` : ""}` : "");
+        setConnectedPeer(address);
+        setManualCode(peer.address ?? "");
+        if (peer.pin) setPeerPin(peer.pin);
+        setStatus("waiting");
+        onNotify(`Peer selected: ${address || "unknown"} — start the transfer to authenticate.`);
         return;
       }
     } catch {
@@ -716,11 +737,25 @@ export function SyncModal({ onClose, onNotify }: { onClose: () => void; onNotify
   };
 
   const handleManualConnect = () => {
-    if (!manualCode.trim()) return;
+    const peer = parsePeerInput(manualCode);
+    if (!peer.address && !peer.pin) {
+      onNotify("Enter a peer IP:port and/or the host's 6-digit pairing PIN.");
+      return;
+    }
     // V-17: selecting a peer is not the same as authenticating to it. The
     // status only flips to "connected" once the handshake succeeds.
-    setConnectedPeer(manualCode.trim());
-    onNotify(`Peer selected: ${manualCode.trim()} — start the transfer to authenticate.`);
+    if (peer.address) setConnectedPeer(peer.address);
+    if (peer.pin) setPeerPin(peer.pin);
+    setStatus("waiting");
+    onNotify(`Peer selected: ${peer.address ?? "PIN only"} — start the transfer to authenticate.`);
+  };
+
+  const peerCoordinates = () => {
+    const peer = connectedPeer && /(\d+\.\d+\.\d+\.\d+)(?::(\d+))?/.exec(connectedPeer);
+    if (!peer) return null;
+    const port = Number(peer[2] ?? hostPort ?? 0);
+    if (!port || port > 65535) return null;
+    return { ip: peer[1], port, pin: peerPin ?? hostPin ?? localPin };
   };
 
   const handleSendVault = async () => {
@@ -728,16 +763,17 @@ export function SyncModal({ onClose, onNotify }: { onClose: () => void; onNotify
     try {
       // Real encrypted transfer to the connected peer. The Rust core performs
       // the authenticated key exchange and encrypts the payload.
-      const peer = connectedPeer && /(\d+\.\d+\.\d+\.\d+)(?::(\d+))?/.exec(connectedPeer);
-      if (!peer) {
-        onNotify("No peer address available yet.");
+      const coords = peerCoordinates();
+      if (!coords) {
+        onNotify("No live peer port yet. Scan the host QR after it starts hosting.");
         return;
       }
       await invokeNativeCommand("sync_vault_payload", {
-        peerIp: peer[1],
-        peerPort: Number(peer[2] ?? hostPort ?? 1420),
-        pin: localPin,
+        peerIp: coords.ip,
+        peerPort: coords.port,
+        pin: coords.pin,
       });
+      setStatus("connected");
       onNotify("Encrypted vault snapshot sent to peer.");
     } catch (err: any) {
       onNotify(err?.safeMessage || "Encrypted transfer failed.");
@@ -749,21 +785,34 @@ export function SyncModal({ onClose, onNotify }: { onClose: () => void; onNotify
   const handleReceiveMerge = async () => {
     setTransferring(true);
     try {
-      const peer = connectedPeer && /(\d+\.\d+\.\d+\.\d+)(?::(\d+))?/.exec(connectedPeer);
-      if (!peer) {
-        onNotify("No peer address available yet.");
+      const coords = peerCoordinates();
+      if (!coords) {
+        onNotify("No live peer port yet. Scan the host QR after it starts hosting.");
         return;
       }
       const payload = await invokeNativeCommand<string>("sync_vault_payload", {
-        peerIp: peer[1],
-        peerPort: Number(peer[2] ?? hostPort ?? 1420),
-        pin: localPin,
+        peerIp: coords.ip,
+        peerPort: coords.port,
+        pin: coords.pin,
       });
-      // The payload is the encrypted .pmv envelope; it is never decrypted in
-      // the renderer — the Rust core owns the vault key.
-      onNotify(`Received encrypted vault snapshot (${payload?.length ?? 0} bytes).`);
+      // V-52: actually merge. `sync_vault_payload` returns the peer's vault
+      // JSON (the authenticated channel already decrypted it in Rust). We
+      // validate every field, normalise Rust Vault entries into VaultItems,
+      // then append only ids that are not already present locally.
+      const remote = parsePeerVaultPayload(payload);
+      if (remote.length === 0) {
+        onNotify("Peer vault is empty — nothing to merge.");
+        return;
+      }
+      const summary = mergeSummary(items, remote);
+      onMerge(remote);
+      setStatus("connected");
+      onNotify(
+        `Merged ${summary.added} new item${summary.added === 1 ? "" : "s"} from peer ` +
+        `(${summary.duplicates} already in your vault).`
+      );
     } catch (err: any) {
-      onNotify(err?.safeMessage || "Encrypted receive failed.");
+      onNotify(err?.safeMessage || (err instanceof Error ? err.message : "Encrypted receive failed."));
     } finally {
       setTransferring(false);
     }
@@ -842,7 +891,7 @@ export function SyncModal({ onClose, onNotify }: { onClose: () => void; onNotify
               : "Waiting for peer selection…"}
           </span>
         </div>
-        <span className="font-mono text-[8px] text-muted">LAN Port: 1420</span>
+        <span className="font-mono text-[8px] text-muted">LAN Port: {hostPort ?? "—"}</span>
       </div>
 
       {/* Mode Tabs */}
@@ -878,18 +927,25 @@ export function SyncModal({ onClose, onNotify }: { onClose: () => void; onNotify
       {/* Tab A: Host / Show Clean QR */}
       {tab === "host" && (
         <div className="mt-3.5 flex flex-col items-center justify-center rounded-[20px] border border-[var(--border-soft)] bg-[var(--glass-soft)] p-5 text-center">
-          <div className="rounded-[18px] border-2 border-white/60 bg-white p-3 shadow-xl">
-            {/* Clean QR code: includeMargin=true, level=M, NO center logo for 100% camera readability */}
-            <QRCodeSVG
-              value={hostPayload}
-              size={168}
-              bgColor="#ffffff"
-              fgColor="#17152b"
-              level="M"
-              includeMargin={true}
-              title="VaultZero Pairing QR Code"
-            />
-          </div>
+          {hostPort !== null ? (
+            <div className="rounded-[18px] border-2 border-white/60 bg-white p-3 shadow-xl">
+              {/* Clean QR: includeMargin=true, level=M, NO center logo for camera readability.
+                  V-52: only rendered after the native host reports its live port. */}
+              <QRCodeSVG
+                value={hostPayload}
+                size={168}
+                bgColor="#ffffff"
+                fgColor="#17152b"
+                level="M"
+                includeMargin={true}
+                title="VaultZero Pairing QR Code"
+              />
+            </div>
+          ) : (
+            <div className="flex h-[168px] w-[168px] items-center justify-center rounded-[18px] border-2 border-dashed p-4 text-center text-[9px] leading-relaxed text-muted" style={{ borderColor: "var(--border)" }}>
+              Start the encrypted host to generate a live pairing QR with its real port and PIN.
+            </div>
+          )}
 
           <p className="mt-3 font-display text-[12px] font-semibold text-main">
             Scan this QR code with the VaultZero Android App
@@ -900,7 +956,7 @@ export function SyncModal({ onClose, onNotify }: { onClose: () => void; onNotify
 
           <div className="mt-3.5 flex flex-wrap items-center justify-center gap-2">
             <span className="rounded-md border border-[var(--border-soft)] bg-[var(--glass-input)] px-2.5 py-1 font-mono text-[9.5px] text-muted">
-              IP: {typeof window !== "undefined" ? window.location.hostname || "192.168.1.103" : "192.168.1.103"}
+              IP: {lanHost || "not detected · use Discover"}
             </span>
             <button
               type="button"
@@ -924,7 +980,7 @@ export function SyncModal({ onClose, onNotify }: { onClose: () => void; onNotify
               aria-label="Start encrypted P2P host"
             >
               <Broadcast size={13} weight="bold" />
-              {hosting ? "Starting…" : hosting ? "Hosting" : "Start Encrypted Host"}
+              {hosting ? "Hosting…" : "Start Encrypted Host"}
             </button>
             <button
               type="button"
@@ -952,8 +1008,8 @@ export function SyncModal({ onClose, onNotify }: { onClose: () => void; onNotify
                   type="button"
                   onClick={() => {
                     setConnectedPeer(`${peer.ip}:${peer.port}`);
-                    setStatus("connected");
-                    onNotify(`Selected peer ${peer.name}`);
+                    setStatus("waiting");
+                    onNotify(`Selected peer ${peer.name} — start the transfer to authenticate.`);
                   }}
                   className="flex w-full items-center justify-between gap-2 rounded-[11px] border border-[var(--border-soft)] bg-[var(--glass-input)] px-2.5 py-1.5 text-left hover:bg-[var(--hover)]"
                 >
@@ -1018,7 +1074,7 @@ export function SyncModal({ onClose, onNotify }: { onClose: () => void; onNotify
               type="text"
               value={manualCode}
               onChange={(e) => setManualCode(e.target.value)}
-              placeholder="192.168.1.103:1420 or 123456"
+              placeholder="10.0.0.5:52137/123456 or 123456"
               className="min-w-0 flex-1 rounded-[11px] border border-[var(--border-soft)] bg-[var(--glass-input)] px-3 py-1.5 font-mono text-[10px] text-main outline-none placeholder:text-faint"
             />
             <button
@@ -1029,6 +1085,11 @@ export function SyncModal({ onClose, onNotify }: { onClose: () => void; onNotify
               Connect
             </button>
           </div>
+
+          <p className="mt-2 text-[8px] leading-relaxed text-faint">
+            {connectedPeer ? `Selected: ${connectedPeer}` : "No peer selected yet."}
+            {peerPin ? ` · pairing PIN ${peerPin}` : " · scan the host QR to pick up its PIN"}
+          </p>
         </div>
       )}
 
@@ -1042,13 +1103,20 @@ export function SyncModal({ onClose, onNotify }: { onClose: () => void; onNotify
 
 // ————————————————————————————————— Emergency kit —————————————————————————————————
 export function EmergencyKitModal({ onClose, onNotify }: { onClose: () => void; onNotify: Notify }) {
+  /*
+   * V-65: a hardcoded document ID meant every kit ever printed carried the
+   * same identifier. Each generated kit now gets its own CSPRNG id, so a
+   * physical copy can be uniquely identified and revoked.
+   */
+  const documentId = useMemo(() => {
+    const bytes = new Uint8Array(5);
+    crypto.getRandomValues(bytes);
+    const suffix = Array.from(bytes, (b) => b.toString(16).padStart(2, "0")).join("").toUpperCase();
+    return `VZ-EK-${new Date().toISOString().slice(0, 10).replace(/-/g, "")}-${suffix}`;
+  }, []);
+
   const savePdf = () => {
-    const win = window.open("", "_blank", "width=900,height=1000");
-    if (!win) {
-      onNotify("Allow pop-ups to save your emergency kit");
-      return;
-    }
-    win.document.write(`<!doctype html><html><head><title>VaultZero Emergency Kit</title><style>
+    const html = `<!doctype html><html><head><title>VaultZero Emergency Kit</title><style>
       @page { margin: 24mm; }
       * { box-sizing: border-box; }
       body { font-family: "Helvetica Neue", Arial, sans-serif; color: #1c2230; margin: 0; background: #fbf8f0; }
@@ -1089,14 +1157,38 @@ export function EmergencyKitModal({ onClose, onNotify }: { onClose: () => void; 
         <div class="box"><label>Phone / relationship</label><div class="lines"></div></div>
       </div>
       <div class="box"><label>Recovery key</label><div class="codes"><div class="code">— — — —</div><div class="code">— — — —</div><div class="code">— — — —</div><div class="code">— — — —</div></div><p class="hint">Handwrite all four groups from VaultZero → Emergency Kit.</p></div>
-      <div class="note">The authorized person should launch VaultZero from a device that already holds a local vault backup, choose "Restore from emergency kit," and enter the credentials above while offline.</div>
-      <div class="footer"><span>DOCUMENT ID · VZ-EK-0826-117</span><span class="stamp">VAULTZERO · LOCAL ONLY</span><span>PAGE 1 / 1</span></div>
-    </div></body></html>`);
-    win.document.close();
-    window.setTimeout(() => {
-      win.focus();
-      win.print();
-    }, 450);
+      <div class="note">The authorized person should launch VaultZero from a device that already holds the local vault file (local-vault.pmv), choose "Forgot master password? Recover vault" on the lock screen, and enter the handwritten 24-character recovery key above while offline.</div>
+      <div class="footer"><span>DOCUMENT ID · ${documentId}</span><span class="stamp">VAULTZERO · LOCAL ONLY</span><span>PAGE 1 / 1</span></div>
+    </div></body></html>`;
+
+    const win = window.open("", "_blank", "width=900,height=1000");
+    if (win) {
+      win.document.write(html);
+      win.document.close();
+      window.setTimeout(() => { win.focus(); win.print(); }, 450);
+    } else {
+      // V-65: WebView2 and hardened browsers often block pop-ups. Printing
+      // through an in-document frame keeps the whole flow inside the single
+      // native window instead of failing with "Allow pop-ups".
+      const frame = document.createElement("iframe");
+      frame.setAttribute("aria-hidden", "true");
+      frame.style.cssText = "position:fixed;left:-10000px;top:0;width:900px;height:1000px;border:0;";
+      document.body.appendChild(frame);
+      const frameDoc = frame.contentWindow?.document;
+      if (!frameDoc) {
+        frame.remove();
+        onNotify("Allow pop-ups to save your emergency kit");
+        return;
+      }
+      frameDoc.open();
+      frameDoc.write(html);
+      frameDoc.close();
+      window.setTimeout(() => {
+        frame.contentWindow?.focus();
+        frame.contentWindow?.print();
+        window.setTimeout(() => frame.remove(), 1000);
+      }, 450);
+    }
     onNotify("Emergency kit prepared — save as PDF");
   };
 
@@ -1170,10 +1262,10 @@ export function EmergencyKitModal({ onClose, onNotify }: { onClose: () => void; 
             <div className="mt-5 h-4 border-b" style={{ borderColor: "#b8ae9b" }} />
           </div>
           <div className="relative mt-2.5 border-l-2 pl-2.5" style={{ borderColor: "#6457ee" }}>
-            <p className="text-[6.5px] leading-relaxed" style={{ color: "#5d564b" }}>The authorized person should open VaultZero on a device holding a local backup, choose "Restore from emergency kit," and enter the handwritten credentials while offline.</p>
+            <p className="text-[6.5px] leading-relaxed" style={{ color: "#5d564b" }}>The authorized person should open VaultZero on a device holding the local vault file (local-vault.pmv), choose "Forgot master password? Recover vault" on the lock screen, and enter the handwritten 24-character recovery key while offline.</p>
           </div>
           <div className="relative mt-3.5 flex items-center justify-between border-t pt-2 text-[6px] tracking-[0.05em]" style={{ borderColor: "#d8d0c0", color: "#8d8475" }}>
-            <span>DOCUMENT ID · VZ-EK-0826-117</span>
+            <span>DOCUMENT ID · ${documentId}</span>
             <span className="font-bold" style={{ color: "#6457ee" }}>VAULTZERO · LOCAL ONLY</span>
           </div>
         </div>

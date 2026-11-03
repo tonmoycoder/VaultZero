@@ -26,6 +26,7 @@ import { brands, buildFormattedQuickCopy, strengthMeta, t, type Language, type V
 import { cn } from "../utils/cn";
 import { sanitizeVaultUrl } from "../lib/url";
 import { BrandMark, CopyButton, SectionLabel, StrengthDots, Tooltip, TotpRing, useCountdown } from "./ui";
+import { useLiveTotpCode } from "./LiveTotp";
 import GlassSelection from "./GlassSelection";
 import ItemSecurity from "./ItemSecurity";
 import { useMotionSettings } from "./Tactile";
@@ -69,15 +70,16 @@ function FieldRow({
 }
 
 const IsolatedInspectorTotp = memo(function IsolatedInspectorTotp({
-  code,
+  secret,
   lang,
   onNotify,
 }: {
-  code: string;
+  secret: string;
   lang: Language;
   onNotify: (msg: string) => void;
 }) {
   const { remaining, progress } = useCountdown();
+  const code = useLiveTotpCode(secret);
   return (
     <div
       className="inspector-field"
@@ -102,11 +104,11 @@ const IsolatedInspectorTotp = memo(function IsolatedInspectorTotp({
       <div className="flex items-center gap-2.5 px-3 pb-2.5 pt-0.5">
         <TotpRing size={29} remaining={remaining} progress={progress} stroke={2.3} />
         <button
-          onClick={() => void copyText(code.replace(/\s/g, ""), onNotify, "2FA code copied")}
+          onClick={() => { if (code) void copyText(code.replace(/\s/g, ""), onNotify, "2FA code copied"); }}
           className="flex min-w-0 flex-1 items-center gap-2 text-left"
           aria-label="Copy two factor code"
         >
-          <span className="font-mono text-[18px] font-semibold tracking-[0.14em] text-main">{code}</span>
+          <span className="font-mono text-[18px] font-semibold tracking-[0.14em] text-main">{code || "••• •••"}</span>
           <Copy size={11} className="text-faint" />
         </button>
         <span className="flex h-5 w-5 items-center justify-center rounded-full text-[var(--success)]" style={{ background: "var(--success-soft)" }}>
@@ -135,6 +137,7 @@ function InspectorBody({
   onInspectSecurity: () => void;
   onRestorePassword?: (item: VaultItem, restoredPassword: string) => void;
 }) {
+  const liveTotpCode = useLiveTotpCode(item.totp);
   const [revealed, setRevealed] = useState(false);
   const [codesRevealed, setCodesRevealed] = useState(false);
   const [revealedHistoryIndex, setRevealedHistoryIndex] = useState<number | null>(null);
@@ -233,7 +236,7 @@ function InspectorBody({
           >
             <button
               onClick={() => {
-                const formatted = buildFormattedQuickCopy(item, item.totp);
+                const formatted = buildFormattedQuickCopy(item, liveTotpCode);
                 void copyText(
                   formatted,
                   onNotify,
@@ -284,7 +287,7 @@ function InspectorBody({
 
       {/* Authenticator */}
       {item.totp ? (
-        <IsolatedInspectorTotp code={item.totp} lang={lang} onNotify={onNotify} />
+        <IsolatedInspectorTotp secret={item.totp} lang={lang} onNotify={onNotify} />
       ) : (
         <button
           onClick={() => onTool?.("authenticator")}

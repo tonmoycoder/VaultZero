@@ -1,11 +1,23 @@
 import { cloneElement, isValidElement, memo, useCallback, useEffect, useId, useMemo, useRef, useState, type CSSProperties, type ReactNode } from "react";
 import { createPortal } from "react-dom";
-import { AnimatePresence, motion, useIsPresent } from "framer-motion";
+import { AnimatePresence, motion, useIsPresent, type PanInfo } from "framer-motion";
 import { Check, Copy, Timer, X } from "@phosphor-icons/react";
 import { brands, type BrandKey, type Strength } from "../lib/vault";
 import { cn } from "../utils/cn";
 import { hapticSuccess, useMotionSettings } from "./Tactile";
-import { livingFlowCollapse, livingFlowExpand, spring, useDialogFocus } from "../lib/motion";
+import {
+  spring,
+  surfaceEntranceSpring,
+  surfaceSpeedLabel,
+  useDialogFocus,
+} from "../lib/motion";
+import {
+  rubberBand,
+  shouldDismiss,
+  speedIntensity,
+  speedLabel,
+  stretchFromDelta,
+} from "../lib/gesturePhysics";
 
 export function Logo({ size = 40, showGlow = true }: { size?: number; showGlow?: boolean }) {
   return (
@@ -501,6 +513,7 @@ export function Modal({
   className,
   bodyClassName,
   footer,
+  pullDown = false,
 }: {
   onClose: () => void;
   title: ReactNode;
@@ -511,12 +524,69 @@ export function Modal({
   className?: string;
   bodyClassName?: string;
   footer?: ReactNode;
+  /** Enable pull-down-to-dismiss with elastic stretch (menus and sheets). */
+  pullDown?: boolean;
 }) {
   const ref = useRef<HTMLDivElement>(null);
+  const surfaceRef = useRef<HTMLDivElement>(null);
+  // V-59: a completed pull-down drag must not leak a click into a control
+  // inside the menu (which could close it or trigger an unrelated action).
+  const draggedRef = useRef(false);
   const titleId = useId();
   const isPresent = useIsPresent();
   const { reduceMotion } = useMotionSettings();
   useDialogFocus(ref, onClose, isPresent);
+
+  /**
+   * V-58: a pull-down menu resists progressively, deforms, and rebounds.
+   * Same physics as the inspector sheet, shared through `gesturePhysics`.
+   */
+  const clearStretch = () => {
+    const element = surfaceRef.current;
+    if (!element) return;
+    element.style.removeProperty("scale");
+    element.removeAttribute("data-elastic-state");
+    element.removeAttribute("data-rebound-speed");
+  };
+  const onDrag = (_: MouseEvent | TouchEvent | PointerEvent, info: PanInfo) => {
+    if (reduceMotion || !pullDown) return;
+    const element = surfaceRef.current;
+    if (!element) return;
+    const damp = rubberBand(Math.max(0, info.offset.y), element.getBoundingClientRect().height || 520);
+    const stretch = stretchFromDelta(0, damp);
+    draggedRef.current = true;
+    element.dataset.elasticState = "stretch";
+    element.style.scale = `${stretch.scaleX} ${stretch.scaleY}`;
+  };
+  const onDragEnd = (_: MouseEvent | TouchEvent | PointerEvent, info: PanInfo) => {
+    if (!pullDown) return;
+    const element = surfaceRef.current;
+    const velocity = Math.abs(info.velocity.y);
+    window.setTimeout(() => { draggedRef.current = false; }, 350);
+    if (Math.abs(info.offset.y) < 3 && velocity < 50) { clearStretch(); return; }
+    if (shouldDismiss(info.offset.y, info.velocity.y, 70)) {
+      if (element) element.dataset.elasticState = "dismiss";
+      onClose();
+      return;
+    }
+    if (reduceMotion || !element) { clearStretch(); return; }
+    const t = speedIntensity(velocity);
+    const overshoot = 0.006 + t * 0.026;
+    const reboundSpeed = speedLabel(velocity);
+    element.dataset.elasticState = "rebound";
+    element.dataset.reboundSpeed = reboundSpeed;
+    element.dataset.lastRebound = reboundSpeed;
+    const animation = element.animate(
+      [
+        { scale: element.style.scale || "1 1" },
+        { scale: `${1 + overshoot} ${1 - overshoot}`, offset: 0.45 },
+        { scale: "1 1" },
+      ],
+      { duration: Math.round(250 + t * 270), easing: "cubic-bezier(.22,1,.36,1)" },
+    );
+    animation.onfinish = clearStretch;
+    animation.oncancel = clearStretch;
+  };
 
   return createPortal(
     <motion.div
@@ -536,21 +606,32 @@ export function Modal({
       aria-labelledby={titleId}
     >
       <motion.div
+        ref={surfaceRef}
+        data-elastic={pullDown ? "pull-down" : "surface"}
+        data-surface-speed={surfaceSpeedLabel()}
         initial={{ y: reduceMotion ? 0 : 24, scale: reduceMotion ? 1 : 0.97 }}
         animate={{ y: 0, scale: 1 }}
-        exit={{ y: reduceMotion ? 0 : 16, scale: reduceMotion ? 1 : 0.97, transition: reduceMotion ? { duration: 0 } : livingFlowCollapse }}
+        exit={{ y: reduceMotion ? 0 : 16, scale: reduceMotion ? 1 : 0.97, transition: reduceMotion ? { duration: 0 } : surfaceEntranceSpring(false, "close") }}
         /*
-         * UX / "Living Flow": the modal used to use the soft spring, whose
-         * damping is high enough that the surface never overshoots — it
-         * slid into place and stopped, which reads as a plain transition.
-         *
-         * The product's motion language is the ColorOS spring, and the
-         * constants for it already existed in `lib/motion.ts` but were
-         * never used here. The modal is the surface a user opens most
-         * often, so it is the one that has to carry the signature bounce:
-         * the sheet comes up, overshoots very slightly, and settles.
+         * UX / "Living Flow" (V-58): open and close springs are now chosen
+         * from the gesture speed that triggered them. A gentle tap settles
+         * softly; a fast one overshoots. Both are under-damped, so the
+         * surface actually bounces instead of sliding to a dead stop.
          */
-        transition={reduceMotion ? { duration: 0 } : livingFlowExpand}
+        transition={reduceMotion ? { duration: 0 } : surfaceEntranceSpring(false, "open")}
+        drag={pullDown && !reduceMotion ? "y" : false}
+        dragConstraints={{ top: 0, bottom: 0 }}
+        dragElastic={{ top: 0, bottom: 0.55 }}
+        dragSnapToOrigin
+        dragTransition={{ bounceStiffness: 420, bounceDamping: 18, timeConstant: 180 }}
+        onDrag={onDrag}
+        onDragEnd={onDragEnd}
+        onClickCapture={(event) => {
+          if (!draggedRef.current) return;
+          event.preventDefault();
+          event.stopPropagation();
+          draggedRef.current = false;
+        }}
         className={cn(
           "glass-strong modal-surface flex max-h-[92dvh] w-full flex-col overflow-hidden rounded-t-[28px] sm:rounded-[26px]",
           width,

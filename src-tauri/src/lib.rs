@@ -230,6 +230,31 @@ pub mod commands {
         // and letting it shell out would mean trusting a path that
         // crossed the IPC boundary. The path was built in this
         // function, so opening it here is both simpler and safer.
+        /*
+         * V-63 — download -> install -> restart, with no data loss.
+         *
+         * On Windows the verified installer is launched on a background
+         * thread with `start /wait`. When it exits, `AppHandle::restart()`
+         * starts the freshly installed build. The vault lives in the app
+         * data directory (never inside the install directory), so the
+         * installer cannot overwrite it; `restorePreUpdateBackupIfNeeded()`
+         * on the frontend is the second layer of protection.
+         *
+         * On other platforms the file is handed to the OS synchronously;
+         * Android keeps it on disk because an APK cannot be installed from
+         * a plain file path.
+         */
+        #[cfg(target_os = "windows")]
+        {
+            let handle = app.clone();
+            let installer = target.clone();
+            std::thread::spawn(move || {
+                let _ = open_artifact(&installer);
+                handle.restart();
+            });
+        }
+
+        #[cfg(not(target_os = "windows"))]
         open_artifact(&target)?;
 
         Ok(target.to_string_lossy().to_string())
@@ -303,6 +328,15 @@ pub mod commands {
     /// carries an argument that could be interpreted as an option by the
     /// launcher. The launcher is still invoked without a shell, so the
     /// file name cannot be expanded into a command.
+    #[cfg(target_os = "android")]
+    fn open_artifact(_path: &std::path::Path) -> Result<(), String> {
+        // Android has no `xdg-open` and an APK cannot be silently installed
+        // from a plain path. The verified APK stays in the app data dir and
+        // the frontend surfaces its path to the user.
+        Ok(())
+    }
+
+    #[cfg(not(target_os = "android"))]
     fn open_artifact(path: &std::path::Path) -> Result<(), String> {
         use std::process::Command;
 
@@ -313,7 +347,11 @@ pub mod commands {
             // the default handler on Windows. The empty string is the
             // window title, which `start` would otherwise take from the
             // first argument.
-            c.arg("/c").arg("start").arg("").arg(path);
+            // `/wait` blocks until the NSIS installer exits. It runs on a
+            // background thread (see `save_update_artifact`), so the UI is
+            // never frozen and the app restarts only after its files have
+            // actually been replaced.
+            c.arg("/c").arg("start").arg("/wait").arg("").arg(path);
             c
         };
 
@@ -337,17 +375,27 @@ pub mod commands {
             return Err("Opening the update artifact is not supported on this platform.".into());
         }
 
-        // The launcher must not wait for the application the user is
-        // about to install, and it must not inherit the terminal.
+        // The launcher must not inherit the terminal. On Windows it uses
+        // `start /wait`, so the caller can restart VaultZero only AFTER the
+        // installer has finished replacing its files.
         command
             .stdin(std::process::Stdio::null())
             .stdout(std::process::Stdio::null())
             .stderr(std::process::Stdio::null());
 
-        command
+        #[cfg(target_os = "windows")]
+        let result = command
+            .status()
+            .map(|_| ())
+            .map_err(|e| format!("The update artifact could not be opened: {}", e));
+
+        #[cfg(not(target_os = "windows"))]
+        let result = command
             .spawn()
             .map(|_| ())
-            .map_err(|e| format!("The update artifact could not be opened: {}", e))
+            .map_err(|e| format!("The update artifact could not be opened: {}", e));
+
+        result
     }
 
     #[tauri::command]

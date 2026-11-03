@@ -108,18 +108,25 @@ test.describe("VaultZero Architectural Hardening & Cryptographic Gate", () => {
     await expect(page.getByRole("button", { name: "Export selected" })).toBeVisible();
   });
 
-  test("Inspector exhibits Password History time-machine with restore capability", async ({ page }) => {
+  test("V-51: a fresh vault ships exactly one password; history is earned by a real edit", async ({ page }) => {
     await page.goto("/?unlocked=true");
-    // Click demo card to open inspector
     await page.locator('[data-item-id="demo-account"]').click();
-    await expect(page.getByTestId("detail-inspector")).toBeVisible();
+    const inspector = page.getByTestId("detail-inspector");
+    await expect(inspector).toBeVisible();
 
-    // Inspect Password History section
-    await expect(page.getByText("Password history")).toBeVisible();
-    await expect(page.getByRole("button", { name: "Restore" })).toBeVisible();
+    // The single demo entry must not carry a second seeded demo password.
+    await expect(inspector.getByText("Password history")).toBeVisible();
+    await expect(inspector.getByText("No prior passwords recorded")).toBeVisible();
+    await expect(inspector.getByRole("button", { name: "Restore" })).toHaveCount(0);
 
-    // Restore previous password
-    await page.getByRole("button", { name: "Restore" }).first().click();
+    // A genuine password change creates real history, and restore works.
+    await inspector.getByRole("button", { name: "Edit this item" }).click();
+    const dialog = page.getByRole("dialog", { name: "Edit vault item" });
+    await dialog.getByPlaceholder("Enter a strong password").fill("Fresh-Real-Pass!2026");
+    await dialog.getByRole("button", { name: "Save changes", exact: true }).click();
+    await expect(dialog).toHaveCount(0);
+    await expect(inspector.getByRole("button", { name: "Restore" })).toHaveCount(1);
+    await inspector.getByRole("button", { name: "Restore" }).first().click();
     await expect(page.getByText("Previous password restored")).toBeVisible();
   });
 
@@ -138,11 +145,15 @@ test.describe("VaultZero Architectural Hardening & Cryptographic Gate", () => {
      */
     await expect(dialog.getByText("Waiting for peer selection…")).toBeVisible();
 
-    // Verify Clean QR code without center logo
-    const qrSvg = dialog.locator("svg").first();
-    await expect(qrSvg).toBeVisible();
-    // Center logo image is not present inside QR
-    await expect(qrSvg.locator("image")).toHaveCount(0);
+    /*
+     * V-52: the QR used to advertise a hardcoded 192.168.1.103:1420 before
+     * any host existed — a fake pairing target. A live QR is only shown once
+     * the native host reports its real (ephemeral) port. In the browser the
+     * native command is unsupported, so the honest placeholder is shown and
+     * NO misleading QR is rendered.
+     */
+    await expect(dialog.getByText(/Start the encrypted host to generate a live pairing QR/)).toBeVisible();
+    await expect(dialog.getByRole("img", { name: "VaultZero Pairing QR Code" })).toHaveCount(0);
 
     /*
      * Host info.
@@ -166,7 +177,7 @@ test.describe("VaultZero Architectural Hardening & Cryptographic Gate", () => {
      * The example PIN is a shape, not a value — the real code is random on
      * every launch, so no particular number can be asserted.
      */
-    await expect(dialog.getByPlaceholder(/192\.168\.1\.103:1420 or \d{6}/)).toBeVisible();
+    await expect(dialog.getByPlaceholder(/10\.0\.0\.5:52137\/123456 or \d{6}/)).toBeVisible();
   });
 
   test("Panic auto-lock on Ctrl+L wipes session and returns to LockScreen", async ({ page }) => {
