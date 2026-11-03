@@ -1,3 +1,4 @@
+import { isSafeVaultUrl } from "./url";
 import {
   siApple,
   siDropbox,
@@ -9,7 +10,7 @@ import {
   siSpotify,
   siX,
 } from "simple-icons";
-import { APP_VERSION, compareSemver } from "./version";
+import { APP_VERSION } from "./version";
 
 export type Theme = "light" | "dark" | "lofi";
 export type Language = "en" | "bn";
@@ -132,15 +133,38 @@ export type VaultItem = {
   passwordHistory?: PasswordHistoryEntry[];
 };
 
+/**
+ * Builds the text produced by the "Copy all" quick-copy action.
+ *
+ * SECURITY (V-30): this bundle deliberately **omits the TOTP setup secret**
+ * and the **recovery codes**.
+ *
+ * The setup secret is the seed the authenticator app is built from. It never
+ * rotates, so leaking it hands an attacker a permanent 2FA bypass for that
+ * account — strictly worse than leaking the password, because changing the
+ * password does not help. Pasting a "copy all" bundle into a support chat,
+ * a password manager, or a spreadsheet is exactly the kind of routine action
+ * that leaks secrets, and a TOTP seed must never ride along with it.
+ *
+ * The recovery codes have the same problem in reverse: they are the user's
+ * fallback when the authenticator is lost, and a bundle containing them
+ * defeats that fallback.
+ *
+ * Both are available through their own explicit, individually-confirmed
+ * actions in the inspector.
+ */
 export const buildFormattedQuickCopy = (item: VaultItem, currentTotpCode?: string): string => {
+  // SECURITY: a `javascript:` or `data:` URL must never reach the
+  // clipboard — the user would paste it into a browser and run it. The URL
+  // is dropped rather than rewritten, so a legitimate `github.com` is
+  // still copied exactly as stored.
+  const safeUrl = isSafeVaultUrl(item.url) ? item.url : "";
   const lines: string[] = [
     `Account: ${item.title}`,
-    item.url ? `Website: ${item.url}` : "",
+    safeUrl ? `Website: ${safeUrl}` : "",
     item.username ? `Username / Email: ${item.username}` : "",
     item.password ? `Password: ${item.password}` : "",
     currentTotpCode || item.totp ? `2FA Code (TOTP): ${currentTotpCode || item.totp}` : "",
-    (item as any).totpSecret ? `2FA Setup Key: ${(item as any).totpSecret}` : "",
-    item.recoveryCodes?.length ? `Recovery Codes: ${item.recoveryCodes.join(", ")}` : "",
     item.note || (item as any).notes ? `Notes: ${item.note || (item as any).notes}` : "",
     item.folder ? `Folder: ${item.folder}` : "",
   ].filter(Boolean);
@@ -437,26 +461,46 @@ export function copyWithAutoClear(text: string, onNotify?: (msg: string) => void
   }, seconds * 1000);
 }
 
-export async function checkGitHubUpdate(currentVersion = APP_VERSION): Promise<{ hasUpdate: boolean; latestVersion?: string; downloadUrl?: string } | null> {
-  try {
-    const res = await fetch("https://api.github.com/repos/tonmoycoder/VaultZero/releases/latest", {
-      headers: { Accept: "application/vnd.github.v3+json" },
-    });
-    if (!res.ok) return null;
-    const data = await res.json();
-    const tag = data.tag_name;
-    if (tag && compareSemver(tag, currentVersion) > 0) {
-      const exeAsset = (data.assets || []).find((a: any) => typeof a.name === "string" && a.name.endsWith(".exe"));
-      return {
-        hasUpdate: true,
-        latestVersion: tag,
-        downloadUrl: exeAsset ? exeAsset.browser_download_url : data.html_url,
-      };
-    }
-    return { hasUpdate: false };
-  } catch {
-    return null;
+/**
+ * Checks GitHub for a newer release.
+ *
+ * This used to be a third, independent update check. The banner, the modal
+ * and this function each fetched the release list on their own, so the app
+ * made three identical requests to the GitHub API on every start and the
+ * three could disagree — the banner could show an update the modal
+ * reported as up to date.
+ *
+ * The check now lives in `lib/updater.ts`, which owns the whole update
+ * contract: the trusted-host allowlist, the checksum verification and the
+ * artifact selection. This wrapper keeps the old call shape for the
+ * existing callers and simply forwards to the shared implementation.
+ *
+ * The release page is never returned as a download URL. It is a web page
+ * that links to several files, so it cannot be checksum-verified.
+ */
+export async function checkGitHubUpdate(
+  currentVersion = APP_VERSION
+): Promise<{ hasUpdate: boolean; latestVersion?: string; downloadUrl?: string } | null> {
+  const { checkReleaseStatus, compareSemver, selectDownloadableAsset } = await import("./updater");
+  const result = await checkReleaseStatus();
+  if (result.status !== "update_available") {
+    return result.status === "up_to_date" ? { hasUpdate: false } : null;
   }
+
+  // The shared check compares against the running build. A caller that asks
+  // about a different version gets the answer for that version, so the
+  // comparison stays correct instead of being ignored.
+  const remoteVersion = result.remoteVersion ?? "";
+  if (!remoteVersion || compareSemver(remoteVersion, currentVersion) <= 0) {
+    return { hasUpdate: false };
+  }
+
+  const asset = selectDownloadableAsset(result.updateInfo);
+  return {
+    hasUpdate: true,
+    latestVersion: remoteVersion,
+    downloadUrl: asset?.browser_download_url,
+  };
 }
 
 export * from "./storage";

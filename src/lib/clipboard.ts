@@ -34,22 +34,21 @@ export async function copySecure(
       if (timeoutMs > 0 && typeof window !== "undefined") {
         activeWipeTimer = window.setTimeout(async () => {
           try {
-            // Attempt to check if clipboard still holds the sensitive text before clearing
+            // Only wipe the clipboard if it still holds the sensitive text we
+            // copied. Blindly clearing it would destroy an unrelated value
+            // the user copied in the meantime (a real data-loss bug).
             if (navigator.clipboard?.readText) {
               const current = await navigator.clipboard.readText();
               if (current === lastCopiedValue) {
                 await navigator.clipboard.writeText("");
               }
-            } else {
-              await navigator.clipboard.writeText("");
             }
+            // If `readText` is unavailable we cannot verify ownership, so we
+            // deliberately leave the clipboard alone rather than risk wiping
+            // unrelated data.
           } catch {
-            // Read permission might be blocked; overwrite directly
-            try {
-              await navigator.clipboard.writeText("");
-            } catch {
-              // Ignore failure in restricted context
-            }
+            // Read permission might be blocked — leave the clipboard as-is
+            // rather than risk destroying unrelated data.
           } finally {
             lastCopiedValue = null;
             activeWipeTimer = null;
@@ -83,13 +82,39 @@ export async function copySecure(
 }
 
 /**
- * Immediately cancels any active auto-wipe timer and wipes clipboard.
+ * Immediately cancels any active auto-wipe timer **and scrubs the clipboard**.
+ *
+ * SECURITY (V-06): this is called when the vault auto-locks. Previously the
+ * function only cancelled the pending timer and cleared the in-memory
+ * bookkeeping, leaving the copied secret sitting in the system clipboard for
+ * the next person at the machine to paste.
+ *
+ * We only overwrite the clipboard if it still holds the value *we* copied.
+ * If the user copied something else in the meantime, overwriting it would
+ * destroy unrelated data.
  */
 export async function clearClipboardWipe(): Promise<void> {
   if (activeWipeTimer !== null && typeof window !== "undefined") {
     window.clearTimeout(activeWipeTimer);
     activeWipeTimer = null;
   }
+
+  const expected = lastCopiedValue;
   lastCopiedValue = null;
+
+  if (!expected || typeof navigator === "undefined" || !navigator.clipboard?.writeText) {
+    return;
+  }
+
+  try {
+    if (navigator.clipboard?.readText) {
+      const current = await navigator.clipboard.readText();
+      // Only wipe if the clipboard still holds our secret.
+      if (current !== expected) return;
+    }
+    await navigator.clipboard.writeText("");
+  } catch {
+    // Clipboard read/write permission may be denied. Best effort only.
+  }
 }
 

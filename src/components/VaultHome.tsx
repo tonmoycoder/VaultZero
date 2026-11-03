@@ -24,6 +24,7 @@ import {
 } from "@phosphor-icons/react";
 import { IconShieldCheck } from "@tabler/icons-react";
 import { useEffect, useId, useMemo, useRef, useState, memo } from "react";
+import { useVirtualList } from "../lib/useVirtualList";
 import { AnimatePresence, LayoutGroup, motion } from "framer-motion";
 import {
   brands,
@@ -35,6 +36,7 @@ import {
   type VaultItem,
 } from "../lib/vault";
 import { cn } from "../utils/cn";
+import { sanitizeVaultUrl } from "../lib/url";
 import { BrandMark, CopyButton, Logo, SectionLabel, Tooltip, useCountdown, TotpRing } from "./ui";
 import LofiPlayer from "./LofiPlayer";
 import TextSizeControl from "./TextSize";
@@ -240,10 +242,27 @@ function SecurityHealth({
   );
 }
 
-function LocalTotpRing({ size = 22, stroke = 2 }: { size?: number; stroke?: number }) {
+/**
+ * A TOTP ring that re-renders on its own.
+ *
+ * PERFORMANCE: the ring used to call `useCountdown()` inside the card, so
+ * every card that had two-factor enabled re-rendered **once per second**,
+ * together with its title, username and strength row.
+ *
+ * The countdown state now lives inside this `memo`ised component, so the
+ * second-by-second update only re-renders the small SVG and never the card.
+ * The vault list itself stays completely still.
+ */
+const LocalTotpRing = memo(function LocalTotpRing({
+  size = 22,
+  stroke = 2,
+}: {
+  size?: number;
+  stroke?: number;
+}) {
   const { remaining, progress } = useCountdown();
   return <TotpRing size={size} remaining={remaining} progress={progress} stroke={stroke} />;
-}
+});
 
 const ItemCard = memo(function ItemCard({
   item,
@@ -372,13 +391,16 @@ const ItemCard = memo(function ItemCard({
               type="button"
               onClick={(e) => {
                 e.stopPropagation();
-                const url = item.url
-                  ? item.url.startsWith("http")
-                    ? item.url
-                    : `https://${item.url}`
-                  : null;
+                // SECURITY: sanitise before opening. A `javascript:` or
+                // `data:` URL stored in an imported entry must never be
+                // handed to `window.open`.
+                const url = sanitizeVaultUrl(item.url);
                 if (url) window.open(url, "_blank", "noopener,noreferrer");
-                else onNotify("No website URL attached");
+                else onNotify(
+                  item.url
+                    ? "That link uses an unsupported address and was blocked"
+                    : "No website URL attached"
+                );
               }}
               className="flex h-6 w-6 items-center justify-center rounded-full text-faint transition-colors hover:bg-[var(--hover-strong)] hover:text-main"
               aria-label="Launch website"
@@ -396,7 +418,7 @@ const ItemCard = memo(function ItemCard({
                 navigator.clipboard.writeText(item.username);
                 onNotify(lang === "bn" ? "ইউজারনেম কপি হয়েছে" : "Username copied");
               }}
-              className="flex h-6 w-6 items-center justify-center rounded-full text-faint transition-all opacity-70 sm:opacity-0 sm:group-hover:opacity-100 focus:opacity-100 hover:bg-[var(--hover-strong)] hover:text-main"
+              className="reveal-on-hover flex h-6 w-6 items-center justify-center rounded-full text-faint hover:bg-[var(--hover-strong)] hover:text-main"
               aria-label="Copy username"
             >
               <User size={13} weight="duotone" />
@@ -412,7 +434,7 @@ const ItemCard = memo(function ItemCard({
                   e.stopPropagation();
                   onEdit();
                 }}
-                className="flex h-6 w-6 items-center justify-center rounded-full text-faint transition-all opacity-70 sm:opacity-0 sm:group-hover:opacity-100 focus:opacity-100 hover:bg-[var(--hover-strong)] hover:text-main"
+                className="reveal-on-hover flex h-6 w-6 items-center justify-center rounded-full text-faint hover:bg-[var(--hover-strong)] hover:text-main"
                 aria-label="Edit item"
               >
                 <PencilSimple size={13} weight="duotone" />
@@ -429,7 +451,7 @@ const ItemCard = memo(function ItemCard({
                   e.stopPropagation();
                   onDelete();
                 }}
-                className="flex h-6 w-6 items-center justify-center rounded-full text-faint transition-all opacity-70 sm:opacity-0 sm:group-hover:opacity-100 focus:opacity-100 hover:bg-[var(--danger-soft)] hover:text-[var(--danger)]"
+                className="reveal-on-hover flex h-6 w-6 items-center justify-center rounded-full text-faint hover:bg-[var(--danger-soft)] hover:text-[var(--danger)]"
                 aria-label="Delete item"
               >
                 <Trash size={13} weight="duotone" />
@@ -456,8 +478,21 @@ const ItemCard = memo(function ItemCard({
         </div>
       </div>
 
-      {/* Main Body */}
-      <div className={cn("relative z-10 mt-auto pt-3", featured && "sm:flex sm:items-end sm:gap-3")}>
+      {/*
+        Main Body.
+
+        UX: the featured card laid its two halves out with `sm:flex
+        sm:items-end`, so the title block and the 2FA panel were
+        bottom-aligned. The 2FA panel is a tall block (a label row, a big
+        six-digit code, and a footnote), so bottom-aligning pushed the title
+        and the password row up against the panel and left the password
+        row's strength label ("Strong") and its dot visually colliding with
+        the panel's rounded corner.
+
+        `sm:items-start` keeps both halves anchored to the top, which is
+        where the eye starts, and the password row keeps its own space.
+      */}
+      <div className={cn("relative z-10 mt-auto pt-3", featured && "sm:flex sm:items-start sm:gap-4")}>
         <div className="min-w-0 flex-1">
           <div className="flex items-start justify-between gap-2">
             <div className="min-w-0">
@@ -485,10 +520,20 @@ const ItemCard = memo(function ItemCard({
               </span>
               <CopyButton value={item.password} label="Password" onCopied={onNotify} />
             </div>
-            <div className="flex shrink-0 items-center gap-1.5">
-              <span className="flex items-center gap-1">
-                <span className="h-1.5 w-1.5 rounded-full" style={{ background: strength.color }} />
-                <span className="hidden text-[8px] font-medium sm:inline" style={{ color: strength.color }}>
+            <div className="flex shrink-0 items-center gap-2">
+              {/*
+                The strength dot is `inline-block` with a matching line
+                height so it sits on the text baseline instead of floating
+                above it. `gap-1` plus `leading-none` used to let the dot
+                overlap the first letter of the label.
+              */}
+              <span className="flex items-center gap-1 leading-none">
+                <span
+                  className="inline-block h-1.5 w-1.5 shrink-0 rounded-full align-middle"
+                  style={{ background: strength.color }}
+                  aria-hidden="true"
+                />
+                <span className="hidden whitespace-nowrap text-[8px] font-medium sm:inline" style={{ color: strength.color }}>
                   {t(lang, strength.labelKey)}
                 </span>
               </span>
@@ -811,6 +856,26 @@ export default function VaultHome({
     return list;
   }, [items, sortMode]);
 
+  // PERFORMANCE (V-37): windowing for very large vaults.
+  //
+  // Below the threshold the bento grid is kept — it is the nicer experience
+  // and the cost is negligible for a realistic vault. Above it, only the
+  // rows near the viewport are rendered.
+  const VIRTUALIZE_THRESHOLD = 150;
+  const VIRTUAL_ROW_ESTIMATE = 132; // px, the average card height
+  const virtualizationActive = sortedItems.length > VIRTUALIZE_THRESHOLD;
+
+  const { ref: virtualListRef, window: virtualWindow } = useVirtualList(
+    sortedItems.length,
+    VIRTUAL_ROW_ESTIMATE
+  );
+
+  const visibleItems = useMemo(() => {
+    if (!virtualizationActive) return sortedItems;
+    return sortedItems.slice(virtualWindow.startIndex, virtualWindow.endIndex);
+  }, [sortedItems, virtualizationActive, virtualWindow.startIndex, virtualWindow.endIndex]);
+
+
   // Grouped by folder if sortMode is "folder"
   const folderGroups = useMemo(() => {
     if (sortMode !== "folder") return null;
@@ -1084,10 +1149,34 @@ export default function VaultHome({
           </div>
         ) : (
           // Standard Grid
-          <div className="vault-bento grid grid-cols-1 gap-3 sm:grid-cols-2 2xl:grid-cols-3 pt-2 pb-3 overflow-visible">
+          //
+          // PERFORMANCE (V-37): the grid used to render one `ItemCard` per
+          // entry with no upper bound, so a 10,000-entry vault created
+          // 10,000 card subtrees and every keystroke in the search box
+          // re-rendered all of them.
+          //
+          // Above {@link VIRTUALIZE_THRESHOLD} entries the grid is replaced
+          // by a windowed single-column list that renders only the rows near
+          // the viewport. Below the threshold the rich bento grid is kept,
+          // because its multi-column layout is the nicer experience for the
+          // vault sizes most people actually have.
+          <div
+            ref={virtualizationActive ? virtualListRef : undefined}
+            className={cn(
+              "pt-2 pb-3",
+              virtualizationActive
+                ? "thin-scrollbar overflow-y-auto"
+                : "vault-bento grid grid-cols-1 gap-3 sm:grid-cols-2 2xl:grid-cols-3 overflow-visible"
+            )}
+            style={virtualizationActive ? { maxHeight: "70vh" } : undefined}
+          >
+            {virtualizationActive && virtualWindow.paddingTop > 0 && (
+              <div style={{ height: virtualWindow.paddingTop }} aria-hidden="true" />
+            )}
             <AnimatePresence initial={false} mode="popLayout">
-              {sortedItems.map((item, index) => {
+              {visibleItems.map((item, index) => {
                 const featured =
+                  !virtualizationActive &&
                   active === "all" &&
                   !folder &&
                   !query &&
@@ -1125,6 +1214,9 @@ export default function VaultHome({
                 );
               })}
             </AnimatePresence>
+            {virtualizationActive && virtualWindow.paddingBottom > 0 && (
+              <div style={{ height: virtualWindow.paddingBottom }} aria-hidden="true" />
+            )}
           </div>
         )}
 

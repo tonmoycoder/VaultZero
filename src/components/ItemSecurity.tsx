@@ -58,8 +58,14 @@ export default function ItemSecurity({
   const handleBreachScan = async () => {
     setScanning(true);
     try {
+      // SECURITY (V-18): the online lookup is opt-in and shared across the
+      // whole app. When it is off, `checkPasswordBreach` stays entirely
+      // local — it checks the bundled breach dictionary and returns without
+      // touching the network.
       const res = await checkPasswordBreach(item.password, "en");
       setBreachResult(res);
+    } catch {
+      setBreachResult(null);
     } finally {
       setScanning(false);
     }

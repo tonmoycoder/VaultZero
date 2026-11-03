@@ -109,4 +109,3 @@ impl Zeroize for LockedBuffer {
 }
 
 impl ZeroizeOnDrop for LockedBuffer {}
-

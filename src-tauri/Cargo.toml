@@ -24,6 +24,8 @@ mdns-sd = "0.13"
 tokio-tungstenite = "0.26"
 futures-util = "0.3"
 subtle = "2.5"
+rmp-serde = "1.3"
+x25519-dalek = { version = "2.0", default-features = false, features = ["static_secrets", "getrandom"] }
 
 [target.'cfg(windows)'.dependencies]
 windows-sys = { version = "0.59", features = [

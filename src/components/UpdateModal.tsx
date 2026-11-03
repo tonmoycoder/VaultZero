@@ -6,6 +6,7 @@ import {
   LockSimple,
   ShieldCheck,
   Sparkle,
+  Warning,
   WarningCircle,
 } from "@phosphor-icons/react";
 import { useState, useEffect } from "react";
@@ -13,10 +14,15 @@ import {
   checkReleaseStatus,
   createPreUpdateBackup,
   CURRENT_APP_VERSION,
+  openVerifiedUpdate,
+  runVerifiedUpdate,
   type CheckReleaseStatus,
   type UpdateInfo,
+  type UpdateProgress,
+  type UpdateStage,
 } from "../lib/updater";
 import { Modal } from "./ui";
+import { stageLabel } from "../lib/updateStage";
 import type { Language } from "../lib/vault";
 
 export default function UpdateModal({
@@ -48,11 +54,20 @@ export default function UpdateModal({
   const [loading, setLoading] = useState(false);
   const [downloading, setDownloading] = useState(false);
   const [progress, setProgress] = useState(0);
+  // The stage of the verified update, so the progress bar tells the truth
+  // about what is happening instead of animating on a timer.
+  const [stage, setStage] = useState<UpdateStage>("idle");
+  const [verificationError, setVerificationError] = useState<string | null>(null);
+  // SECURITY (V-32): the digest the artifact was actually verified
+  // against. Shown to the user so the check is visible, not implicit.
+  const [verifiedDigest, setVerifiedDigest] = useState<string | null>(null);
 
   const performCheck = async () => {
     setLoading(true);
     try {
-      const res = await checkReleaseStatus();
+      // The button always asks for a fresh answer, so the shared cache is
+      // bypassed here.
+      const res = await checkReleaseStatus(true);
       setStatusState(res);
       if (res.status === "up_to_date") {
         onNotify?.(
@@ -78,47 +93,74 @@ export default function UpdateModal({
     }
   }, []);
 
-  const handleStartUpdate = () => {
-    const backupKey = createPreUpdateBackup();
-    onNotify?.(
-      lang === "bn"
-        ? `প্রি-আপডেট নিরাপত্তা ব্যাকআপ সংরক্ষিত: ${backupKey}`
-        : `Pre-update safety snapshot saved: ${backupKey}`
-    );
+  /**
+   * SECURITY (V-32): the update is only handed to the user after the
+   * artifact's SHA-256 has been verified against the checksum manifest of
+   * the same release.
+   *
+   * The banner and this modal used to be two separate flows, and only this
+   * one verified the artifact. The banner opened the download URL directly,
+   * so the checksum guarantee the README advertises did not hold on the
+   * path a user is most likely to take. Both now go through
+   * `runVerifiedUpdate`, which is fail-closed at every step and reports the
+   * real download progress.
+   */
+  const handleStartUpdate = async () => {
+    const info = statusState.updateInfo;
+    if (!info) return;
 
     setDownloading(true);
-    setProgress(15);
+    setProgress(0);
+    setVerificationError(null);
+    setVerifiedDigest(null);
+    setStage("snapshot");
 
-    const int = setInterval(() => {
-      setProgress((prev) => {
-        if (prev >= 95) {
-          clearInterval(int);
-          return 95;
-        }
-        return prev + 25;
+    try {
+      const verified = await runVerifiedUpdate(info, (update: UpdateProgress) => {
+        setStage(update.stage);
+        setProgress(update.percent);
       });
-    }, 250);
 
-    setTimeout(() => {
-      clearInterval(int);
+      const backupKey = createPreUpdateBackup();
+      if (backupKey) {
+        onNotify?.(
+          lang === "bn"
+            ? `প্রি-আপডেট নিরাপত্তা ব্যাকআপ সংরক্ষিত: ${backupKey}`
+            : `Pre-update safety snapshot saved: ${backupKey}`
+        );
+      }
+
       setProgress(100);
-      setDownloading(false);
-
-      const downloadUrl =
-        statusState.updateInfo?.installerAsset?.browser_download_url ||
-        statusState.updateInfo?.portableAsset?.browser_download_url ||
-        statusState.updateInfo?.androidAsset?.browser_download_url ||
-        statusState.updateInfo?.htmlUrl ||
-        "https://github.com/tonmoycoder/VaultZero/releases/latest";
-
-      window.open(downloadUrl, "_blank", "noopener,noreferrer");
+      setStage("done");
+      setVerifiedDigest(verified.sha256);
+      /*
+       * The native build already handed the verified file to the
+       * operating system, so opening it again here would launch a
+       * second copy of the installer. The browser build has to open the
+       * object URL itself.
+       */
+      await openVerifiedUpdate(verified);
 
       onNotify?.(
         lang === "bn"
-          ? "আপডেট প্যাকেজ ডাউনলোড হচ্ছে। ইনস্টল শেষে পুনরায় চালু করুন।"
-          : "Update package downloaded. Complete installer to apply changes."
+          ? "আপডেট প্যাকেজ যাচাই করা হয়েছে। ইনস্টল শেষে পুনরায় চালু করুন।"
+          : "Update package verified against its published checksum. Complete the installer to apply changes."
       );
-    }, 1400);
+    } catch (error: any) {
+      setProgress(0);
+      setStage("failed");
+      const reason = error?.message || "The update could not be verified.";
+      setVerificationError(
+        lang === "bn" ? `আপডেট যাচাই করা যায়নি: ${reason}` : `The update could not be verified: ${reason}`
+      );
+      onNotify?.(
+        lang === "bn"
+          ? "আপডেট চেকসাম যাচাই ব্যর্থ — ডাউনলোড বন্ধ করা হয়েছে।"
+          : "Update checksum verification failed — the download was blocked."
+      );
+    } finally {
+      setDownloading(false);
+    }
   };
 
   return (
@@ -212,6 +254,36 @@ export default function UpdateModal({
           </div>
         )}
 
+        {verificationError && (
+          <div
+            role="alert"
+            className="mb-3 rounded-[14px] border border-[var(--danger)] bg-[var(--danger-soft)] px-3 py-2.5 text-left text-[10.5px] font-medium text-danger"
+          >
+            <div className="flex items-start gap-2">
+              <Warning size={15} weight="fill" className="mt-px shrink-0" />
+              <span>{verificationError}</span>
+            </div>
+          </div>
+        )}
+
+        {/* SECURITY (V-32): show the digest the artifact was verified
+            against, so the check is visible rather than implied. */}
+        {verifiedDigest && (
+          <div
+            className="mb-3 flex items-start gap-2 rounded-[14px] border border-[var(--success)] bg-[var(--success-soft)] px-3 py-2.5 text-left"
+          >
+            <ShieldCheck size={15} weight="fill" className="mt-px shrink-0 text-success" />
+            <div className="min-w-0">
+              <p className="text-[10.5px] font-semibold text-success">
+                {lang === "bn" ? "চেকসাম যাচাই সম্পন্ন" : "Checksum verified"}
+              </p>
+              <p className="mt-0.5 break-all font-mono text-[8.5px] leading-[1.4] text-muted">
+                SHA-256 {verifiedDigest}
+              </p>
+            </div>
+          </div>
+        )}
+
         {/* State 2: Update Available Card */}
         {statusState.status === "update_available" && statusState.updateInfo && (
           <div className="rounded-[18px] border border-[var(--accent)] bg-[var(--accent-soft)] p-4 text-left animate-rise">
@@ -244,7 +316,7 @@ export default function UpdateModal({
             {downloading && (
               <div className="mt-3.5 space-y-1.5">
                 <div className="flex justify-between text-[8px] font-semibold text-muted">
-                  <span>{lang === "bn" ? "ডাউনলোড ও প্রস্তুতি..." : "Downloading update..."}</span>
+                  <span>{stageLabel(stage, lang)}</span>
                   <span>{progress}%</span>
                 </div>
                 <div className="h-2 w-full overflow-hidden rounded-full bg-[var(--border-soft)]">
@@ -267,7 +339,7 @@ export default function UpdateModal({
 
               <button
                 type="button"
-                onClick={handleStartUpdate}
+                onClick={() => void handleStartUpdate()}
                 disabled={downloading}
                 className="primary-button flex h-9 items-center gap-1.5 rounded-full px-5 text-[11px] font-semibold shadow-md shadow-[var(--accent-glow)]"
               >

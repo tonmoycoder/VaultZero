@@ -1,0 +1,5 @@
+=== node version ===
+v20.20.2
+=== script output ===
+23 Rust file(s) are correctly formatted.
+=== script exit: 0 ===

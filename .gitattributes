@@ -1,0 +1,41 @@
+# The line endings are pinned, so that the source is the same everywhere.
+#
+# Rust is formatted with `rustfmt`, and `rustfmt` writes Unix line
+# endings. A checkout on Windows would otherwise turn the source into
+# CRLF, the formatter would then produce a different file, and the
+# formatting gate would fail on a source that nobody had touched. The
+# gate is supposed to report a formatting difference, not a difference
+# in the line endings, so the endings are pinned here.
+
+*.rs text eol=lf
+*.toml text eol=lf
+*.ts text eol=lf
+*.tsx text eol=lf
+*.js text eol=lf
+*.jsx text eol=lf
+*.mjs text eol=lf
+*.cjs text eol=lf
+*.json text eol=lf
+*.md text eol=lf
+*.yml text eol=lf
+*.yaml text eol=lf
+*.css text eol=lf
+*.html text eol=lf
+*.sh text eol=lf
+*.ps1 text eol=crlf
+
+# The assets are binary and must not be touched.
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.webp binary
+*.ico binary
+*.woff binary
+*.woff2 binary
+*.ttf binary
+*.otf binary
+*.zip binary
+*.wasm binary
+*.br binary
+*.pdf binary

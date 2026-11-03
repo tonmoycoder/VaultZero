@@ -66,7 +66,7 @@ VaultZero operates on an unhackable **Fail-Closed Air-Gapped Security Architectu
 | **Symmetric Cipher** | **XChaCha20-Poly1305** (256-bit key, 192-bit extended nonce) | Quantum-resistant stream cipher, zero nonce-reuse vulnerability |
 | **Envelope Architecture** | **Multi-Slot AAD Header Masking** (`.pmv` format) | Tamper-evident authenticated data; bit-flip attempts immediately fail-closed |
 | **Zero-Knowledge Memory** | **Memory Zeroization & DoD 5220.22-M 3-Pass Shredder** | Cold-boot memory scraping and forensic disk carving defense |
-| **P2P Transport** | **SPAKE2 Handshake + Constant-Time PIN Authentication** | Active Man-in-the-Middle (MitM) rejection across untrusted Wi-Fi |
+| **P2P Transport** | **PAKE-style Handshake + Transcript Channel Binding + XChaCha20-Poly1305** | Active Man-in-the-Middle (MitM) rejection across untrusted Wi-Fi; payload never leaves the host in cleartext |
 | **System Boundary** | **Fail-Closed IPC Gate (Rust 🦀)** | Strict boundary isolation; renderer compromises cannot extract plaintext |
 
 ---
@@ -76,7 +76,9 @@ VaultZero operates on an unhackable **Fail-Closed Air-Gapped Security Architectu
 ### 1. 📡 Military-Grade P2P LAN Sync (Zero Cloud)
 *   **Serverless Local Transfer:** Sync credentials between desktop and mobile devices over local Wi-Fi without any third-party cloud servers.
 *   **mDNS Auto-Discovery:** Broadcasts on `_vaultzero._tcp.local.` with ephemeral socket binding.
-*   **Constant-Time Ephemeral PIN:** High-security 6-digit ephemeral pairing with `subtle::ConstantTimeEq` timing-attack mitigation.
+*   **Constant-Time Ephemeral PIN:** High-security 6-digit ephemeral pairing with `subtle::ConstantTimeEq` timing-attack mitigation, bound into the key schedule before the shared secret is used.
+*   **Authenticated Key Exchange:** X25519 ephemeral exchange with a **transcript channel-binding hash** that both peers must verify — a man-in-the-middle that substitutes a key is rejected before any vault data is released.
+*   **Encrypted Payload:** The vault snapshot is sealed with XChaCha20-Poly1305 (direction-separated keys) *before* it reaches the socket. Plaintext never crosses the wire.
 *   **Encrypted-Only Transmission:** Plaintext never crosses the network wire; only authenticated, encrypted `.pmv` payloads are transferred.
 
 ### 2. 🎨 ColorOS 17 "Living Flow Design" (120fps UI)
@@ -135,7 +137,7 @@ flowchart TD
     CIPHER -->|"Encrypt / Decrypt"| PMV
     Core -->|"Emergency Backup"| BACKUP
     Core -->|"Verify Key"| KEYFILE
-    P2P <-->|"Local Wi-Fi (SPAKE2 + PIN)"| P2P
+    P2P <-->|"Local Wi-Fi (PAKE + channel binding)"| P2P
 ```
 
 ---

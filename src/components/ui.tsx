@@ -1,11 +1,11 @@
-import { memo, useEffect, useId, useMemo, useRef, useState, type CSSProperties, type ReactNode } from "react";
+import { cloneElement, isValidElement, memo, useCallback, useEffect, useId, useMemo, useRef, useState, type CSSProperties, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { AnimatePresence, motion, useIsPresent } from "framer-motion";
 import { Check, Copy, Timer, X } from "@phosphor-icons/react";
 import { brands, type BrandKey, type Strength } from "../lib/vault";
 import { cn } from "../utils/cn";
 import { hapticSuccess, useMotionSettings } from "./Tactile";
-import { exitTransition, softSpring, spring, useDialogFocus } from "../lib/motion";
+import { livingFlowCollapse, livingFlowExpand, spring, useDialogFocus } from "../lib/motion";
 
 export function Logo({ size = 40, showGlow = true }: { size?: number; showGlow?: boolean }) {
   return (
@@ -314,6 +314,44 @@ export function Avatar({
   );
 }
 
+/**
+ * Tooltip.
+ *
+ * ACCESSIBILITY (V-16): the tooltip bubble is only a *visual* affordance, so
+ * assistive technology never learns what an icon-only button does. We
+ * therefore:
+ *   1. give the bubble a stable `id`,
+ *   2. clone the child element and inject `aria-describedby` pointing at it,
+ *      so screen readers announce the label when the control is focused.
+ *
+ * When the child already has its own `aria-label`, we still attach the
+ * description (it adds context rather than replacing the name).
+ */
+/**
+ * A tooltip that escapes every overflow context and stays in the viewport.
+ *
+ * UX: the tooltip used to be a `position: absolute` child of its trigger.
+ * That means any ancestor with `overflow: hidden` clips it — and the vault
+ * card has exactly that (`.vault-card { overflow: hidden }`), so a tooltip on
+ * a card action button was sliced in half. On a 97-character label such as
+ * "Copy all account details (Title, Website, Username, Password, 2FA Code &
+ * Notes) formatted line-by-line" inside the Inspector panel, the user saw
+ * "Copy all account details (Title, Website, Username, Password, 2FA Code a"
+ * and the rest was gone.
+ *
+ * The bubble is now rendered in a **portal** attached to `document.body`,
+ * positioned with fixed coordinates measured from the trigger. That solves
+ * three problems at once:
+ *
+ * 1. No ancestor can clip it.
+ * 2. It is measured against the real viewport, so it can be clamped to stay
+ *    on screen instead of hanging off the edge.
+ * 3. It can wrap, so a long label becomes two readable lines rather than a
+ *    500-pixel-wide strip.
+ *
+ * The trigger keeps `aria-describedby` pointing at the bubble, so screen
+ * readers still announce it.
+ */
 export function Tooltip({
   label,
   children,
@@ -327,12 +365,124 @@ export function Tooltip({
   up?: boolean;
   className?: string;
 }) {
+  const bubbleId = useId();
+  const wrapRef = useRef<HTMLSpanElement | null>(null);
+  const bubbleRef = useRef<HTMLSpanElement | null>(null);
+  const [position, setPosition] = useState<{ top: number; left: number; placement: "top" | "bottom" | "side" } | null>(
+    null
+  );
+  const [mounted, setMounted] = useState(false);
+
+  const child = isValidElement(children)
+    ? cloneElement(children as React.ReactElement<Record<string, unknown>>, {
+        "aria-describedby": bubbleId,
+      })
+    : children;
+
+  const reposition = useCallback(() => {
+    const wrap = wrapRef.current;
+    const bubble = bubbleRef.current;
+    if (!wrap || !bubble) return;
+
+    const wrapRect = wrap.getBoundingClientRect();
+    // The bubble is measured after the portal mount, when it is visible.
+    const bubbleRect = bubble.getBoundingClientRect();
+    const viewportWidth = window.innerWidth;
+    const viewportHeight = window.innerHeight;
+    const margin = 10;
+    const gap = 8;
+
+    // Prefer the requested placement, then flip when it does not fit.
+    let placement: "top" | "bottom" | "side" = side ? "side" : up ? "top" : "bottom";
+
+    if (placement === "bottom" && wrapRect.bottom + gap + bubbleRect.height > viewportHeight - margin) {
+      placement = "top";
+    }
+    if (placement === "top" && wrapRect.top - gap - bubbleRect.height < margin) {
+      placement = "bottom";
+    }
+    if (placement === "side" && wrapRect.right + gap + bubbleRect.width > viewportWidth - margin) {
+      placement = "side";
+    }
+
+    let top: number;
+    let left: number;
+
+    if (placement === "side") {
+      top = wrapRect.top + wrapRect.height / 2 - bubbleRect.height / 2;
+      left = wrapRect.right + gap;
+    } else if (placement === "top") {
+      top = wrapRect.top - gap - bubbleRect.height;
+      left = wrapRect.left + wrapRect.width / 2 - bubbleRect.width / 2;
+    } else {
+      top = wrapRect.bottom + gap;
+      left = wrapRect.left + wrapRect.width / 2 - bubbleRect.width / 2;
+    }
+
+    // Clamp horizontally so the bubble never leaves the viewport.
+    if (left < margin) left = margin;
+    if (left + bubbleRect.width > viewportWidth - margin) {
+      left = Math.max(margin, viewportWidth - margin - bubbleRect.width);
+    }
+    // Clamp vertically as a final safety net.
+    top = Math.max(margin, Math.min(top, viewportHeight - margin - bubbleRect.height));
+
+    setPosition({ top, left, placement });
+  }, [side, up]);
+
+  const show = useCallback(() => {
+    setMounted(true);
+    // Measure after the bubble has been laid out.
+    requestAnimationFrame(reposition);
+  }, [reposition]);
+
+  const hide = useCallback(() => {
+    setMounted(false);
+    setPosition(null);
+  }, []);
+
+  // Keep the bubble glued to the trigger while it is open.
+  useEffect(() => {
+    if (!mounted) return;
+    const onScroll = () => reposition();
+    const onResize = () => reposition();
+    window.addEventListener("scroll", onScroll, true);
+    window.addEventListener("resize", onResize);
+    return () => {
+      window.removeEventListener("scroll", onScroll, true);
+      window.removeEventListener("resize", onResize);
+    };
+  }, [mounted, reposition]);
+
   return (
-    <span className={cn("tooltip-wrap inline-flex", className)}>
-      {children}
-      <span className={cn("tooltip-bubble", side && "side", up && "up")} role="tooltip">
-        {label}
-      </span>
+    <span
+      ref={wrapRef}
+      className={cn("tooltip-wrap inline-flex", className)}
+      onMouseEnter={show}
+      onMouseLeave={hide}
+      onFocus={show}
+      onBlur={hide}
+    >
+      {child}
+      {mounted &&
+        typeof document !== "undefined" &&
+        createPortal(
+          <span
+            id={bubbleId}
+            ref={bubbleRef}
+            className="tooltip-bubble tooltip-bubble-portal"
+            data-placement={position?.placement ?? (side ? "side" : up ? "top" : "bottom")}
+            style={
+              position
+                ? ({ top: position.top, left: position.left } as CSSProperties)
+                : { top: -9999, left: -9999, visibility: "hidden" }
+            }
+            role="tooltip"
+          >
+            {label}
+          </span>,
+          document.body
+        )}
     </span>
   );
 }
@@ -388,8 +538,19 @@ export function Modal({
       <motion.div
         initial={{ y: reduceMotion ? 0 : 24, scale: reduceMotion ? 1 : 0.97 }}
         animate={{ y: 0, scale: 1 }}
-        exit={{ y: reduceMotion ? 0 : 16, scale: reduceMotion ? 1 : 0.97, transition: reduceMotion ? { duration: 0 } : exitTransition }}
-        transition={reduceMotion ? { duration: 0 } : softSpring}
+        exit={{ y: reduceMotion ? 0 : 16, scale: reduceMotion ? 1 : 0.97, transition: reduceMotion ? { duration: 0 } : livingFlowCollapse }}
+        /*
+         * UX / "Living Flow": the modal used to use the soft spring, whose
+         * damping is high enough that the surface never overshoots — it
+         * slid into place and stopped, which reads as a plain transition.
+         *
+         * The product's motion language is the ColorOS spring, and the
+         * constants for it already existed in `lib/motion.ts` but were
+         * never used here. The modal is the surface a user opens most
+         * often, so it is the one that has to carry the signature bounce:
+         * the sheet comes up, overshoots very slightly, and settles.
+         */
+        transition={reduceMotion ? { duration: 0 } : livingFlowExpand}
         className={cn(
           "glass-strong modal-surface flex max-h-[92dvh] w-full flex-col overflow-hidden rounded-t-[28px] sm:rounded-[26px]",
           width,
@@ -397,8 +558,18 @@ export function Modal({
         )}
         style={{ boxShadow: "0 40px 100px rgba(8,10,28,.38), var(--inset-hi)" }}
       >
-        <header className="flex shrink-0 items-start justify-between gap-4 px-5 pb-3 pt-5 sm:px-6 sm:pt-6">
-          <div className="flex min-w-0 items-start gap-3">
+        {/*
+          UX: the header row used to let a long title run under the close
+          button, because the title block had `min-w-0` but no truncation
+          and the row itself had no `overflow-hidden`. The title and the
+          right-hand actions visually overlapped.
+
+          The header now clips its content, the title truncates on one line,
+          and the subtitle is clamped to two lines so it can never push the
+          body off the screen.
+        */}
+        <header className="flex shrink-0 items-start justify-between gap-3 overflow-hidden px-5 pb-3 pt-5 sm:gap-4 sm:px-6 sm:pt-6">
+          <div className="flex min-w-0 flex-1 items-start gap-3">
             {icon && (
               <span
                 className="mt-0.5 flex h-10 w-10 shrink-0 items-center justify-center rounded-[13px] border"
@@ -411,9 +582,17 @@ export function Modal({
                 {icon}
               </span>
             )}
-            <div className="min-w-0">
-              <h2 id={titleId} className="font-display text-[19px] font-semibold leading-tight tracking-[-0.02em] text-main">{title}</h2>
-              {subtitle && <p className="mt-1 text-[11.5px] leading-relaxed text-muted">{subtitle}</p>}
+            <div className="min-w-0 flex-1">
+              <h2
+                id={titleId}
+                className="truncate font-display text-[19px] font-semibold leading-tight tracking-[-0.02em] text-main"
+                title={typeof title === "string" ? title : undefined}
+              >
+                {title}
+              </h2>
+              {subtitle && (
+                <p className="mt-1 line-clamp-2 text-[11.5px] leading-relaxed text-muted">{subtitle}</p>
+              )}
             </div>
           </div>
           <Tooltip label="Close · Esc">
@@ -564,20 +743,75 @@ export function CopyButton({
   );
 }
 
+/**
+ * A single shared one-second ticker for the whole application.
+ *
+ * PERFORMANCE: `useCountdown` used to create its own `setInterval` per
+ * caller. The vault list renders a TOTP ring on **every** card that has
+ * two-factor enabled, so a 500-entry vault with 2FA started 500 timers and
+ * performed 500 state updates every second — a constant, invisible CPU tax
+ * that scaled with the size of the vault and re-rendered every card each
+ * tick.
+ *
+ * One shared timer now drives every countdown in the app. The number of
+ * subscribers is bounded by the number of visible components, but the
+ * *timers* are always exactly one.
+ *
+ * The tick is also aligned to the wall-clock second, so every countdown
+ * flips at the same instant instead of drifting apart.
+ */
+type TickListener = () => void;
+
+const tickListeners = new Set<TickListener>();
+let tickTimer: number | null = null;
+
+/**
+ * Schedules the next tick.
+ *
+ * The first tick of a "session" is aligned to the next whole second, so
+ * every countdown in the app flips on the same frame instead of drifting
+ * apart. Subsequent ticks run once per second.
+ */
+function scheduleTick(delay: number): void {
+  if (typeof window === "undefined") return;
+  tickTimer = window.setTimeout(() => {
+    tickTimer = null;
+    for (const listener of tickListeners) listener();
+    if (tickListeners.size > 0) scheduleTick(1000);
+  }, delay);
+}
+
+function subscribeToTick(listener: TickListener): () => void {
+  tickListeners.add(listener);
+
+  if (tickTimer === null) {
+    scheduleTick(1000 - (Date.now() % 1000));
+  }
+
+  return () => {
+    tickListeners.delete(listener);
+    if (tickListeners.size === 0 && tickTimer !== null) {
+      window.clearTimeout(tickTimer);
+      tickTimer = null;
+    }
+  };
+}
+
 export function useCountdown(period = 30) {
-  const [remaining, setRemaining] = useState(() => {
+  const compute = useCallback(() => {
     const now = Math.floor(Date.now() / 1000);
     return period - (now % period);
-  });
-  useEffect(() => {
-    const tick = () => {
-      const now = Math.floor(Date.now() / 1000);
-      setRemaining(period - (now % period));
-    };
-    tick();
-    const interval = window.setInterval(tick, 1000);
-    return () => window.clearInterval(interval);
   }, [period]);
+
+  const [remaining, setRemaining] = useState(compute);
+
+  useEffect(() => {
+    setRemaining(compute());
+    return subscribeToTick(() => {
+      setRemaining(compute());
+    });
+  }, [compute]);
+
   return { remaining, progress: remaining / period };
 }
 

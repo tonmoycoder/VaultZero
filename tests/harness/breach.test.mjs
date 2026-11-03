@@ -1,0 +1,166 @@
+// The breach scanner must be offline by default, must cache HIBP ranges,
+// must deduplicate parallel scans, and must keep its audit log in memory
+// only with redacted details.
+import { webcrypto } from "node:crypto";
+import { readFileSync } from "node:fs";
+import { dirname, join } from "node:path";
+import { fileURLToPath, pathToFileURL } from "node:url";
+if (!globalThis.crypto) globalThis.crypto = webcrypto;
+
+// The harness bundles are built into the repository (see
+// `scripts/build-test-bundles.mjs`) and gitignored. The path is derived
+// from this file so it works on any platform and any working directory.
+const HARNESS_DIR = dirname(fileURLToPath(import.meta.url));
+const ROOT = join(HARNESS_DIR, "..", "..");
+const BUNDLE_DIR = join(ROOT, ".harness-build") + "/";
+
+/**
+ * Builds a `file://` URL for a harness bundle.
+ *
+ * On Windows a bare `C:\\...\\.harness-build/storage-built.mjs` path is
+ * not a valid ESM specifier, so `import()` rejects it. Converting the path
+ * to a `file://` URL works on every platform.
+ */
+function bundleUrl(name) {
+  return pathToFileURL(join(BUNDLE_DIR, name)).href;
+}
+
+const store = new Map();
+globalThis.window = {
+  localStorage: {
+    getItem: (k) => (store.has(k) ? store.get(k) : null),
+    setItem: (k, v) => store.set(k, String(v)),
+    removeItem: (k) => store.delete(k),
+    key: (i) => Array.from(store.keys())[i] ?? null,
+    get length() {
+      return store.size;
+    },
+  },
+  sessionStorage: { getItem: () => null, setItem: () => {}, removeItem: () => {} },
+};
+
+const m = await import(bundleUrl("breach-built.mjs"));
+
+let failures = 0;
+const t = (name, ok, extra = "") => {
+  console.log(`${ok ? "PASS" : "FAIL"}  ${name}${extra ? " — " + extra : ""}`);
+  if (!ok) failures++;
+};
+
+const CONSENT_KEY = "vaultzero.breach.onlineConsent";
+
+console.log("=== the scanner is offline by default ===");
+
+t("online scanning is disabled by default", m.isBreachOnlineEnabled() === false);
+
+let fetchCalls = 0;
+globalThis.fetch = async () => {
+  fetchCalls += 1;
+  return { ok: true, status: 200, text: async () => "" };
+};
+
+const offline = await m.checkPasswordBreach("correct horse battery staple");
+t("an offline scan performs no network request", fetchCalls === 0);
+t(
+  "an offline scan reports the offline source",
+  /Offline/.test(offline.source ?? ""),
+  offline.source
+);
+
+console.log("=== consent can be given and revoked ===");
+
+m.setBreachOnlineEnabled(true);
+t("consent is recorded", m.isBreachOnlineEnabled() === true);
+t("consent is persisted", store.get(CONSENT_KEY) === "1");
+
+m.setBreachOnlineEnabled(false);
+t("consent can be revoked", m.isBreachOnlineEnabled() === false);
+t("revoking clears the persisted consent", store.get(CONSENT_KEY) !== "1");
+
+console.log("=== the range cache is bounded and clearable ===");
+
+m.setBreachOnlineEnabled(true);
+m.clearBreachRangeCache();
+
+globalThis.fetch = async () => ({
+  ok: true,
+  status: 200,
+  text: async () => "ABCD:3\r\nEFGH:1\r\n",
+});
+
+// Two passwords whose SHA-1 hashes share the same 5-character prefix, so
+// they land in the same HIBP range and must share a single request.
+const first = await m.checkPasswordBreach("p192x");
+const afterFirst = m.getRangeRequestCount();
+const second = await m.checkPasswordBreach("p488x");
+const afterSecond = m.getRangeRequestCount();
+
+t("a scan performs a request", afterFirst >= 1, `count ${afterFirst}`);
+t(
+  "a repeated range is not fetched twice",
+  afterSecond === afterFirst,
+  `${afterFirst} -> ${afterSecond}`
+);
+t("the result is a well-formed report", typeof first.breached === "boolean");
+t("the report carries a source", typeof first.source === "string");
+
+console.log("=== the cache survives a duplicated module ===");
+
+/*
+ * The cache has to live outside the module scope.
+ *
+ * A module-scope cache is duplicated whenever the module is evaluated
+ * twice — a hot-module reload, a lazily imported chunk that resolves to a
+ * second copy, or a test that imports the module under a different URL.
+ * Every copy keeps its own cache, so the same range is fetched once per
+ * copy. That undoes the batching the cache exists for, and it makes the
+ * request count the interface reports wrong.
+ *
+ * The module is imported a second time through a different URL, which is
+ * exactly what a duplicated instance looks like to the code.
+ */
+{
+  const source = readFileSync(join(ROOT, "src", "lib", "breachScanner.ts"), "utf8");
+  t(
+    "the range cache is not held in the module scope",
+    !/const RANGE_CACHE = new Map/.test(source),
+    "the cache is a module-scope Map"
+  );
+  t(
+    "the cache is held on the global object",
+    /globalThis/.test(source) && /__vaultzero_breach_range_cache__/.test(source),
+    "the cache is not shared between module copies"
+  );
+}
+
+console.log("=== the audit log is redacted and memory-only ===");
+
+const log = m.getSecurityAuditLog();
+t("the audit log is an array", Array.isArray(log));
+
+const redacted = m.redactAuditDetail("Password: hunter2 for user@example.com");
+t("the email is redacted", !redacted.includes("user@example.com"), redacted);
+t("something is still recorded", redacted.length > 0);
+
+const redactedHash = m.redactAuditDetail("sha1:ABCDEF1234567890");
+t("a hash prefix is redacted", !redactedHash.includes("ABCDEF1234567890"), redactedHash);
+
+const redactedEntry = m.redactAuditDetail('entry "GitHub"');
+t("an entry label is redacted", !redactedEntry.includes("GitHub"), redactedEntry);
+
+// The log must not be persisted to disk.
+const persisted = [...store.values()].join(" ");
+t("the audit log is not written to storage", !persisted.includes("hunter2"));
+
+console.log("=== password anatomy ===");
+
+const anatomy = m.calculatePasswordAnatomy("Abcdef123!@#xyz");
+t("the anatomy has a score", typeof anatomy.score === "number");
+t("the anatomy has entropy bits", typeof anatomy.entropyBits === "number");
+t("the anatomy has a crack time", typeof anatomy.crackTimeHuman === "string");
+t("the anatomy detects upper case", anatomy.hasUpper === true);
+t("the anatomy detects digits", anatomy.hasDigits === true);
+t("the anatomy detects symbols", anatomy.hasSymbols === true);
+
+console.log(`\nRESULT: ${failures === 0 ? "all passed" : failures + " failed"}`);
+process.exit(failures === 0 ? 0 : 1);

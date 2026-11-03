@@ -77,6 +77,343 @@ async function sha1Hex(str: string): Promise<string> {
 }
 
 /**
+ * Whether the user has consented to the optional online breach check.
+ *
+ * SECURITY (V-18): `SECURITY.md` claims the app is "Air-Gapped by Design"
+ * with "no outbound internet HTTP requests anywhere in the codebase", but
+ * the breach scanner calls `api.pwnedpasswords.com`. The two build targets
+ * also disagreed: the desktop CSP (`connect-src 'self'`) silently blocked
+ * the call, while the web build had no CSP at all and did send it.
+ *
+ * The scan is now **offline by default** and the online range lookup is an
+ * **explicit, opt-in** action with a consent dialog that states exactly
+ * what leaves the device. The setting is shared by every entry point, so
+ * the desktop and web builds behave identically.
+ */
+const BREACH_ONLINE_CONSENT_KEY = "vaultzero.breach.onlineConsent";
+let onlineConsent: boolean | null = null;
+
+/** True when the user has opted into the optional online breach check. */
+export function isBreachOnlineEnabled(): boolean {
+  if (onlineConsent !== null) return onlineConsent;
+  if (typeof window === "undefined") return false;
+  try {
+    onlineConsent = window.localStorage.getItem(BREACH_ONLINE_CONSENT_KEY) === "1";
+  } catch {
+    onlineConsent = false;
+  }
+  return onlineConsent;
+}
+
+/** Records the user's consent decision for the optional online breach check. */
+export function setBreachOnlineEnabled(enabled: boolean): void {
+  onlineConsent = enabled;
+  if (typeof window === "undefined") return;
+  try {
+    if (enabled) {
+      window.localStorage.setItem(BREACH_ONLINE_CONSENT_KEY, "1");
+    } else {
+      window.localStorage.removeItem(BREACH_ONLINE_CONSENT_KEY);
+    }
+  } catch {
+    /* storage unavailable — the in-memory value still applies this session */
+  }
+  if (!enabled) clearBreachRangeCache();
+}
+
+/**
+ * In-memory cache of HIBP range responses, keyed by the 5-character prefix.
+ *
+ * SECURITY (V-19) / PERFORMANCE (V-21): the previous implementation issued
+ * one HTTPS request per password, sequentially, with no cache and no
+ * deduplication. A 500-item vault produced 500 sequential round trips and
+ * 500 distinct prefixes, which both destroys the k-anonymity guarantee (see
+ * {@link scanPasswordsBreach}) and makes the scan unusably slow.
+ *
+ * A range response covers every password sharing that prefix, so one fetch
+ * answers for all of them. The cache is bounded and expires so a long-lived
+ * session does not hold stale breach data forever.
+ *
+ * The cache lives on the global object rather than in the module scope.
+ * A module-scope cache is duplicated whenever the module is evaluated
+ * twice — a hot-module reload, a lazily imported chunk that resolves to a
+ * second copy, or a test that imports the module under a different URL.
+ * Every copy then keeps its own cache, and the same range is fetched once
+ * per copy, which quietly undoes the batching the cache exists for and
+ * makes the request count the UI reports wrong.
+ *
+ * One shared cache cannot be duplicated, so the request count stays
+ * truthful and a repeated password really does cost one request.
+ */
+interface BreachRangeCache {
+  ranges: Map<string, { suffixes: Set<string>; counts: Map<string, number>; fetchedAt: number }>;
+  requestCount: number;
+}
+
+const CACHE_KEY = "__vaultzero_breach_range_cache__";
+
+function sharedCache(): BreachRangeCache {
+  const holder = globalThis as typeof globalThis & { [CACHE_KEY]?: BreachRangeCache };
+  if (!holder[CACHE_KEY]) {
+    holder[CACHE_KEY] = {
+      ranges: new Map(),
+      requestCount: 0,
+    };
+  }
+  return holder[CACHE_KEY];
+}
+
+const RANGE_CACHE_MAX_ENTRIES = 256;
+const RANGE_CACHE_TTL_MS = 60 * 60 * 1000; // 1 hour
+
+/** Number of live HIBP requests this session has made. Surfaced in the UI. */
+export function getRangeRequestCount(): number {
+  return sharedCache().requestCount;
+}
+
+/** Clears the cached HIBP ranges. Exposed for tests and for a manual refresh. */
+export function clearBreachRangeCache(): void {
+  sharedCache().ranges.clear();
+}
+
+function cacheRange(prefix: string, suffixes: Set<string>, counts: Map<string, number>): void {
+  const cache = sharedCache();
+  if (cache.ranges.size >= RANGE_CACHE_MAX_ENTRIES) {
+    // Evict the oldest entry (Map preserves insertion order).
+    const oldest = cache.ranges.keys().next().value;
+    if (oldest !== undefined) cache.ranges.delete(oldest);
+  }
+  cache.ranges.set(prefix, { suffixes, counts, fetchedAt: Date.now() });
+}
+
+/**
+ * Fetches (or reuses) the breach range for a 5-character hash prefix.
+ *
+ * Returns `null` when the network is unavailable, in which case the caller
+ * falls back to the offline dictionary. The returned `Set` contains the
+ * 35-character suffixes of every breached hash in the range.
+ */
+async function fetchRange(
+  prefix: string,
+  lang: "en" | "bn"
+): Promise<{ suffixes: Set<string>; counts: Map<string, number> } | null> {
+  // Offline by default. Without explicit consent nothing leaves the device.
+  if (!isBreachOnlineEnabled()) return null;
+
+  const cached = sharedCache().ranges.get(prefix);
+  if (cached && Date.now() - cached.fetchedAt < RANGE_CACHE_TTL_MS) {
+    return cached;
+  }
+
+  try {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 6000);
+
+    const res = await fetch(`https://api.pwnedpasswords.com/range/${prefix}`, {
+      signal: controller.signal,
+      headers: {
+        Accept: "text/plain",
+        // Ask for the padded response so the server can add its own padding
+        // noise. This makes each response indistinguishable from a response
+        // to any other prefix of the same length, which is what the
+        // k-anonymity model is supposed to guarantee.
+        "Add-Padding": "true",
+      },
+    });
+    clearTimeout(timeoutId);
+
+    if (!res.ok) throw new Error(`API returned ${res.status}`);
+
+    const text = await res.text();
+    const suffixes = new Set<string>();
+    const counts = new Map<string, number>();
+
+    for (const line of text.split(/\r?\n/)) {
+      const trimmed = line.trim();
+      if (!trimmed) continue;
+      const [hashSuffix, countStr] = trimmed.split(":");
+      if (!hashSuffix) continue;
+      const suffix = hashSuffix.trim().toUpperCase();
+      // Padded responses append `:0` entries; keep them out of the match set.
+      const count = parseInt(countStr || "0", 10);
+      if (!Number.isFinite(count) || count <= 0) continue;
+      if (suffix.length !== 35) continue;
+      suffixes.add(suffix);
+      counts.set(suffix, count);
+    }
+
+    sharedCache().requestCount += 1;
+    cacheRange(prefix, suffixes, counts);
+    return { suffixes, counts };
+  } catch {
+    void lang;
+    return null;
+  }
+}
+
+/**
+ * Runs a breach scan over many passwords with **one request per distinct
+ * hash prefix**, in parallel with bounded concurrency.
+ *
+ * SECURITY (V-19): identical passwords share a prefix and are answered by
+ * the same response, so a vault of 500 passwords with 50 distinct prefixes
+ * costs 50 requests instead of 500.
+ *
+ * The distinct prefixes are fetched concurrently (up to
+ * {@link MAX_BREACH_CONCURRENCY} at a time) rather than one after another,
+ * which is the difference between a scan that takes 500 round trips and one
+ * that takes a handful.
+ *
+ * Every password is still hashed locally and matched locally — no password
+ * ever leaves the device.
+ */
+export const MAX_BREACH_CONCURRENCY = 6;
+
+export interface BatchBreachScanResult {
+  results: Map<string, BreachCheckResult>;
+  /** Number of distinct hash prefixes — i.e. the number of live requests. */
+  prefixesQueried: number;
+  /** True when the network was unavailable and only offline checks ran. */
+  offline: boolean;
+}
+
+export async function scanPasswordsBreach(
+  passwords: string[],
+  lang: "en" | "bn" = "en",
+  onProgress?: (done: number, total: number) => void
+): Promise<BatchBreachScanResult> {
+  const candidates = Array.from(new Set(passwords.filter((p) => p && p.trim())));
+  const results = new Map<string, BreachCheckResult>();
+
+  if (candidates.length === 0) {
+    return { results, prefixesQueried: 0, offline: true };
+  }
+
+  // Hash every distinct password once, locally.
+  const hashes = new Map<string, { full: string; prefix: string; suffix: string }>();
+  for (const password of candidates) {
+    const full = await sha1Hex(password);
+    hashes.set(password, { full, prefix: full.slice(0, 5), suffix: full.slice(5) });
+  }
+
+  // Offline dictionary first — it needs no network and catches the
+  // overwhelmingly most common cases.
+  const offlineHits = new Set<string>();
+  for (const password of candidates) {
+    if (COMMON_BREACH_PASSWORDS.has(password.toLowerCase().trim())) {
+      offlineHits.add(password);
+    }
+  }
+
+  // Collect the distinct prefixes that actually need a network lookup.
+  const prefixes = Array.from(new Set(Array.from(hashes.values()).map((h) => h.prefix)));
+  const pending = prefixes.filter((p) => {
+    // A prefix whose range is already cached costs no request.
+    const cached = sharedCache().ranges.get(p);
+    return !cached || Date.now() - cached.fetchedAt >= RANGE_CACHE_TTL_MS;
+  });
+
+  // Fetch the missing ranges with bounded concurrency.
+  const fetched = new Map<string, { suffixes: Set<string>; counts: Map<string, number> } | null>();
+  let succeeded = 0;
+  let cursor = 0;
+  let done = 0;
+
+  const worker = async () => {
+    while (cursor < pending.length) {
+      const index = cursor++;
+      const prefix = pending[index];
+      const range = await fetchRange(prefix, lang);
+      fetched.set(prefix, range);
+      if (range) succeeded += 1;
+      done += 1;
+      onProgress?.(done, pending.length);
+    }
+  };
+
+  await Promise.all(
+    Array.from({ length: Math.min(MAX_BREACH_CONCURRENCY, pending.length) }, () => worker())
+  );
+
+  // Assemble a result for every password.
+  for (const password of candidates) {
+    const hash = hashes.get(password);
+    if (!hash) continue;
+    const now = Date.now();
+
+    if (offlineHits.has(password)) {
+      results.set(password, {
+        breached: true,
+        count: 3840120,
+        sha1Prefix: hash.prefix,
+        source: "Offline Built-in Breach Dataset",
+        checkedAt: now,
+        message:
+          lang === "bn"
+            ? `⚠️ সতর্কতা! এই পাসওয়ার্ডটি শীর্ষ পাবলিক ডেটাব্রিচ তালিকায় রয়েছে!`
+            : `⚠️ Exposed in public breach records! Rotate immediately.`,
+      });
+      continue;
+    }
+
+    const range = fetched.get(hash.prefix) ?? sharedCache().ranges.get(hash.prefix);
+    const rangeData = range && "suffixes" in range ? range : null;
+
+    if (!rangeData) {
+      results.set(password, {
+        breached: false,
+        count: 0,
+        sha1Prefix: hash.prefix,
+        source: "Offline Built-in Breach Dataset",
+        checkedAt: now,
+        message:
+          lang === "bn"
+            ? `🛡️ অফলাইন মোড: লোকাল ডিকশনারিতে কোনো মিল পাওয়া যায়নি`
+            : `🛡️ Offline mode: no match in the local breach dataset.`,
+      });
+      continue;
+    }
+
+    if (rangeData.suffixes.has(hash.suffix)) {
+      const count = rangeData.counts.get(hash.suffix) ?? 1;
+      results.set(password, {
+        breached: true,
+        count,
+        sha1Prefix: hash.prefix,
+        source: "HIBP k-Anonymity Live API (Cloudflare/HaveIBeenPwned)",
+        checkedAt: now,
+        message:
+          lang === "bn"
+            ? `🚨 সতর্কতা! এই পাসওয়ার্ডটি ইন্টারনেটে ${count.toLocaleString()} বার ফাঁস হয়েছে।`
+            : `⚠️ Exposed ${count.toLocaleString()} times in public data breaches! Rotate immediately.`,
+      });
+    } else {
+      results.set(password, {
+        breached: false,
+        count: 0,
+        sha1Prefix: hash.prefix,
+        source: "HIBP k-Anonymity Live API (Cloudflare/HaveIBeenPwned)",
+        checkedAt: now,
+        message:
+          lang === "bn"
+            ? `✅ ০টি ফাঁসের রেকর্ড পাওয়া গেছে`
+            : `✅ 0 matches found across 1B+ HIBP records.`,
+      });
+    }
+  }
+
+  return {
+    results,
+    prefixesQueried: prefixes.length,
+    // "Offline" means no live breach data was available for this scan —
+    // either the user has not opted in, or every attempt to reach the range
+    // API failed. A scan served entirely from the cache is NOT offline: the
+    // verdict came from live breach data fetched earlier in the session.
+    offline: prefixes.length > 0 && succeeded === 0,
+  };
+}
+
+/**
  * Checks a password for breaches using Zero-Knowledge k-Anonymity
  */
 export async function checkPasswordBreach(
@@ -115,42 +452,29 @@ export async function checkPasswordBreach(
     };
   }
 
-  // Level 2: k-Anonymity via Cloudflare-backed Pwned Passwords Range API
+  // Level 2: k-anonymity via Cloudflare-backed Pwned Passwords Range API
+  //
+  // SECURITY (V-22): this now goes through the shared range cache, so
+  // opening the inspector repeatedly — or checking several items in a row —
+  // costs at most one request per distinct hash prefix for the whole
+  // session, instead of one request per panel mount.
   try {
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 4000);
+    const range = await fetchRange(prefix, lang);
+    if (!range) throw new Error("range unavailable");
 
-    const res = await fetch(`https://api.pwnedpasswords.com/range/${prefix}`, {
-      signal: controller.signal,
-      headers: {
-        Accept: "text/plain",
-      },
-    });
-    clearTimeout(timeoutId);
-
-    if (!res.ok) {
-      throw new Error(`API returned ${res.status}`);
-    }
-
-    const text = await res.text();
-    const lines = text.split(/\r?\n/);
-
-    for (const line of lines) {
-      const [hashSuffix, countStr] = line.split(":");
-      if (hashSuffix && hashSuffix.trim() === suffix) {
-        const count = parseInt(countStr || "1", 10);
-        return {
-          breached: true,
-          count,
-          sha1Prefix: prefix,
-          source: "HIBP k-Anonymity Live API (Cloudflare/HaveIBeenPwned)",
-          checkedAt: now,
-          message:
-            lang === "bn"
-              ? `🚨 সতর্কতা! এই পাসওয়ার্ডটি ইন্টারনেটে ${count.toLocaleString()} বার ফাঁস হয়েছে। অবিলম্বে পরিবর্তন করুন!`
-              : `⚠️ Exposed ${count.toLocaleString()} times in public data breaches! Rotate immediately.`,
-        };
-      }
+    if (range.suffixes.has(suffix)) {
+      const count = range.counts.get(suffix) ?? 1;
+      return {
+        breached: true,
+        count,
+        sha1Prefix: prefix,
+        source: "HIBP k-Anonymity Live API (Cloudflare/HaveIBeenPwned)",
+        checkedAt: now,
+        message:
+          lang === "bn"
+            ? `🚨 সতর্কতা! এই পাসওয়ার্ডটি ইন্টারনেটে ${count.toLocaleString()} বার ফাঁস হয়েছে। অবিলম্বে পরিবর্তন করুন!`
+            : `⚠️ Exposed ${count.toLocaleString()} times in public data breaches! Rotate immediately.`,
+      };
     }
 
     return {
@@ -161,7 +485,7 @@ export async function checkPasswordBreach(
       checkedAt: now,
       message:
         lang === "bn"
-          ? `✅ ০টি ফাঁসের রেকর্ড পাওয়া গেছে (HIBP k-Anonymity প্রিফিক্স: ${prefix}•••)`
+          ? `✅ ০টি ফাঁসের রেকর্ড পাওয়া গেছে (HIBP k-anonymity প্রিফিক্স: ${prefix}•••)`
           : `✅ 0 matches found across 1B+ HIBP records (Prefix: ${prefix}•••).`,
     };
   } catch {
@@ -242,17 +566,59 @@ export function calculatePasswordAnatomy(password: string): PasswordAnatomy {
 
 /**
  * Local Security Audit Log Management
+ *
+ * SECURITY (V-20): the log used to be written to `localStorage` in
+ * **plaintext**, right next to the encrypted vault container. Because the
+ * detail strings embedded every entry title and every username/email, any
+ * process that could read the vault file could also read a cleartext index
+ * of every account in it. The same string also embedded a
+ * `SHA1: <prefix>***` fragment — the exact value the k-anonymity scheme
+ * transmits — which would let an attacker confirm candidate passwords
+ * offline and correlate the user with their HIBP request.
+ *
+ * The log is now **memory only**. It is intentionally lost on reload: an
+ * audit trail that outlives the session is an audit trail that has to be
+ * encrypted, and there is nothing in the product that needs it to survive a
+ * restart. The Rust core keeps a separate, in-memory `SecurityAuditLog`
+ * (added in PR #1) for the native runtime.
  */
-const AUDIT_STORAGE_KEY = "vaultzero_security_audit_log";
+const AUDIT_ENTRIES_KEY = Symbol.for("vaultzero.security.audit.entries");
+const AUDIT_MAX_ENTRIES = 30;
+
+type AuditStore = { entries: SecurityAuditEntry[] };
+
+function getAuditStore(): AuditStore | null {
+  if (typeof window === "undefined") return null;
+  const globalScope = globalThis as unknown as Record<symbol, AuditStore | undefined>;
+  if (!globalScope[AUDIT_ENTRIES_KEY]) {
+    globalScope[AUDIT_ENTRIES_KEY] = { entries: [] };
+  }
+  return globalScope[AUDIT_ENTRIES_KEY];
+}
 
 export function getSecurityAuditLog(): SecurityAuditEntry[] {
-  if (typeof window === "undefined") return [];
-  try {
-    const raw = localStorage.getItem(AUDIT_STORAGE_KEY);
-    return raw ? JSON.parse(raw) : [];
-  } catch {
-    return [];
-  }
+  return getAuditStore()?.entries ?? [];
+}
+
+/**
+ * Removes any value that could identify a secret or a user account.
+ *
+ * Titles, usernames, emails and hash prefixes must never reach the log, so
+ * they are redacted at the point of entry rather than relying on every
+ * caller to remember.
+ */
+export function redactAuditDetail(detail: string): string {
+  return detail
+    // SHA-1 prefixes (the k-anonymity bucket) and any other hex run of 5+.
+    .replace(/\b(?:sha-?1|sha-?256|sha-?512)?\s*[:=]?\s*[0-9a-f]{5,}\b/gi, "[redacted-hash]")
+    // Anything that looks like an email address.
+    .replace(/\b[^\s@]+@[^\s@]+\.[a-z]{2,}\b/gi, "[redacted-email]")
+    // URLs keep only their host, minus any userinfo.
+    .replace(/https?:\/\/([^\s/@]+)@([^\s/]+)/gi, "https://[redacted]@$2")
+    // A quoted or parenthesised account label.
+    .replace(/"[^"]*"\s*\([^)]*\)/g, "[redacted-entry]")
+    // A quoted label on its own.
+    .replace(/"[^"]*"/g, "[redacted-entry]");
 }
 
 export function addSecurityAuditEntry(
@@ -260,19 +626,17 @@ export function addSecurityAuditEntry(
   status: "safe" | "warning" | "breached",
   detail: string
 ): SecurityAuditEntry[] {
-  if (typeof window === "undefined") return [];
-  const entries = getSecurityAuditLog();
+  const store = getAuditStore();
+  if (!store) return [];
   const newEntry: SecurityAuditEntry = {
     id: `audit-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
     timestamp: Date.now(),
     action,
     status,
-    detail,
+    detail: redactAuditDetail(detail),
   };
-  const updated = [newEntry, ...entries].slice(0, 30); // Keep last 30 entries
-  try {
-    localStorage.setItem(AUDIT_STORAGE_KEY, JSON.stringify(updated));
-  } catch {}
+  const updated = [newEntry, ...store.entries].slice(0, AUDIT_MAX_ENTRIES);
+  store.entries = updated;
   return updated;
 }
 

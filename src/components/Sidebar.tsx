@@ -343,11 +343,31 @@ export default function Sidebar({
             <ShieldCheck size={15} weight="duotone" />
           </span>
           <div className="min-w-0 flex-1">
-            <p className="flex items-center gap-1 text-[9.5px] font-bold leading-none text-main">
-              {t(lang, "offlineNote")}
-              <span className="h-1 w-1 rounded-full" style={{ background: "var(--success)" }} />
+            {/*
+              UX: `leading-none` on a bold 9.5px label clips the ascenders and
+              descenders — the "100% offline" text was visibly cut at the top
+              and bottom, and the status dot floated half outside the line
+              box. A `leading-tight` line-height plus `inline-block` on the
+              dot keeps both on the same baseline without the clipping.
+            */}
+            <p className="flex items-center gap-1.5 text-[9.5px] font-bold leading-tight text-main">
+              <span className="min-w-0 truncate">{t(lang, "offlineNote")}</span>
+              <span
+                className="inline-block h-1 w-1 shrink-0 rounded-full align-middle"
+                style={{ background: "var(--success)" }}
+                aria-hidden="true"
+              />
             </p>
-            <p className="mt-1 truncate text-[8px] leading-none text-faint">XChaCha20 · Argon2id · local</p>
+            {/*
+              The crypto line used to be `truncate`, so at the sidebar's
+              246-260px width it read "XChaCha20 · Argon2i…" — the user
+              could not tell which KDF was in use. It now wraps to a second
+              line instead, and the whole card grows by a few pixels rather
+              than hiding information.
+            */}
+            <p className="mt-0.5 text-[8px] leading-[1.35] text-faint">
+              XChaCha20 · Argon2id · local
+            </p>
           </div>
           </button>
           <div className="flex items-center gap-1 shrink-0">

@@ -25,6 +25,11 @@ pub struct SearchEngine;
 
 impl SearchEngine {
     /// Performs ultra-fast in-memory filtering across entry summaries (<50ms for 10,000+ entries).
+    ///
+    /// PERFORMANCE: the free-text match now runs against a **precomputed**
+    /// lowercase `search_blob` on each summary instead of calling
+    /// `to_lowercase()` on six separate fields for every entry on every
+    /// keystroke. The blob is built once, when the summary is created.
     pub fn search(entries: &[EntrySummary], filter: &SearchFilter) -> Vec<EntrySummary> {
         let q = filter.query.trim().to_lowercase();
         let has_q = !q.is_empty();
@@ -52,15 +57,36 @@ impl SearchEngine {
                     }
                 }
                 if has_q {
-                    let matches_title = e.title.to_lowercase().contains(&q);
-                    let matches_url = e.url.to_lowercase().contains(&q);
-                    let matches_domain = e.domain.to_lowercase().contains(&q);
-                    let matches_user = e.username.to_lowercase().contains(&q);
-                    let matches_email = e.email.to_lowercase().contains(&q);
-                    let matches_tag = e.tags.iter().any(|t| t.to_lowercase().contains(&q));
+                    // Fast path: the precomputed blob.
+                    if !e.search_blob.is_empty() {
+                        // The blob holds every field the search looks at,
+                        // so a query that is not in the blob is not in any
+                        // of the fields either. The entry is rejected
+                        // here. It used to fall through, and a query that
+                        // matched nothing was still reported as a match.
+                        return e.search_blob.contains(&q);
+                    }
 
-                    if !(matches_title || matches_url || matches_domain || matches_user || matches_email || matches_tag) {
-                        return false;
+                    // The per-field checks run only when the blob is empty,
+                    // which happens for summaries that were deserialised
+                    // from an older vault that predates the blob field.
+                    {
+                        let matches_title = e.title.to_lowercase().contains(&q);
+                        let matches_url = e.url.to_lowercase().contains(&q);
+                        let matches_domain = e.domain.to_lowercase().contains(&q);
+                        let matches_user = e.username.to_lowercase().contains(&q);
+                        let matches_email = e.email.to_lowercase().contains(&q);
+                        let matches_tag = e.tags.iter().any(|t| t.to_lowercase().contains(&q));
+
+                        if !(matches_title
+                            || matches_url
+                            || matches_domain
+                            || matches_user
+                            || matches_email
+                            || matches_tag)
+                        {
+                            return false;
+                        }
                     }
                 }
                 true
@@ -69,7 +95,8 @@ impl SearchEngine {
             .collect()
     }
 
-    /// Groups entries by domain for Bento Grid and service overview (computing "2 accounts", "5 accounts", etc.).
+    /// Groups entries by domain for Bento Grid and service overview
+    /// (computing "2 accounts", "5 accounts", etc.).
     pub fn group_by_domain(entries: &[EntrySummary]) -> Vec<DomainGroup> {
         let mut map: HashMap<String, Vec<EntrySummary>> = HashMap::new();
 
@@ -115,4 +142,3 @@ impl SearchEngine {
         groups
     }
 }
-
