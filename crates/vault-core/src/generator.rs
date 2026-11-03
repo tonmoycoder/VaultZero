@@ -1,6 +1,19 @@
 use rand::rngs::OsRng;
-use rand::seq::SliceRandom;
 use rand::RngCore;
+
+/*
+ * The word list is the canonical one.
+ *
+ * The generator used to carry a list of its own, with seventy seven
+ * words in it, while the browser and the exported list carried the full
+ * seven thousand seven hundred and seventy two. A passphrase made on
+ * the device was therefore drawn from a pool that was thirty three
+ * times smaller than the one the interface promised, and the interface
+ * reported the entropy of the larger pool. The two lists are now the
+ * same list, so the number the interface shows is the number the
+ * passphrase has.
+ */
+use crate::data::wordlist::WORDLIST as DICEWARE_WORDLIST;
 
 #[derive(Debug, Clone)]
 pub struct PasswordGenOptions {
@@ -36,18 +49,6 @@ const NUMBERS_SAFE: &[u8] = b"23456789"; // No 0, 1
 
 const SYMBOLS: &[u8] = b"!@#$%^&*()-_=+[]{}|;:,.<>?";
 
-/// 77-word EFF Diceware curated compact offline list
-const DICEWARE_WORDLIST: &[&str] = &[
-    "ability", "absent", "absorb", "abstract", "academy", "accent", "account", "acquire", "across",
-    "actress", "advance", "airport", "album", "alibi", "alley", "alpha", "alpine", "amber",
-    "anchor", "angel", "anthem", "antique", "apron", "arcade", "arctic", "arena", "artist",
-    "aspect", "astral", "atlas", "atom", "audio", "august", "avatar", "avenue", "bacon", "badge",
-    "balcony", "banner", "baron", "beacon", "breeze", "bronze", "cabin", "canyon", "castle",
-    "cedar", "cipher", "clover", "cobalt", "comet", "compass", "coral", "cosmos", "crater",
-    "crystal", "delta", "diamond", "drift", "echo", "ember", "falcon", "frost", "galaxy",
-    "glacier", "granite", "harbor", "horizon", "island", "jasper", "kinetic", "lagoon", "lunar",
-    "marble", "matrix", "meadow", "meteor",
-];
 
 /// Generates a high-entropy CSPRNG password based on configuration options.
 pub fn generate_password(opts: &PasswordGenOptions) -> String {
@@ -109,24 +110,80 @@ pub fn generate_password(opts: &PasswordGenOptions) -> String {
 }
 
 /// Generates an EFF Diceware passphrase with random words separated by a delimiter.
+///
+/// The words are drawn **without replacement**, so a passphrase always
+/// contains distinct words. With replacement the chance of a repeated
+/// word grows with the word count, and the real entropy is lower than
+/// the number the interface reports. The browser generator draws the
+/// same way, so a passphrase made here and one made there have the same
+/// strength.
 pub fn generate_passphrase(word_count: usize, separator: &str, capitalize: bool) -> String {
-    let count = word_count.clamp(3, 10);
-    let mut words = Vec::with_capacity(count);
+    let count = word_count.clamp(3, 12);
+    let mut pool: Vec<&str> = DICEWARE_WORDLIST.to_vec();
 
-    for _ in 0..count {
-        if let Some(word) = DICEWARE_WORDLIST.choose(&mut OsRng) {
-            let mut w = word.to_string();
-            if capitalize {
-                let mut chars = w.chars();
-                if let Some(first) = chars.next() {
-                    w = format!("{}{}", first.to_uppercase(), chars.as_str());
-                }
-            }
-            words.push(w);
-        }
+    // A partial Fisher-Yates shuffle: the first `count` entries of the
+    // shuffled pool are the words.
+    for i in 0..count {
+        let j = i + (rng_next_below(pool.len() - i) as usize);
+        pool.swap(i, j);
     }
 
-    words.join(separator)
+    let mut words = Vec::with_capacity(count);
+    for word in pool.iter().take(count) {
+        let mut w = word.to_string();
+        if capitalize {
+            let mut chars = w.chars();
+            if let Some(first) = chars.next() {
+                w = format!("{}{}", first.to_uppercase(), chars.as_str());
+            }
+        }
+        words.push(w);
+    }
+
+    // The trailing digit is uniform over a hundred values, and it is
+    // counted in the entropy.
+    let digit = rng_next_below(100);
+    format!("{}!{}", words.join(separator), digit)
+}
+
+/// Draws a number below `upper` from the operating system's generator.
+///
+/// `rng_next_below` is used instead of a modulo of a raw draw, because
+/// a modulo would make the low values of the range more likely than
+/// the high ones.
+fn rng_next_below(upper: usize) -> u32 {
+    if upper == 0 {
+        return 0;
+    }
+    let upper = upper as u32;
+    // The rejection threshold keeps the distribution uniform.
+    let threshold = upper.wrapping_neg() % upper;
+    loop {
+        let draw = OsRng.next_u32();
+        if draw >= threshold {
+            return draw % upper;
+        }
+    }
+}
+
+/// Calculates the entropy of a passphrase in bits.
+///
+/// The words are drawn without replacement, so the entropy of the draw
+/// is `log2(N!/(N-k)!)` rather than `k * log2(N)`. The trailing digit
+/// is uniform over a hundred values and is counted as well. The browser
+/// generator reports the same number, so the interface shows the same
+/// strength for both.
+pub fn passphrase_entropy(word_count: usize) -> f64 {
+    let count = word_count.clamp(1, crate::data::wordlist::WORDLIST_LEN);
+
+    let mut without_replacement = 0.0;
+    for i in 0..count {
+        without_replacement += ((crate::data::wordlist::WORDLIST_LEN - i) as f64).log2();
+    }
+
+    // The "!" is fixed; the digit is uniform over a hundred values.
+    let suffix_bits = 100.0f64.log2();
+    ((without_replacement + suffix_bits) * 100.0).round() / 100.0
 }
 
 /// Calculates the estimated entropy in bits for a given password.
