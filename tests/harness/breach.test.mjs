@@ -2,6 +2,7 @@
 // must deduplicate parallel scans, and must keep its audit log in memory
 // only with redacted details.
 import { webcrypto } from "node:crypto";
+import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 if (!globalThis.crypto) globalThis.crypto = webcrypto;
@@ -9,7 +10,9 @@ if (!globalThis.crypto) globalThis.crypto = webcrypto;
 // The harness bundles are built into the repository (see
 // `scripts/build-test-bundles.mjs`) and gitignored. The path is derived
 // from this file so it works on any platform and any working directory.
-const BUNDLE_DIR = join(dirname(fileURLToPath(import.meta.url)), "..", "..", ".harness-build") + "/";
+const HARNESS_DIR = dirname(fileURLToPath(import.meta.url));
+const ROOT = join(HARNESS_DIR, "..", "..");
+const BUNDLE_DIR = join(ROOT, ".harness-build") + "/";
 
 /**
  * Builds a `file://` URL for a harness bundle.
@@ -100,6 +103,35 @@ t(
 );
 t("the result is a well-formed report", typeof first.breached === "boolean");
 t("the report carries a source", typeof first.source === "string");
+
+console.log("=== the cache survives a duplicated module ===");
+
+/*
+ * The cache has to live outside the module scope.
+ *
+ * A module-scope cache is duplicated whenever the module is evaluated
+ * twice — a hot-module reload, a lazily imported chunk that resolves to a
+ * second copy, or a test that imports the module under a different URL.
+ * Every copy keeps its own cache, so the same range is fetched once per
+ * copy. That undoes the batching the cache exists for, and it makes the
+ * request count the interface reports wrong.
+ *
+ * The module is imported a second time through a different URL, which is
+ * exactly what a duplicated instance looks like to the code.
+ */
+{
+  const source = readFileSync(join(ROOT, "src", "lib", "breachScanner.ts"), "utf8");
+  t(
+    "the range cache is not held in the module scope",
+    !/const RANGE_CACHE = new Map/.test(source),
+    "the cache is a module-scope Map"
+  );
+  t(
+    "the cache is held on the global object",
+    /globalThis/.test(source) && /__vaultzero_breach_range_cache__/.test(source),
+    "the cache is not shared between module copies"
+  );
+}
 
 console.log("=== the audit log is redacted and memory-only ===");
 

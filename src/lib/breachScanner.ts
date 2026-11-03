@@ -133,30 +133,57 @@ export function setBreachOnlineEnabled(enabled: boolean): void {
  * A range response covers every password sharing that prefix, so one fetch
  * answers for all of them. The cache is bounded and expires so a long-lived
  * session does not hold stale breach data forever.
+ *
+ * The cache lives on the global object rather than in the module scope.
+ * A module-scope cache is duplicated whenever the module is evaluated
+ * twice — a hot-module reload, a lazily imported chunk that resolves to a
+ * second copy, or a test that imports the module under a different URL.
+ * Every copy then keeps its own cache, and the same range is fetched once
+ * per copy, which quietly undoes the batching the cache exists for and
+ * makes the request count the UI reports wrong.
+ *
+ * One shared cache cannot be duplicated, so the request count stays
+ * truthful and a repeated password really does cost one request.
  */
-const RANGE_CACHE = new Map<string, { suffixes: Set<string>; counts: Map<string, number>; fetchedAt: number }>();
+interface BreachRangeCache {
+  ranges: Map<string, { suffixes: Set<string>; counts: Map<string, number>; fetchedAt: number }>;
+  requestCount: number;
+}
+
+const CACHE_KEY = "__vaultzero_breach_range_cache__";
+
+function sharedCache(): BreachRangeCache {
+  const holder = globalThis as typeof globalThis & { [CACHE_KEY]?: BreachRangeCache };
+  if (!holder[CACHE_KEY]) {
+    holder[CACHE_KEY] = {
+      ranges: new Map(),
+      requestCount: 0,
+    };
+  }
+  return holder[CACHE_KEY];
+}
+
 const RANGE_CACHE_MAX_ENTRIES = 256;
 const RANGE_CACHE_TTL_MS = 60 * 60 * 1000; // 1 hour
 
 /** Number of live HIBP requests this session has made. Surfaced in the UI. */
-let rangeRequestCount = 0;
-
 export function getRangeRequestCount(): number {
-  return rangeRequestCount;
+  return sharedCache().requestCount;
 }
 
 /** Clears the cached HIBP ranges. Exposed for tests and for a manual refresh. */
 export function clearBreachRangeCache(): void {
-  RANGE_CACHE.clear();
+  sharedCache().ranges.clear();
 }
 
 function cacheRange(prefix: string, suffixes: Set<string>, counts: Map<string, number>): void {
-  if (RANGE_CACHE.size >= RANGE_CACHE_MAX_ENTRIES) {
+  const cache = sharedCache();
+  if (cache.ranges.size >= RANGE_CACHE_MAX_ENTRIES) {
     // Evict the oldest entry (Map preserves insertion order).
-    const oldest = RANGE_CACHE.keys().next().value;
-    if (oldest !== undefined) RANGE_CACHE.delete(oldest);
+    const oldest = cache.ranges.keys().next().value;
+    if (oldest !== undefined) cache.ranges.delete(oldest);
   }
-  RANGE_CACHE.set(prefix, { suffixes, counts, fetchedAt: Date.now() });
+  cache.ranges.set(prefix, { suffixes, counts, fetchedAt: Date.now() });
 }
 
 /**
@@ -173,7 +200,7 @@ async function fetchRange(
   // Offline by default. Without explicit consent nothing leaves the device.
   if (!isBreachOnlineEnabled()) return null;
 
-  const cached = RANGE_CACHE.get(prefix);
+  const cached = sharedCache().ranges.get(prefix);
   if (cached && Date.now() - cached.fetchedAt < RANGE_CACHE_TTL_MS) {
     return cached;
   }
@@ -215,7 +242,7 @@ async function fetchRange(
       counts.set(suffix, count);
     }
 
-    rangeRequestCount += 1;
+    sharedCache().requestCount += 1;
     cacheRange(prefix, suffixes, counts);
     return { suffixes, counts };
   } catch {
@@ -282,7 +309,7 @@ export async function scanPasswordsBreach(
   const prefixes = Array.from(new Set(Array.from(hashes.values()).map((h) => h.prefix)));
   const pending = prefixes.filter((p) => {
     // A prefix whose range is already cached costs no request.
-    const cached = RANGE_CACHE.get(p);
+    const cached = sharedCache().ranges.get(p);
     return !cached || Date.now() - cached.fetchedAt >= RANGE_CACHE_TTL_MS;
   });
 
@@ -329,7 +356,7 @@ export async function scanPasswordsBreach(
       continue;
     }
 
-    const range = fetched.get(hash.prefix) ?? RANGE_CACHE.get(hash.prefix);
+    const range = fetched.get(hash.prefix) ?? sharedCache().ranges.get(hash.prefix);
     const rangeData = range && "suffixes" in range ? range : null;
 
     if (!rangeData) {

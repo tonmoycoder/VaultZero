@@ -37,6 +37,15 @@ test.describe("V-19 breach scan batching", () => {
       const originalFetch = window.fetch;
       window.fetch = (async (input: any, init?: any) => {
         const url = String(input);
+        /*
+         * Only the breach-range requests are counted. The application
+         * checks GitHub for a release on startup, and that request goes
+         * through the same `fetch`, so counting every URL would make the
+         * assertion depend on when the update check happened to land.
+         */
+        if (!url.includes("api.pwnedpasswords.com/range/")) {
+          return originalFetch(input, init);
+        }
         requests.push(url);
         current += 1;
         peak = Math.max(peak, current);
@@ -88,7 +97,11 @@ test.describe("V-19 breach scan batching", () => {
       const module = await import("/src/lib/breachScanner.ts");
       let count = 0;
       const originalFetch = window.fetch;
-      window.fetch = (async () => {
+      window.fetch = (async (input: any, init?: any) => {
+        // Only the breach-range requests are counted — see above.
+        if (!String(input).includes("api.pwnedpasswords.com/range/")) {
+          return originalFetch(input, init);
+        }
         count += 1;
         return new Response("", { status: 200 });
       }) as typeof window.fetch;
@@ -97,15 +110,25 @@ test.describe("V-19 breach scan batching", () => {
         module.setBreachOnlineEnabled(true);
         module.clearBreachRangeCache();
         await module.scanPasswordsBreach(["same-password"], "en");
+        const afterFirst = count;
         await module.scanPasswordsBreach(["same-password"], "en");
-        return count;
+        return { total: count, afterFirst };
       } finally {
         window.fetch = originalFetch;
       }
     });
 
-    // The second scan is served entirely from the cache.
-    expect(requestCount).toBe(1);
+    /*
+     * The second scan is served entirely from the cache, so the first scan
+     * costs exactly one request and the second costs none.
+     *
+     * The two numbers are checked separately. A single total only says
+     * that *something* was cached; it does not say that the first scan
+     * was not already fetching three ranges for one password, which is
+     * what a duplicated module instance used to cause.
+     */
+    expect(requestCount.afterFirst).toBe(1);
+    expect(requestCount.total).toBe(1);
   });
 
   test("the scan is offline unless the user explicitly opts in (V-18)", async ({

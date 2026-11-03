@@ -183,6 +183,19 @@ export function createAutoLock(options: AutoLockOptions): AutoLockController {
     window.addEventListener("keydown", handleKeyDown);
     window.addEventListener("touchstart", handleActivity, { passive: true });
     window.addEventListener("wheel", handleActivity, { passive: true });
+    /*
+     * Pointer events are the ones that actually fire on a touch screen.
+     *
+     * The activity listeners above are mouse and touch specific. A
+     * pointer device — which is what every modern phone and tablet
+     * reports — sends `pointermove` and `pointerdown`, and the mouse
+     * events only appear when the browser decides to emulate them. The
+     * emulated ones are not guaranteed to arrive, so the idle timer was
+     * not reset while the user was actually using the application, and
+     * the vault locked itself in the middle of a task on a phone.
+     */
+    window.addEventListener("pointermove", handleActivity, { passive: true });
+    window.addEventListener("pointerdown", handleActivity, { passive: true });
     window.addEventListener("focus", handleFocus);
     window.addEventListener("blur", handleBlur);
     document.addEventListener("visibilitychange", handleVisibility);
@@ -200,6 +213,8 @@ export function createAutoLock(options: AutoLockOptions): AutoLockController {
     window.removeEventListener("keydown", handleKeyDown);
     window.removeEventListener("touchstart", handleActivity);
     window.removeEventListener("wheel", handleActivity);
+    window.removeEventListener("pointermove", handleActivity);
+    window.removeEventListener("pointerdown", handleActivity);
     window.removeEventListener("focus", handleFocus);
     window.removeEventListener("blur", handleBlur);
     document.removeEventListener("visibilitychange", handleVisibility);

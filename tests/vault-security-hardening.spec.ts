@@ -200,6 +200,19 @@ test.describe("V-06 — the vault must auto-lock", () => {
 
     expect(values.low).toBe(0);
     expect(values.high).toBe(1440);
+
+    /*
+     * The preference is persisted, and this test leaves an extreme value
+     * behind — zero minutes, which is the shortest possible timeout. The
+     * browser context is shared by every spec file in the run, so the
+     * value would carry into the next file and lock the vault the moment
+     * it opened. The stored value is put back so the test only asserts
+     * what it means to assert.
+     */
+    await page.evaluate(async () => {
+      const mod = await import("/src/lib/autoLock.ts");
+      mod.writeAutoLockMinutes(mod.DEFAULT_AUTO_LOCK_MINUTES);
+    });
   });
 
   test("hiding the window locks the vault", async ({ page }) => {

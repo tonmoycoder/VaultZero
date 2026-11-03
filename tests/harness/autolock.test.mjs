@@ -1,6 +1,7 @@
 // The auto-lock timer must lock the vault after a period of inactivity,
 // and the setting must be clamped and persisted.
 import { webcrypto } from "node:crypto";
+import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 if (!globalThis.crypto) globalThis.crypto = webcrypto;
@@ -8,7 +9,8 @@ if (!globalThis.crypto) globalThis.crypto = webcrypto;
 // The harness bundles are built into the repository (see
 // `scripts/build-test-bundles.mjs`) and gitignored. The path is derived
 // from this file so it works on any platform and any working directory.
-const BUNDLE_DIR = join(dirname(fileURLToPath(import.meta.url)), "..", "..", ".harness-build") + "/";
+const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..", "..");
+const BUNDLE_DIR = join(ROOT, ".harness-build") + "/";
 
 /**
  * Builds a `file://` URL for a harness bundle.
@@ -124,6 +126,43 @@ zero.setTimeoutMinutes(0);
 zero.noteActivity();
 t("a zero timeout does not auto-lock", zeroLocked === false);
 zero.stop();
+
+console.log("=== the activity listeners cover pointer devices ===");
+
+/*
+ * The idle timer has to be reset by the events a touch screen sends.
+ *
+ * The activity listeners were mouse and touch specific. A pointer
+ * device — which is what every modern phone and tablet reports — sends
+ * `pointermove` and `pointerdown`, and the mouse events only appear
+ * when the browser decides to emulate them. The emulated ones are not
+ * guaranteed to arrive, so the idle timer was not reset while the user
+ * was actually using the application, and the vault locked itself in
+ * the middle of a task on a phone.
+ *
+ * The source is checked here because the listeners are attached to the
+ * real `window`, which the harness does not have.
+ */
+{
+  const source = readFileSync(join(ROOT, "src", "lib", "autoLock.ts"), "utf8");
+
+  t(
+    "pointer movement resets the idle timer",
+    /addEventListener\("pointermove",\s*handleActivity/.test(source),
+    "the idle timer ignores pointer movement"
+  );
+  t(
+    "a pointer press resets the idle timer",
+    /addEventListener\("pointerdown",\s*handleActivity/.test(source),
+    "the idle timer ignores pointer presses"
+  );
+  t(
+    "the pointer listeners are removed on stop",
+    /removeEventListener\("pointermove",\s*handleActivity/.test(source) &&
+      /removeEventListener\("pointerdown",\s*handleActivity/.test(source),
+    "the pointer listeners leak"
+  );
+}
 
 console.log(`\nRESULT: ${failures === 0 ? "all passed" : failures + " failed"}`);
 process.exit(failures === 0 ? 0 : 1);

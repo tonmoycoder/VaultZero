@@ -1,5 +1,5 @@
 import { test, expect, type Page } from "@playwright/test";
-import { seedVault } from "./helpers/seedVault";
+import { seedVault, settleLockState } from "./helpers/seedVault";
 
 const inspector = (page: Page) => page.getByTestId("detail-inspector");
 const card = (page: Page, id: string) => page.locator(`[data-item-id="${id}"]`);
@@ -229,6 +229,16 @@ for (const width of [390, 320]) {
   test(`mobile ${width}px uses a scrollable, swipe-dismissable sheet`, async ({ page }) => {
     await page.setViewportSize({ width, height: 844 });
     await page.reload();
+    /*
+     * The reload settles the auto-lock state.
+     *
+     * The application locks the vault when the document becomes hidden
+     * and when the window loses focus, and a reload does both. The lock
+     * that was scheduled can then land while this test is running, which
+     * would close the sheet before the swipe got to it. The failure
+     * would read as a broken gesture.
+     */
+    await settleLockState(page);
     await expect(inspector(page)).toHaveCount(0);
     await openItem(page, "google");
     await expect(inspector(page)).toHaveAttribute("data-mode", "sheet");
@@ -239,13 +249,33 @@ for (const width of [390, 320]) {
     await scroll.evaluate((element) => { element.scrollTop = 0; });
     const handle = inspector(page).getByRole("button", { name: "Drag down to close details" });
     const box = (await handle.boundingBox())!;
-    await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
+    const grabX = box.x + box.width / 2;
+    const grabY = box.y + box.height / 2;
+
+    await page.mouse.move(grabX, grabY);
     await page.mouse.down();
-    await page.mouse.move(box.x + box.width / 2, box.y + 250, { steps: 14 });
-    await page.mouse.up();
-    if ((await inspector(page).count()) > 0) {
-      await handle.click({ force: true });
+
+    /*
+     * The swipe is a series of small moves, not one jump.
+     *
+     * A single jump can land the release before the last move has been
+     * delivered, so the gesture ends with a distance that depends on how
+     * the events happened to be scheduled. The sheet would then stay
+     * open on a swipe that a person would certainly read as a dismissal.
+     * The steps are small and the release waits for the last one.
+     */
+    for (let step = 1; step <= 10; step += 1) {
+      await page.mouse.move(grabX, grabY + step * 25);
     }
+    await page.mouse.up();
+
+    /*
+     * The swipe itself has to dismiss the sheet.
+     *
+     * The test used to click the handle when the swipe had not worked,
+     * which hid the failure: the assertion then passed because the click
+     * closed the panel, and the gesture was never actually tested.
+     */
     await expect(inspector(page)).toHaveCount(0);
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1)).toBe(true);
   });
