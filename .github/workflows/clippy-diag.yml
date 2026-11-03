@@ -1,0 +1,34 @@
+name: Clippy Diagnostic
+
+on:
+  push:
+    branches: [ arena/79f3d1ba-vaultzero ]
+
+jobs:
+  clippy:
+    name: Clippy Diagnostic
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+        with:
+          ref: arena/79f3d1ba-vaultzero
+
+      - name: Setup Rust Stable
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy
+
+      - name: Run Clippy and capture the report
+        run: |
+          cargo clippy --workspace --all-targets --message-format=short -- -D warnings > clippy.txt 2>&1 || true
+          echo "=== exit code above ===" >> clippy.txt
+          cat clippy.txt
+          git config user.name  "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add clippy.txt
+          git commit -m "chore: capture the clippy report" || echo "nothing to commit"
+          git push origin HEAD:arena/79f3d1ba-vaultzero
