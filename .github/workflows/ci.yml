@@ -87,8 +87,13 @@ jobs:
       - name: Check Rust Formatting with the toolchain
         run: cargo fmt --all -- --check
 
-      - name: Run Cargo Clippy
-        run: cargo clippy --workspace --all-targets -- -D warnings
+      # The lint and the test suite cover `vault-core` here. That crate
+      # is pure Rust and has no system dependencies, so the check runs
+      # the same way on every runner. The Tauri application is linted in
+      # the Linux job below, where the desktop libraries it links
+      # against are actually installed.
+      - name: Run Cargo Clippy on the core crate
+        run: cargo clippy -p vault-core --all-targets -- -D warnings
 
       - name: Run Cargo Test Suite
         run: cargo test -p vault-core --verbose
@@ -100,6 +105,47 @@ jobs:
 
       - name: Audit Frontend Dependencies
         run: npm audit --audit-level=high
+
+  rust-workspace:
+    name: Rust Workspace Lint
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      # The Tauri application links against the desktop web view. The
+      # build scripts of those libraries look for them through
+      # `pkg-config`, and without the packages below the linter cannot
+      # even reach the application's own code: it stops at the system
+      # library. The lint is worth having, so the libraries are
+      # installed.
+      - name: Install the desktop libraries
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            libwebkit2gtk-4.1-dev \
+            libgtk-3-dev \
+            libayatana-appindicator3-dev \
+            librsvg2-dev \
+            libxdo-dev \
+            libssl-dev \
+            pkg-config \
+            build-essential
+
+      - name: Setup Rust Stable
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy
+
+      - name: Rust Cache
+        uses: swatinem/rust-cache@v2
+
+      - name: Run Cargo Clippy on the whole workspace
+        run: cargo clippy --workspace --all-targets -- -D warnings
+
+      - name: Run Cargo Clippy on the application crate
+        run: cargo clippy -p vaultzero-app --all-targets -- -D warnings
 
   frontend-e2e:
     name: Frontend End-to-End & Security Tests
