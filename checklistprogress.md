@@ -91,3 +91,9 @@ Active branch: `arena/61b1561a-vaultzero` (never rename). PR #2 MERGED.
 - [x] test reproduces desktop launcher bug → 4 FAIL, then PASS after minimal `.bat` edit; 32/32 harness
 - [ ] make the live-404 test pass — BLOCKED: 4 Android signing secrets not set; no publishable artifact exists
 - [ ] OCR 10% stall, phone UI/scroll, camera, update mismatch — untouched (next batch, by priority)
+
+## V-83 (awaiting CI after push)
+- [x] rebase onto `021cc02` without dropping any remote commit; both ledgers preserved
+- [x] reproduce remote CSV regression locally then make `vault-csv-import.spec.ts:115` pass (3 lines)
+- [ ] watch new CI run + `gh pr checks 3` → expect BOTH green
+- [ ] 4 Android secrets still unset; Beta publication + `check-live-release.mjs` PASS deferred to Antigravity handoff

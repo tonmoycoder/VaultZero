@@ -364,11 +364,9 @@ function extractDomain(urlStr: string): string {
  */
 export function sanitizeCsvExportCell(val: string): string {
   if (!val) return "";
-  const trimmed = val.trimStart();
-  const first = trimmed.charAt(0);
-  if (first === "=" || first === "+" || first === "-" || first === "@" || first === "\t" || first === "\r" || first === "|") {
-    return `'${val}`;
-  }
+  // A raw leading control char (tab/CR) is dangerous by itself; trimStart()
+  // would hide it, so check the raw value and the whitespace-skipped value.
+  if (/^[=+\-@|\t\r]/.test(val) || /^\s+[=+\-@|]/.test(val)) return `'${val}`;
   return val;
 }
 

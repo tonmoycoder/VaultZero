@@ -231,3 +231,7 @@ Never fabricate assets or silently downgrade to a debug keystore.
 - Reproduced 2 bugs with tests first: `scripts/check-live-release.mjs` → 3 README links 404 (RED, blocked on 4 Android secrets); `tests/harness/desktop-launcher.test.mjs` → 4 FAIL then PASS after 11 lines in `Launch-VaultZero.bat`.
 - Root cause found read-only: `Launch-VaultZero.bat` opened a browser at localhost:1420 even when the engine never started; `tauri.conf.json:9` has `devUrl: http://localhost:1420`. Screenshot `VaultZero.exe` is NOT in the repo (likely a compiled wrapper of that .bat — unproven).
 - 32/32 harness PASS. Nothing pushed; no release published; no fake assets. Waiting for the user to set secrets.
+
+## V-83 (CI regression from remote commits, test-first)
+- Remote `7837f35…021cc02` (kept intact) changed `sanitizeCsvExportCell` to `trimStart()`, which hid a raw leading TAB → `41736098847` Frontend 1 failed / 134 passed at `tests/vault-csv-import.spec.ts:115`; reproduced locally 1 failed / 4 passed. Fixed in 3 lines (`src/lib/csv.ts`) keeping both raw-first-char and whitespace-skipped formula detection; targeted 10/10, full 135/135.
+- Keystore caveat (user chose to KEEP): `release.yml` now signs the APK with hardcoded `vaultzero123` when the 4 Android secrets are absent. Conflicts with the earlier no-debug-keystore rule; documented, not reverted. Live latest is STILL `v2.5.2`, 3 README links 404, `check-live-release.mjs` intentionally RED.
