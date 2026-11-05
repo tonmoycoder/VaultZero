@@ -1212,6 +1212,12 @@ export function getActiveSession(): UnlockedSession | null {
 
 export function clearActiveSession(): void {
   vaultMutationQueue.bumpEpoch();
+  if (inMemorySession?.items) {
+    for (const item of inMemorySession.items) {
+      if (item.password) item.password = "";
+      if (item.totp) item.totp = "";
+    }
+  }
   inMemorySession = null;
   activeDataKey = null;
   if (typeof window === "undefined") return;

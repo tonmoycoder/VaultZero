@@ -18,6 +18,7 @@ import {
   speedLabel,
   stretchFromDelta,
 } from "../lib/gesturePhysics";
+import { copySecure } from "../lib/clipboard";
 
 export function Logo({ size = 40, showGlow = true }: { size?: number; showGlow?: boolean }) {
   return (
@@ -773,19 +774,10 @@ export function CopyButton({
 }) {
   const [copied, setCopied] = useState(false);
   const copy = async () => {
-    try {
-      await navigator.clipboard.writeText(value);
-    } catch {
-      const el = document.createElement("textarea");
-      el.value = value;
-      document.body.appendChild(el);
-      el.select();
-      document.execCommand("copy");
-      el.remove();
-    }
+    await copySecure(value);
     setCopied(true);
     hapticSuccess();
-    onCopied(`${label} copied to clipboard`);
+    onCopied(`${label} copied to clipboard (auto-wipes in 30s)`);
     setTimeout(() => setCopied(false), 1500);
   };
   return (

@@ -434,7 +434,7 @@ export default function App() {
         setTheme((current) => (current === "lofi" ? "light" : "lofi"));
         return;
       }
-      if (mod && !event.shiftKey && event.key.toLowerCase() === "l") {
+      if (mod && event.key.toLowerCase() === "l") {
         event.preventDefault();
         void lockVault();
         return;
