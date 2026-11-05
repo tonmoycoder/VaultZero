@@ -226,3 +226,8 @@ Never fabricate assets or silently downgrade to a debug keystore.
 5. PR #1 remains OPEN/superseded — ask before closing or merging.
 6. `ui.tsx:211-213` still fetches Google/DuckDuckGo favicons; V-69 air-seal
    scope is only `crates/vault-core`. Not a global "zero network" guarantee.
+
+## V-82 (current, IN PROGRESS — stopped for user decision)
+- Reproduced 2 bugs with tests first: `scripts/check-live-release.mjs` → 3 README links 404 (RED, blocked on 4 Android secrets); `tests/harness/desktop-launcher.test.mjs` → 4 FAIL then PASS after 11 lines in `Launch-VaultZero.bat`.
+- Root cause found read-only: `Launch-VaultZero.bat` opened a browser at localhost:1420 even when the engine never started; `tauri.conf.json:9` has `devUrl: http://localhost:1420`. Screenshot `VaultZero.exe` is NOT in the repo (likely a compiled wrapper of that .bat — unproven).
+- 32/32 harness PASS. Nothing pushed; no release published; no fake assets. Waiting for the user to set secrets.

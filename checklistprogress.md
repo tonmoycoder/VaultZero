@@ -85,3 +85,9 @@ Active branch: `arena/61b1561a-vaultzero` (never rename). PR #2 MERGED.
 - V-69 air-seal covers `crates/vault-core` only; `ui.tsx` external favicons,
   `src/lib/updater.ts` release check and `src-tauri/src/p2p_lan.rs` are
   outside its scope. Do not claim global "zero network".
+
+## V-82 (stopped, awaiting user)
+- [x] test reproduces GitHub 404 → `node scripts/check-live-release.mjs` (3 FAIL)
+- [x] test reproduces desktop launcher bug → 4 FAIL, then PASS after minimal `.bat` edit; 32/32 harness
+- [ ] make the live-404 test pass — BLOCKED: 4 Android signing secrets not set; no publishable artifact exists
+- [ ] OCR 10% stall, phone UI/scroll, camera, update mismatch — untouched (next batch, by priority)

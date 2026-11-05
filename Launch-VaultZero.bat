@@ -17,9 +17,16 @@ if exist "%~dp0src-tauri\target\release\vaultzero-app.exe" (
     exit /b 0
 )
 
+:: 0b. Published native build sitting next to this launcher (no dev server needed)
+if exist "%~dp0VaultZero-Windows-x64-Portable.exe" (
+    start "" "%~dp0VaultZero-Windows-x64-Portable.exe"
+    exit /b 0
+)
+
 :: 1. Fallback: Ensure local engine is running and ready on port 1420 before opening browser
 powershell -NoProfile -ExecutionPolicy Bypass -Command ^
   "$port = 1420; " ^
+  "$ready = $false; " ^
   "if (-not (Get-NetTCPConnection -LocalPort $port -ErrorAction SilentlyContinue)) { " ^
   "    Write-Host 'Starting VaultZero local engine on port 1420...'; " ^
   "    Start-Process powershell -ArgumentList '-WindowStyle Hidden -Command npm run dev' -WindowStyle Hidden " ^
@@ -28,9 +35,15 @@ powershell -NoProfile -ExecutionPolicy Bypass -Command ^
   "for ($i = 0; $i -lt 40; $i++) { " ^
   "    try { " ^
   "        $r = Invoke-WebRequest -Uri 'http://localhost:1420/' -UseBasicParsing -TimeoutSec 1; " ^
-  "        if ($r.StatusCode -eq 200) { break } " ^
+  "        if ($r.StatusCode -eq 200) { $ready = $true; break } " ^
   "    } catch { Start-Sleep -Milliseconds 400 } " ^
-  "}"
+  "}; " ^
+  "if (-not $ready) { Write-Host 'VaultZero local engine did not start on port 1420.'; exit 1 }"
+
+if %ERRORLEVEL% neq 0 (
+    echo VaultZero could not start; no browser window will be opened.
+    exit /b 1
+)
 
 :: 2. Launch in native Standalone Chromeless App Window (Brave -> Edge -> Chrome -> Default Browser)
 if exist "C:\Program Files\BraveSoftware\Brave-Browser\Application\brave.exe" (
