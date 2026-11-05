@@ -108,3 +108,5 @@ Active branch: `arena/61b1561a-vaultzero` (never rename). PR #2 MERGED.
 - [x] Gates: tsc 0, verify 0 / 34 harness, node20 34/34, audit 0, Playwright 137/137 (6.6m)
 - [ ] watch new CI + `gh pr checks 3` -> expect pass/pass
 - [ ] NOT possible here (defer to Antigravity prompt): 4 Android secrets, Windows `.exe`/WebView2/MSI local checks, real-device camera/LAN P2P/120Hz, <2s cold start, Rust 2024 migration, Beta publication + `check-live-release.mjs` exit 0
+
+- [x] V-84 correction: restore 4 tracked `gen/schemas/*.json`, narrow ignore to `gen/android/`, bound harness cleanup, add regression guard (34/34 harness, verify 0)

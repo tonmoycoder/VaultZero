@@ -1,6 +1,6 @@
 // V-84: Stage 5.1 workspace hygiene. Agent memory / prompt / MCP scratch
 // files must stay out of Git; a fresh clone must not depend on them.
-import { readFileSync } from "node:fs";
+import { readFileSync, existsSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { execFileSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
@@ -22,7 +22,7 @@ t("accepts an ignore file that covers it", /AGENTS\.md/.test("AGENTS.md\n"));
 console.log("=== every scratch convention is ignored ===");
 for (const pattern of [
   ".agent/", ".agents/", "agent/", "*PROMPT*.md", "*HANDOFF*.md",
-  "MEMORY_BANK.md", "TASK_QUEUE.md", "AGENTS.md", ".mcp.json", "src-tauri/gen/",
+  "MEMORY_BANK.md", "TASK_QUEUE.md", "AGENTS.md", ".mcp.json", "src-tauri/gen/android/",
 ]) {
   t(`.gitignore covers ${pattern}`, ignore.includes(pattern));
 }
@@ -35,6 +35,13 @@ const forbidden = tracked.filter((f) =>
   /(PROMPT|HANDOFF)/.test(f)
 );
 t("git ls-files has no agent/prompt/MCP scratch file", forbidden.length === 0, forbidden.join(", "));
+
+console.log("=== tracked Tauri schemas are never hidden or deleted ===");
+t("ignore rule targets gen/android, not the whole gen directory", /src-tauri\/gen\/android\//.test(ignore) && !/^src-tauri\/gen\/$/m.test(ignore));
+for (const schema of ["acl-manifests.json", "capabilities.json", "desktop-schema.json", "windows-schema.json"]) {
+  const rel = `src-tauri/gen/schemas/${schema}`;
+  t(`${rel} exists and is still tracked`, existsSync(join(ROOT, rel)) && tracked.includes(rel));
+}
 
 console.log(`\nRESULT: ${failures === 0 ? "all passed" : failures + " failed"}`);
 process.exit(failures === 0 ? 0 : 1);

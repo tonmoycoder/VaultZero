@@ -101,8 +101,10 @@ t("README logo is a Markdown image (GitHub-safe)", /!\[VaultZero Official Logo\]
 t("README no longer claims an unmeasured 120fps", !/১২০fps|120 ?fps/i.test(readme));
 
 console.log("=== V-84: the patch actually runs on a SELF-CLOSING <application/> ===");
-const genDir = join(ROOT, "src-tauri", "gen");
-const genPath = join(genDir, "android", "app", "src", "main", "AndroidManifest.xml");
+// Only the simulated ANDROID tree is disposable: src-tauri/gen/schemas/*.json
+// are tracked files that must survive every harness run.
+const genDir = join(ROOT, "src-tauri", "gen", "android");
+const genPath = join(genDir, "app", "src", "main", "AndroidManifest.xml");
 try {
   mkdirSync(dirname(genPath), { recursive: true });
   writeFileSync(

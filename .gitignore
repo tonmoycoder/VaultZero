@@ -54,7 +54,8 @@ skills-lock.json
 *HANDOFF*.md
 AGENTS.md
 # Tauri regenerates src-tauri/gen/android at build time; never commit it.
-src-tauri/gen/
+# NOTE: gen/schemas/*.json ARE tracked and must stay visible.
+src-tauri/gen/android/
 VOLUME_*.md
 MEMORY_BANK.md
 TASK_QUEUE.md
