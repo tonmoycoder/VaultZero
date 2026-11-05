@@ -4,7 +4,11 @@
  * creates emergency pre-update safety snapshots, and guides seamless binary installation.
  */
 
-import { APP_VERSION } from "./version";
+import { APP_VERSION, compareSemver } from "./version";
+
+// Single source of truth: the app, the sidebar and the updater must all use
+// the same SemVer ordering (including beta/prerelease tags).
+export { compareSemver };
 import { invokeTauri, isTauri, VAULT_STORAGE_KEY } from "./vault";
 
 export const CURRENT_APP_VERSION = APP_VERSION;
@@ -256,22 +260,6 @@ export async function fetchReleaseAssets(tagName: string): Promise<GitHubAsset[]
     browser_download_url: a.browser_download_url,
     size: a.size,
   }));
-}
-
-export function compareSemver(v1: string, v2: string): number {
-  const parse = (v: string) =>
-    v
-      .replace(/^v/i, "")
-      .split(/[-+]/)[0]
-      .split(".")
-      .map((num) => parseInt(num, 10) || 0);
-
-  const [maj1, min1, pat1] = parse(v1);
-  const [maj2, min2, pat2] = parse(v2);
-
-  if (maj1 !== maj2) return maj1 - maj2;
-  if (min1 !== min2) return min1 - min2;
-  return pat1 - pat2;
 }
 
 export function isNewerVersion(candidate: string, current = CURRENT_APP_VERSION): boolean {

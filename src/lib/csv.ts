@@ -91,13 +91,23 @@ export function parseCsvRaw(
   let i = 0;
   const len = clean.length;
 
+  // V-84: fail CLOSED on an oversized cell. Silently clipping a quoted cell
+  // (while leaving unquoted ones unbounded) loses vault data without telling
+  // anyone. One bound, applied to every append, so nothing can be truncated.
+  const append = (ch: string) => {
+    currentCell += ch;
+    if (currentCell.length > MAX_CSV_CELL_LENGTH) {
+      throw new Error(`CSV cell exceeds ${MAX_CSV_CELL_LENGTH} characters; refusing to truncate silently.`);
+    }
+  };
+
   while (i < len) {
     const ch = clean[i];
 
     if (inQuotes) {
       if (ch === '"') {
         if (i + 1 < len && clean[i + 1] === '"') {
-          currentCell += '"';
+          append('"');
           i += 2;
           continue;
         } else {
@@ -106,9 +116,7 @@ export function parseCsvRaw(
           continue;
         }
       } else {
-        if (currentCell.length < MAX_CSV_CELL_LENGTH) {
-          currentCell += ch;
-        }
+        append(ch);
         i++;
         continue;
       }
@@ -143,7 +151,7 @@ export function parseCsvRaw(
         currentRow = [];
         continue;
       } else {
-        currentCell += ch;
+        append(ch);
         i++;
         continue;
       }

@@ -18,6 +18,11 @@
   <uses-permission android:name="android.permission.ACCESS_WIFI_STATE" />
   <uses-permission android:name="android.permission.CHANGE_WIFI_MULTICAST_STATE" />
 
+  <!-- V-84: a camera is optional hardware. Without required="false" the
+       Play Store hides the app from camera-less devices, and the gallery /
+       file-picker QR fallback would be unreachable there. -->
+  <uses-feature android:name="android.hardware.camera" android:required="false" />
+
   <!-- Local Wi-Fi P2P uses plain HTTP on the LAN (no external server). -->
   <application android:usesCleartextTraffic="true" />
 </manifest>

@@ -97,3 +97,14 @@ Active branch: `arena/61b1561a-vaultzero` (never rename). PR #2 MERGED.
 - [x] reproduce remote CSV regression locally then make `vault-csv-import.spec.ts:115` pass (3 lines)
 - [x] CI `42106165442` BOTH GREEN (Frontend 6m7s, Windows 4m13s); signed log `135 passed (5.5m)`; `gh pr checks 3` pass/pass
 - [ ] 4 Android secrets still unset; Beta publication + `check-live-release.mjs` PASS deferred to Antigravity handoff
+
+## V-84 (awaiting CI after push)
+- [x] 5 test-first repros written RED (6+1+3 harness FAIL, 2 Playwright FAIL) then made GREEN
+- [x] SemVer prerelease single source of truth; 4 version constants synced at 2.5.2, no downgrade
+- [x] CSV oversized cell fails closed (quoted + unquoted), at-limit cell lossless
+- [x] Android optional-camera feature injected + self-closing `<application/>` XML bug fixed and verified by real execution (both tag forms, idempotent)
+- [x] QR image fallback (`capture="environment"`) with fail-closed blank-image message; bilingual via `lang`
+- [x] `.gitignore`: `AGENTS.md`, `src-tauri/gen/`; 2 real SKILL.md installed into gitignored `.agents/skills/`
+- [x] Gates: tsc 0, verify 0 / 34 harness, node20 34/34, audit 0, Playwright 137/137 (6.6m)
+- [ ] watch new CI + `gh pr checks 3` -> expect pass/pass
+- [ ] NOT possible here (defer to Antigravity prompt): 4 Android secrets, Windows `.exe`/WebView2/MSI local checks, real-device camera/LAN P2P/120Hz, <2s cold start, Rust 2024 migration, Beta publication + `check-live-release.mjs` exit 0

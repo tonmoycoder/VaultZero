@@ -201,4 +201,35 @@ test.describe("VaultZero Architectural Hardening & Cryptographic Gate", () => {
     // Immediately shows locked gate
     await expect(page.getByRole("dialog", { name: "VaultZero is locked" })).toBeVisible();
   });
+
+  test("V-84: QR pairing has a native image fallback when the camera is denied", async ({ page }) => {
+    await page.goto("/?unlocked=true");
+    await page.keyboard.press("Control+Shift+Y");
+
+    const dialog = page.getByRole("dialog", { name: "Nearby P2P Sync" });
+    await dialog.getByRole("button", { name: /Scan QR/ }).click();
+
+    const picker = dialog.locator('input[type="file"][capture="environment"]');
+    await expect(picker).toHaveCount(1);
+    await expect(picker).toHaveAttribute("accept", "image/*");
+
+    // A real (blank) PNG: it must fail closed with a visible explanation
+    // instead of silently doing nothing or pretending a peer was found.
+    const png = await page.evaluate(() => {
+      const canvas = document.createElement("canvas");
+      canvas.width = 8;
+      canvas.height = 8;
+      const ctx = canvas.getContext("2d")!;
+      ctx.fillStyle = "#ffffff";
+      ctx.fillRect(0, 0, 8, 8);
+      return canvas.toDataURL("image/png").split(",")[1];
+    });
+    await picker.setInputFiles({
+      name: "no-qr.png",
+      mimeType: "image/png",
+      buffer: Buffer.from(png, "base64"),
+    });
+    await expect(dialog.getByText(/No QR code found|Could not read that image/i)).toBeVisible();
+    await expect(dialog.getByText("Waiting for peer selection…")).toBeVisible();
+  });
 });

@@ -7,6 +7,7 @@ import {
   exportVaultToCsv,
   MAX_CSV_FILE_SIZE,
   MAX_CSV_COLUMNS,
+  MAX_CSV_CELL_LENGTH,
 } from "../src/lib/csv";
 
 test.describe("Generic CSV Import & Lossless Data Preservation", () => {
@@ -113,5 +114,18 @@ test.describe("Generic CSV Import & Lossless Data Preservation", () => {
     expect(exported).toContain("\"'-DANGEROUS\"");
     expect(exported).toContain("\"'@http://evil.com\"");
     expect(exported).toContain("\"'\tSecret formula inside\"");
+  });
+
+  test("V-84: an oversized cell is rejected, never silently truncated", () => {
+    const over = "x".repeat(MAX_CSV_CELL_LENGTH + 1);
+
+    // Quoted and unquoted cells must use the SAME bound (the old code only
+    // clipped quoted ones, and did it silently — a data-loss fail-open).
+    expect(() => parseCsvRaw(`title,notes\n"${over}",ok`)).toThrow(/cell exceeds/i);
+    expect(() => parseCsvRaw(`title,notes\n${over},ok`)).toThrow(/cell exceeds/i);
+
+    // Positive control: a cell exactly at the limit stays lossless.
+    const atLimit = "y".repeat(MAX_CSV_CELL_LENGTH);
+    expect(parseCsvRaw(`"${atLimit}"`)[0][0]).toBe(atLimit);
   });
 });

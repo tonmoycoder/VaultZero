@@ -31,9 +31,24 @@ if (permissions.length === 0) {
   process.exit(1);
 }
 
-const additions = permissions.filter((p) => !manifest.includes(`android:name="${p}"`));
+// V-84: <uses-feature> tags are injected verbatim from the overlay, so a
+// camera-less device is never filtered out of the Play Store listing.
+const featureTags = [...overlay.matchAll(/<uses-feature\b[^>]*\/>/g)].map((m) => m[0]);
+const featureNames = featureTags
+  .map((tag) => /android:name="([^"]+)"/.exec(tag)?.[1])
+  .filter(Boolean);
+
+const missingPermissions = permissions.filter((p) => !manifest.includes(`android:name="${p}"`));
+const missingFeatures = featureTags.filter((tag) => {
+  const name = /android:name="([^"]+)"/.exec(tag)?.[1];
+  return name && !manifest.includes(`android:name="${name}"`);
+});
+const additions = [
+  ...missingPermissions.map((p) => `    <uses-permission android:name="${p}" />`),
+  ...missingFeatures.map((tag) => `    ${tag}`),
+];
 if (additions.length) {
-  const block = additions.map((p) => `    <uses-permission android:name="${p}" />`).join("\n");
+  const block = additions.join("\n");
   if (!/<manifest[^>]*>/.test(manifest)) {
     console.error("[android-manifest] generated manifest has no <manifest> root — cannot inject.");
     process.exit(1);
@@ -44,9 +59,15 @@ if (additions.length) {
 // Local LAN P2P uses plain HTTP; Android 9+ blocks cleartext by default.
 if (!/android:usesCleartextTraffic="true"/.test(manifest)) {
   if (/<application\b[^>]*>/.test(manifest)) {
-    manifest = manifest.replace(/<application\b([^>]*)>/, (_, attrs) =>
-      `<application${attrs} android:usesCleartextTraffic="true">`
-    );
+    // V-84: `tauri android init` emits a SELF-CLOSING <application ... />.
+    // Appending an attribute after the slash produced invalid XML
+    // (`<application ... / android:...>`) and broke the APK build. Preserve
+    // the original tag form instead of blindly string-concatenating.
+    manifest = manifest.replace(/<application\b[^>]*>/, (tag) => {
+      const selfClosing = /\/>$/.test(tag);
+      const attrs = tag.replace(/^<application\b/, "").replace(/\s*\/?>$/, "").trimEnd();
+      return `<application${attrs} android:usesCleartextTraffic="true"${selfClosing ? " />" : ">"}`;
+    });
   } else {
     console.error("[android-manifest] generated manifest has no <application> element — cannot enable LAN P2P.");
     process.exit(1);
@@ -57,7 +78,7 @@ writeFileSync(GENERATED, manifest, "utf8");
 
 // Verify the write: never publish an APK whose permissions we only *hoped* to add.
 const verified = readFileSync(GENERATED, "utf8");
-for (const p of permissions) {
+for (const p of [...permissions, ...featureNames]) {
   if (!verified.includes(`android:name="${p}"`)) {
     console.error(`[android-manifest] verification failed: ${p} is missing.`);
     process.exit(1);
@@ -68,4 +89,4 @@ if (!verified.includes('android:usesCleartextTraffic="true"')) {
   process.exit(1);
 }
 
-console.log(`[android-manifest] OK — ${permissions.length} permissions + cleartext LAN enabled (${additions.length} newly injected).`);
+console.log(`[android-manifest] OK — ${permissions.length} permissions + ${featureNames.length} optional features + cleartext LAN enabled (${additions.length} newly injected).`);

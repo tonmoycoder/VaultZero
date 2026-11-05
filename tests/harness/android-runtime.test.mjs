@@ -3,7 +3,8 @@
 // by `tauri android init` in CI. Without a committed manifest overlay and a
 // patch step, the APK ships with no CAMERA / LAN permissions, so getUserMedia
 // is denied and LAN P2P cannot bind. This guard checks the whole contract.
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync, readFileSync, writeFileSync, mkdirSync, rmSync } from "node:fs";
+import { execFileSync } from "node:child_process";
 import { dirname, join } from "node:path";
 import { createHash } from "node:crypto";
 import { fileURLToPath } from "node:url";
@@ -25,6 +26,7 @@ const workflow = read(".github/workflows/release.yml");
 const syncModal = read("src/components/toolModals.tsx");
 const cargo = read("src-tauri/Cargo.toml");
 const readme = read("README.md");
+const patch = read(patchRel);
 
 console.log("=== positive control ===");
 t("detects a manifest without CAMERA", !/android\.permission\.CAMERA/.test('<manifest xmlns:android="http://schemas.android.com/apk/res/android"></manifest>'));
@@ -46,6 +48,12 @@ if (has(manifestRel)) {
   t("allows local cleartext LAN traffic for P2P", /usesCleartextTraffic="true"/.test(m));
   t("no exported debug activity", !/android:exported="true"/.test(m));
 }
+
+console.log("=== camera is optional hardware, not a Play Store filter (V-84) ===");
+t("detects a manifest with no uses-feature", !/uses-feature/.test('<manifest xmlns:android="http://schemas.android.com/apk/res/android"></manifest>'));
+t("declares the camera as optional hardware", /<uses-feature[^>]*android\.hardware\.camera[^>]*required="false"/.test(read(manifestRel)));
+t("the patch step injects uses-feature into the GENERATED manifest", /uses-feature/.test(patch));
+t("the patch step verifies the injected feature fail-closed", /featureNames/.test(patch) && /verification failed/.test(patch));
 
 console.log("=== CI injects the overlay ===");
 t("patch script exists", has(patchRel));
@@ -91,6 +99,39 @@ t("header bitmap exists", has("src-tauri/icons/nsis-header.bmp"));
 t("sidebar bitmap exists", has("src-tauri/icons/nsis-sidebar.bmp"));
 t("README logo is a Markdown image (GitHub-safe)", /!\[VaultZero Official Logo\]\(\.\/public\/vaultzero-logo\.png\)/.test(readme));
 t("README no longer claims an unmeasured 120fps", !/১২০fps|120 ?fps/i.test(readme));
+
+console.log("=== V-84: the patch actually runs on a SELF-CLOSING <application/> ===");
+const genDir = join(ROOT, "src-tauri", "gen");
+const genPath = join(genDir, "android", "app", "src", "main", "AndroidManifest.xml");
+try {
+  mkdirSync(dirname(genPath), { recursive: true });
+  writeFileSync(
+    genPath,
+    '<?xml version="1.0" encoding="utf-8"?>\n<manifest xmlns:android="http://schemas.android.com/apk/res/android">\n    <application android:label="VaultZero" />\n</manifest>\n',
+    "utf8"
+  );
+  const run = () =>
+    execFileSync(process.execPath, [join(ROOT, "scripts", "patch-android-manifest.mjs")], {
+      cwd: ROOT,
+      encoding: "utf8",
+    });
+  run();
+  const out = readFileSync(genPath, "utf8");
+  t("positive control: a self-closing tag is detected", /<application[^>]*\/>/.test('<application android:label="VaultZero" />'));
+  t(
+    "cleartext injection keeps the application tag well-formed",
+    !/<application[^>]*\s\/\s+android:/.test(out),
+    (out.split("\n").find((l) => l.includes("<application")) || "").trim()
+  );
+  t("the cleartext attribute is really present", /<application[^>]*android:usesCleartextTraffic="true"/.test(out));
+  t("self-closing form is preserved", /<application[^>]*\/>/.test(out));
+  t("camera feature is injected into the generated manifest", /uses-feature[^>]*required="false"/.test(out));
+  t("a second run injects nothing (idempotent)", /0 newly injected/.test(run()));
+} catch (err) {
+  t("patch step executes without throwing", false, err.message);
+} finally {
+  rmSync(genDir, { recursive: true, force: true });
+}
 
 console.log(`\nRESULT: ${failures === 0 ? "all passed" : failures + " failed"}`);
 process.exit(failures === 0 ? 0 : 1);

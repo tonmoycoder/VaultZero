@@ -910,6 +910,7 @@ export default function App() {
               onNotify={notify}
               items={items}
               onMerge={handleP2PMerge}
+              lang={lang}
             />
           )}
           {modal === "emergency" && (

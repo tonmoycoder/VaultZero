@@ -494,12 +494,14 @@ export function AuthenticatorModal({
 // ————————————————————————————————— Security center —————————————————————————————————
 export { default as SecurityCenterModal } from "./SecurityCenter";
 
-export function SyncModal({ onClose, onNotify, items, onMerge }: {
+export function SyncModal({ onClose, onNotify, items, onMerge, lang = "en" }: {
   onClose: () => void;
   onNotify: Notify;
   items: VaultItem[];
   onMerge: (remote: VaultItem[]) => void;
+  lang?: Language;
 }) {
+  const S = (bn: string, en: string) => (lang === "bn" ? bn : en);
   const [tab, setTab] = useState<"host" | "scan">("host");
   const [status, setStatus] = useState<"waiting" | "connected">("waiting");
   const [connectedPeer, setConnectedPeer] = useState<string | null>(null);
@@ -507,6 +509,7 @@ export function SyncModal({ onClose, onNotify, items, onMerge }: {
   const [peerPin, setPeerPin] = useState<string | null>(null);
   const [cameraActive, setCameraActive] = useState(false);
   const [cameraError, setCameraError] = useState("");
+  const [qrImageError, setQrImageError] = useState("");
   const [transferring, setTransferring] = useState(false);
   // SECURITY/V-17: the P2P flow used to be a pure mock that reported success
   // without transferring anything. These hold the REAL host state produced by
@@ -528,6 +531,7 @@ export function SyncModal({ onClose, onNotify, items, onMerge }: {
   // V-75: rAF callbacks close over stale render state. A ref is the only
   // reliable way to stop the scanner loop the instant the camera is stopped.
   const cameraActiveRef = useRef(false);
+  const qrFileRef = useRef<HTMLInputElement | null>(null);
 
   /*
    * SECURITY: the PIN is generated locally with a CSPRNG. It is never
@@ -729,8 +733,8 @@ export function SyncModal({ onClose, onNotify, items, onMerge }: {
    * stopped could still arrive afterwards; the camera check makes sure a
    * late result cannot reopen a session that was already closed.
    */
-  const handleScannedCode = (text: string | null) => {
-    if (!text || !cameraActive) return;
+  const handleScannedCode = (text: string | null, fromImage = false) => {
+    if (!text || (!cameraActive && !fromImage)) return;
 
     try {
       const parsed = JSON.parse(text);
@@ -756,6 +760,37 @@ export function SyncModal({ onClose, onNotify, items, onMerge }: {
       setConnectedPeer(text);
       onNotify("Peer selected via QR scan — start the transfer to authenticate.");
       return;
+    }
+  };
+
+  /**
+   * V-84: native fallback when Android denies CAMERA (or the device has no
+   * camera). A file picker with `capture="environment"` still lets the user
+   * take / choose a QR photo; the same jsQR decoder then selects the peer.
+   */
+  const handleQrImage = async (file: File | undefined) => {
+    if (!file) return;
+    setQrImageError("");
+    try {
+      const bitmap = await createImageBitmap(file);
+      const canvas = document.createElement("canvas");
+      canvas.width = bitmap.width;
+      canvas.height = bitmap.height;
+      const ctx = canvas.getContext("2d");
+      if (!ctx) throw new Error("Canvas unavailable");
+      ctx.drawImage(bitmap, 0, 0);
+      bitmap.close();
+      const image = ctx.getImageData(0, 0, canvas.width, canvas.height);
+      const jsQR = await loadJsQr();
+      const code = jsQR(image.data, image.width, image.height, { inversionAttempts: "attemptBoth" });
+      if (!code?.data) {
+        setQrImageError(S("এই ছবিতে QR কোড পাওয়া যায়নি।", "No QR code found in that image."));
+        return;
+      }
+      setQrImageError("");
+      handleScannedCode(code.data, true);
+    } catch {
+      setQrImageError(S("ছবিটি পড়া যায়নি। অন্য ছবি চেষ্টা করুন।", "Could not read that image. Try another one."));
     }
   };
 
@@ -1091,6 +1126,29 @@ export function SyncModal({ onClose, onNotify, items, onMerge }: {
           <p className="mt-2.5 text-[9px] text-muted">
             {isMobileDevice ? "Point camera at the host QR code or enter peer details:" : "Enter peer host IP or pairing PIN:"}
           </p>
+
+          {/* V-84: if the camera is denied, a QR photo still pairs the device. */}
+          <button
+            type="button"
+            onClick={() => qrFileRef.current?.click()}
+            className="mt-2 flex min-h-[44px] w-full max-w-[340px] items-center justify-center gap-2 rounded-[12px] border border-[var(--border-soft)] bg-[var(--glass-input)] px-3 py-2 text-[10px] font-semibold text-main hover:bg-[var(--hover)]"
+          >
+            {S("📷 ছবি থেকে QR পড়ুন / ক্যামেরা ছবি তুলুন", "📷 Read QR from an image / take a photo")}
+          </button>
+          <input
+            ref={qrFileRef}
+            type="file"
+            accept="image/*"
+            capture="environment"
+            className="hidden"
+            onChange={(e) => {
+              void handleQrImage(e.target.files?.[0]);
+              e.target.value = "";
+            }}
+          />
+          {qrImageError && (
+            <p className="mt-1 text-[9px] font-semibold text-amber-300">{qrImageError}</p>
+          )}
 
           <div className="mt-2 flex w-full max-w-[340px] items-center gap-2">
             <input

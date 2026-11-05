@@ -52,6 +52,9 @@ skills-lock.json
 .gemini/
 *PROMPT*.md
 *HANDOFF*.md
+AGENTS.md
+# Tauri regenerates src-tauri/gen/android at build time; never commit it.
+src-tauri/gen/
 VOLUME_*.md
 MEMORY_BANK.md
 TASK_QUEUE.md
