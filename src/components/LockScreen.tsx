@@ -238,6 +238,7 @@ export default function LockScreen({
       style={{
         background:
           "radial-gradient(ellipse 70% 60% at 50% 0%, color-mix(in srgb, var(--accent) 22%, transparent), transparent 62%), var(--app-base)",
+        paddingBottom: "max(calc(2rem + var(--safe-bottom)), 32px)",
       }}
       role="dialog"
       aria-modal="true"

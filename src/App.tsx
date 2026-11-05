@@ -457,6 +457,34 @@ export default function App() {
     return () => window.removeEventListener("keydown", onKeyDown);
   }, [modal, commandOpen, locked, lockVault]);
 
+  // Android & mobile hardware back button / edge swipe gesture handling (V-85)
+  // When an overlay (modal, command palette, or mobile drawer) is open,
+  // pressing Back dismisses the overlay cleanly without terminating the app.
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const isMobileOverlay = !dockedInspector && detailOpen;
+    const hasOverlay = Boolean(modal || commandOpen || isMobileOverlay);
+
+    if (hasOverlay) {
+      if (!window.history.state?.vaultOverlay) {
+        window.history.pushState({ vaultOverlay: true }, "");
+      }
+    }
+
+    const onPopState = () => {
+      if (modal) {
+        setModal(null);
+      } else if (commandOpen) {
+        setCommandOpen(false);
+      } else if (!dockedInspector && detailOpen) {
+        setDetailOpen(false);
+      }
+    };
+
+    window.addEventListener("popstate", onPopState);
+    return () => window.removeEventListener("popstate", onPopState);
+  }, [modal, commandOpen, detailOpen, dockedInspector]);
+
   const filteredItems = useMemo(() => {
     let result = items;
     if (folder) {

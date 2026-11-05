@@ -71,6 +71,13 @@ t("camera start requires an explicit click", /onClick=[\s\S]{0,80}startCamera|on
 t("camera has a bounded timeout / no infinite hang", /AbortController|setTimeout|timeout|Promise\.race/.test(syncModal));
 t("scanner loop checks cameraActive before decoding", /cameraActive/.test(syncModal));
 
+console.log("=== Android back navigation & safe area (V-85) ===");
+const app = read("src/App.tsx");
+const lock = read("src/components/LockScreen.tsx");
+t("listens for popstate for Android hardware back gesture", /addEventListener\("popstate"/.test(app));
+t("pushes vaultOverlay history state when an overlay opens", /history\.pushState\(\{\s*vaultOverlay:\s*true\s*\}\s*,\s*""\)/.test(app));
+t("lock screen reserves safe area bottom", /paddingBottom:[^}]*var\(--safe-bottom\)/.test(lock));
+
 console.log("=== tokio dependency diet (V-78) ===");
 t(
   "tokio no longer pulls features = [\"full\"]",
