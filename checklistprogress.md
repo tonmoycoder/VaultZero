@@ -95,5 +95,5 @@ Active branch: `arena/61b1561a-vaultzero` (never rename). PR #2 MERGED.
 ## V-83 (awaiting CI after push)
 - [x] rebase onto `021cc02` without dropping any remote commit; both ledgers preserved
 - [x] reproduce remote CSV regression locally then make `vault-csv-import.spec.ts:115` pass (3 lines)
-- [ ] watch new CI run + `gh pr checks 3` → expect BOTH green
+- [x] CI `42106165442` BOTH GREEN (Frontend 6m7s, Windows 4m13s); signed log `135 passed (5.5m)`; `gh pr checks 3` pass/pass
 - [ ] 4 Android secrets still unset; Beta publication + `check-live-release.mjs` PASS deferred to Antigravity handoff
