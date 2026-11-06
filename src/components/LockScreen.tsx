@@ -17,6 +17,7 @@ import {
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import { hapticSuccess } from "./Tactile";
 import { Logo, Tooltip } from "./ui";
+import { APP_VERSION } from "../lib/version";
 import VaultRecoveryModal from "./VaultRecoveryModal";
 import {
   createNewVault,
@@ -561,7 +562,7 @@ export default function LockScreen({
             </button>
             <span className="flex items-center gap-1.5 font-mono text-[7.5px] text-faint">
               <span className="h-1.5 w-1.5 rounded-full" style={{ background: "var(--success)", boxShadow: "0 0 5px var(--success)" }} />
-              AIR-GAPPED · v2.5.0
+              AIR-GAPPED · v{APP_VERSION}
             </span>
           </div>
         </div>

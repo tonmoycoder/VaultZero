@@ -5,7 +5,8 @@
 > must be updated after EVERY completed step.
 
 - Repo: `tonmoycoder/VaultZero`
-- Active branch (FIXED, never rename): `arena/61b1561a-vaultzero`
+- Active branch (FIXED, never rename): `arena/317fbb3c-vaultzero`
+  (earlier `arena/61b1561a-vaultzero` sections below are HISTORICAL only)
 - Base: `main` @ `df048f9d3276c4eaf7b2b0f3220c69ff4b56d800`
   (`docs(readme): update version badge to v2.5.2`, 2026-11-03 22:53 +0600)
 - PR #3 OPEN (`arena/61b1561a-vaultzero` → `main`), head `66e6273`.
@@ -255,3 +256,79 @@ Never fabricate assets or silently downgrade to a debug keystore.
 
 ### V-84 correction (self-caught, honest)
 The first V-84 simulation used `rm -rf src-tauri/gen`, which deleted 4 TRACKED files (`src-tauri/gen/schemas/*.json`). They were restored with `git restore`; the ignore rule was narrowed to `src-tauri/gen/android/`, and the harness cleanup now removes ONLY `gen/android/`. A new guard asserts all 4 schemas exist AND remain tracked after every harness run. Head `f2ffe0f` carried the broad rule; this follow-up commit fixes it. No app source changed after the 137/137 Playwright run.
+
+---
+
+## PHASE D / V-86 — "make it workable" on `arena/317fbb3c-vaultzero` (2026-11-07)
+
+**Observed state (read-only, no guesses).** Shallow/grafted clone: `git rev-list --count HEAD` = 1,
+HEAD `f2e8978` = `origin/main` = branch head (`V-85 back-navigation + safe-area bottom`). Versions
+all `2.5.2`. `gh pr list --state all`: #3 MERGED 2026-11-05T22:58:51Z, #2 MERGED 2026-11-03T16:54:12Z,
+#1 OPEN (superseded, never touched). Live `v2.5.2` published `2026-11-02T01:18:40Z`, target `main`,
+9 assets — NOW includes `VaultZero-Windows-x64-Setup.exe`; still missing canonical
+`VaultZero-Windows-x64-Portable.exe` and `VaultZero-Windows-x64.msi` (2 README links 404).
+
+**ROOT CAUSE of "downloads old version" (empirical).** `scripts/check-live-release.mjs` now prints
+`STALE release v2.5.2 predates local source (2026-11-02 < 2026-11-06); users download old code
+until a signed Beta is published.` The 6 screenshots contain strings that DO NOT EXIST in current
+source (`Connected: 192.1`, `Keys negotiated via SPAKE2`, `Waiting for peer connection…`,
+`AIR-GAPPED · v2.5.0`) → they came from the old published APK. `src-tauri/tauri.conf.json` CSP
+already allows `connect-src https://api.github.com` and `AndroidManifest.xml` already has INTERNET;
+the old APK did not. Do not claim the screenshots are fixed by a code change — a new signed build
+must be published (blocked on 4 Android secrets + Windows runner here).
+
+**Read-only external analysis.** `storytold/craft-anything` (★17711, Rust, "inspect → checklist →
+builder → verify" clean-room loop) was read and its loop applied to OUR code. The Dropbox RoboForm
+APK WAS found via the enabled connector: `/uptodown-com.siber.roboform.apk`, 15,790,385 B,
+content_hash `9265acf0…`, modified 2026-11-06T20:20:31Z. Its temporary link host
+`*.dl.dropboxusercontent.com` is OUTSIDE the sandbox allowlist (`SSL_ERROR_SYSCALL`), `fetch_page`
+HTTP 500, and `apktool`/`jadx`/`aapt`/`java` are ABSENT → APK decompilation is IMPOSSIBLE here;
+see the Antigravity prompt. GitHub topic search (read-only) added to `docs/EXTERNAL-REPO-SURVEY.md`.
+
+**Test-first RED → GREEN (12 harness FAIL + 4 Playwright FAIL / 1 PASS).**
+- D-1 version drift: `LockScreen.tsx` hardcoded `AIR-GAPPED · v2.5.0`; now `v{APP_VERSION}`
+  imported from `src/lib/version.ts`. New harness guard rejects any stale `v2.5.0`/`v2.5.1`
+  literal in shipped `src/**/*.ts(x)` (comments excluded).
+- D-2 fake peer: `src/lib/p2pMerge.ts` gained `isValidPeerAddress()` (4 octets, 0-255, no leading
+  zeros, optional port 1-65535). `parsePeerInput()` now uses it for BOTH the QR-JSON `ip` path and
+  plain text; `192.1`, `999.1.1.1`, `tauri.localhost`, `:99999` are rejected.
+  `SyncModal.handleScannedCode` no longer paints arbitrary raw text as a peer; `peerCoordinates()`
+  uses the same validator.
+- D-3 fake "connected": `handleStartHost()` no longer does `setStatus("connected")` /
+  `setConnectedPeer("This device · port N")`. Banner now says
+  `Hosting on port N · waiting for a peer` and stays amber until a real transfer succeeds.
+- D-4 no-op Connect: invalid input now leaves a persistent bilingual `role="alert"` message
+  ("… is not a valid peer address …") instead of a transient toast only.
+- D-5 cut footer: P2P footer wraps (`flex-wrap`, `min-w-0`, smaller mobile padding) → all three
+  actions (`Close`, `Send Vault`, `Receive & Merge`) measured inside 360px viewport.
+- D-6 camera denial: after `cameraError`, an explicit "Camera unavailable — use the QR photo
+  option instead." hint appears next to the V-84 `capture="environment"` picker.
+- D-7 updater: `RELEASE_CHECK_TIMEOUT_MS = 8000` AbortController bound + `signal` on the GitHub
+  request; only genuine network/timeout failures are `offline`, a malformed API body or HTTP error
+  is `error` with an explanatory message. Offline modal copy unchanged.
+- D-8 `scripts/check-live-release.mjs` prints `published`, `target`, `local HEAD`, and a `STALE`
+  line when the published build predates the source.
+
+**Gates (all real, exit codes from the commands themselves).** `npx tsc --noEmit` 0;
+`npm run verify` 0 (35 harness files, contrast, 23 rustfmt, bundle budget);
+`npx -y node@20 scripts/run-harness.mjs` 35/35; `npm audit --audit-level=high` 0 vulnerabilities;
+`npx playwright test --workers=2` **142 passed (8.6m)**; `scripts/check-live-release.mjs`
+intentionally exits 1 (2 live 404s + STALE). No local `cargo`/`rustc`/`keytool`/`java`;
+Windows `clippy`/`test` are CI-only. Chromium 153 came from npm `@sparticuz/chromium` tarball
+(Playwright CDN blocked), extracted to `/tmp` with `LD_LIBRARY_PATH`; NOT committed.
+
+**Already-correct behaviour proven, not changed.** M-11: fresh install shows
+"Create your VaultZero vault", not "Welcome back" (`isSetup = !isVaultConfigured()`). Quick unlock
+is genuine WebAuthn in `src/lib/quickUnlock.ts` (no demo password); on Android WebView a platform
+authenticator is unavailable, so the UI honestly shows an explanation — a persistent biometric
+unlock needs OS keystore support in the native runtime (Antigravity). Existing M-01…M-09 already
+cover horizontal overflow, status-bar clearance, clipped sort header, 44px targets, non-draggable
+lock screen, explicit camera tap and offline OCR; all still pass.
+
+**STILL OPEN / impossible here.** 4 Android signing secrets; signed Beta publication (fixes the
+stale download + 2 404s); Windows `.exe`/WebView2/MSI local smoke test; real-device camera
+`PermissionRequest` bridging, LAN P2P handshake and 120Hz jitter; absolute <2s `.exe` cold start;
+native `.pmv` Rust IPC backup; `webviewInstallMode`; Rust edition 2024; global zero-network
+guarantee (`ui.tsx:211-213` favicons, updater, `p2p_lan.rs`); hardcoded `vaultzero123` fallback
+KEPT by earlier user decision. Phased resume: `continue` → Phase E.
+

@@ -54,7 +54,7 @@ import { BrandMark, Modal, Toggle, Tooltip, TotpRing, useCountdown } from "./ui"
 import { generateTotp, isValidTotpSecret, resolveTotpConfig, validateGoogleAuthSecret } from "../lib/totp";
 import { copySecure } from "../lib/clipboard";
 import { invokeNativeCommand } from "../lib/platform";
-import { mergeSummary, parsePeerInput, parsePeerVaultPayload } from "../lib/p2pMerge";
+import { isValidPeerAddress, mergeSummary, parsePeerInput, parsePeerVaultPayload } from "../lib/p2pMerge";
 
 type Notify = (message: string) => void;
 
@@ -506,6 +506,7 @@ export function SyncModal({ onClose, onNotify, items, onMerge, lang = "en" }: {
   const [status, setStatus] = useState<"waiting" | "connected">("waiting");
   const [connectedPeer, setConnectedPeer] = useState<string | null>(null);
   const [manualCode, setManualCode] = useState("");
+  const [peerInputError, setPeerInputError] = useState("");
   const [peerPin, setPeerPin] = useState<string | null>(null);
   const [cameraActive, setCameraActive] = useState(false);
   const [cameraError, setCameraError] = useState("");
@@ -601,9 +602,12 @@ export function SyncModal({ onClose, onNotify, items, onMerge, lang = "en" }: {
       );
       setHostPort(info.port);
       setHostPin(info.pin);
-      setStatus("connected");
-      setConnectedPeer(`This device · port ${info.port}`);
-      onNotify(`P2P host started on port ${info.port}. PIN ${info.pin}`);
+      // V-86: hosting is NOT a connection. The old code turned the banner
+      // green and invented "This device · port N" as a peer, which made
+      // Send/Receive look live while `peerCoordinates()` could never parse
+      // it. Stay in the waiting state until a transfer actually succeeds.
+      setStatus("waiting");
+      onNotify(`P2P host started on port ${info.port}. Waiting for a peer. PIN ${info.pin}`);
     } catch (err: any) {
       setHosting(false);
       onNotify(err?.safeMessage || "Failed to start the P2P host.");
@@ -739,26 +743,46 @@ export function SyncModal({ onClose, onNotify, items, onMerge, lang = "en" }: {
     try {
       const parsed = JSON.parse(text);
       if (parsed.app === "vaultzero" || parsed.ip) {
-        stopCamera();
         // V-17 / V-52: a scanned QR is a *peer selection*, not a completed
         // connection. Capture BOTH the address and the host's pairing PIN —
         // the old code put the PIN into the address field and authenticated
         // with this device's own local PIN, so remote connections always
         // failed the handshake.
         const peer = parsePeerInput(text);
-        const address = peer.address ?? (parsed.ip ? `${parsed.ip}${parsed.port ? `:${parsed.port}` : ""}` : "");
-        setConnectedPeer(address);
-        setManualCode(peer.address ?? "");
+        const candidate = peer.address ?? (parsed.ip ? `${parsed.ip}${parsed.port ? `:${parsed.port}` : ""}` : "");
+        // V-86: a QR payload with no usable LAN address is a PIN-only pairing
+        // hint. It must NOT paint an arbitrary string as a "connected" peer.
+        if (candidate && !isValidPeerAddress(candidate)) {
+          onNotify("QR code has no valid LAN address. Use Discover Peers or the 6-digit PIN.");
+          return;
+        }
+        stopCamera();
+        if (candidate) {
+          setConnectedPeer(candidate);
+          setManualCode(candidate);
+          setPeerInputError("");
+        }
         if (peer.pin) setPeerPin(peer.pin);
         setStatus("waiting");
-        onNotify(`Peer selected: ${address || "unknown"} — start the transfer to authenticate.`);
+        onNotify(
+          candidate
+            ? `Peer selected: ${candidate} — start the transfer to authenticate.`
+            : "Pairing PIN received — use Discover Peers to pick a LAN address.",
+        );
         return;
       }
+      onNotify("This QR code is not a VaultZero pairing code.");
     } catch {
-      // Raw text QR code
+      // Raw text QR: only a real LAN address may become a peer.
       stopCamera();
-      setConnectedPeer(text);
-      onNotify("Peer selected via QR scan — start the transfer to authenticate.");
+      if (isValidPeerAddress(text)) {
+        setConnectedPeer(text);
+        setManualCode(text);
+        setPeerInputError("");
+        onNotify("Peer selected via QR scan — start the transfer to authenticate.");
+      } else {
+        onNotify("This QR code is not a valid VaultZero LAN address. Use the 6-digit PIN instead.");
+      }
       return;
     }
   };
@@ -795,11 +819,21 @@ export function SyncModal({ onClose, onNotify, items, onMerge, lang = "en" }: {
   };
 
   const handleManualConnect = () => {
-    const peer = parsePeerInput(manualCode);
+    const raw = manualCode.trim();
+    const peer = parsePeerInput(raw);
     if (!peer.address && !peer.pin) {
+      // A transient toast alone felt like "Connect does nothing" (user
+      // report). Keep a persistent, bilingual explanation next to the field.
+      setPeerInputError(
+        S(
+          `“${raw || "—"}” বৈধ পিয়ার ঠিকানা নয়। IP:port (যেমন ১৯২.১৬৮.১.৫:৫২১৩৭) অথবা ৬-অঙ্কের PIN দিন।`,
+          `"${raw || "—"}" is not a valid peer address. Use IP:port (e.g. 192.168.1.5:52137) or the 6-digit PIN.`,
+        ),
+      );
       onNotify("Enter a peer IP:port and/or the host's 6-digit pairing PIN.");
       return;
     }
+    setPeerInputError("");
     // V-17: selecting a peer is not the same as authenticating to it. The
     // status only flips to "connected" once the handshake succeeds.
     if (peer.address) setConnectedPeer(peer.address);
@@ -809,11 +843,11 @@ export function SyncModal({ onClose, onNotify, items, onMerge, lang = "en" }: {
   };
 
   const peerCoordinates = () => {
-    const peer = connectedPeer && /(\d+\.\d+\.\d+\.\d+)(?::(\d+))?/.exec(connectedPeer);
-    if (!peer) return null;
-    const port = Number(peer[2] ?? hostPort ?? 0);
+    if (!connectedPeer || !isValidPeerAddress(connectedPeer)) return null;
+    const [ip, portText] = connectedPeer.split(":");
+    const port = Number(portText ?? hostPort ?? 0);
     if (!port || port > 65535) return null;
-    return { ip: peer[1], port, pin: peerPin ?? hostPin ?? localPin };
+    return { ip, port, pin: peerPin ?? hostPin ?? localPin };
   };
 
   const handleSendVault = async () => {
@@ -884,15 +918,18 @@ export function SyncModal({ onClose, onNotify, items, onMerge, lang = "en" }: {
       icon={<ArrowsLeftRight size={20} weight="duotone" />}
       width="max-w-[640px]"
       footer={
-        <div className="flex items-center justify-between gap-3">
+        <div className="flex flex-wrap items-center justify-between gap-2">
           <span className="hidden items-center gap-1.5 text-[8.5px] text-faint sm:flex">
             <LockSimple size={11} weight="duotone" className="shrink-0 text-success" /> PAKE + Channel Binding · XChaCha20-Poly1305
           </span>
-          <div className="flex w-full items-center justify-end gap-2.5 sm:w-auto">
+          {/* V-86: at 360px the three actions overflowed and "Close" was
+              pushed off the left edge. Wrapping keeps every action on screen
+              without adding a hidden horizontal scroll area. */}
+          <div className="flex min-w-0 flex-wrap items-center justify-end gap-2 sm:w-auto">
             <button
               type="button"
               onClick={onClose}
-              className="secondary-button h-10 shrink-0 whitespace-nowrap rounded-full px-5 text-[11px] font-semibold"
+              className="secondary-button h-10 shrink-0 whitespace-nowrap rounded-full px-4 text-[11px] font-semibold sm:px-5"
             >
               Close
             </button>
@@ -902,7 +939,7 @@ export function SyncModal({ onClose, onNotify, items, onMerge, lang = "en" }: {
                   type="button"
                   onClick={handleSendVault}
                   disabled={transferring}
-                  className="secondary-button flex h-9 items-center gap-1.5 rounded-full px-4 text-[10px] font-semibold"
+                  className="secondary-button flex h-9 items-center gap-1.5 rounded-full px-3 text-[10px] font-semibold sm:px-4"
                 >
                   <PaperPlaneTilt size={13} weight="bold" />
                   Send Vault
@@ -911,7 +948,7 @@ export function SyncModal({ onClose, onNotify, items, onMerge, lang = "en" }: {
                   type="button"
                   onClick={handleReceiveMerge}
                   disabled={transferring}
-                  className="primary-button flex h-9 items-center gap-1.5 rounded-full px-4 text-[10px] font-semibold"
+                  className="primary-button flex h-9 items-center gap-1.5 rounded-full px-3 text-[10px] font-semibold sm:px-4"
                 >
                   <DownloadSimple size={13} weight="bold" />
                   Receive & Merge
@@ -946,7 +983,9 @@ export function SyncModal({ onClose, onNotify, items, onMerge, lang = "en" }: {
           >
             {connectedPeer
               ? `Peer selected: ${connectedPeer}`
-              : "Waiting for peer selection…"}
+              : hostPort !== null
+                ? `Hosting on port ${hostPort} · waiting for a peer`
+                : "Waiting for peer selection…"}
           </span>
         </div>
         <span className="font-mono text-[8px] text-muted">LAN Port: {hostPort ?? "—"}</span>
@@ -1146,6 +1185,13 @@ export function SyncModal({ onClose, onNotify, items, onMerge, lang = "en" }: {
               e.target.value = "";
             }}
           />
+          {/* V-86: a denied camera must point at the working fallback instead
+              of leaving "Start camera" as a dead button (user screenshot). */}
+          {cameraError && (
+            <p className="mt-1.5 max-w-[340px] text-center text-[9px] font-semibold leading-relaxed text-amber-300">
+              {S("ক্যামেরা পাওয়া যায়নি — উপরের QR ছবির অপশনটি ব্যবহার করুন।", "Camera unavailable — use the QR photo option instead.")}
+            </p>
+          )}
           {qrImageError && (
             <p className="mt-1 text-[9px] font-semibold text-amber-300">{qrImageError}</p>
           )}
@@ -1154,7 +1200,10 @@ export function SyncModal({ onClose, onNotify, items, onMerge, lang = "en" }: {
             <input
               type="text"
               value={manualCode}
-              onChange={(e) => setManualCode(e.target.value)}
+              onChange={(e) => {
+                setManualCode(e.target.value);
+                if (peerInputError) setPeerInputError("");
+              }}
               placeholder="10.0.0.5:52137/123456 or 123456"
               className="min-w-0 flex-1 rounded-[11px] border border-[var(--border-soft)] bg-[var(--glass-input)] px-3 py-1.5 font-mono text-[10px] text-main outline-none placeholder:text-faint"
             />
@@ -1167,6 +1216,11 @@ export function SyncModal({ onClose, onNotify, items, onMerge, lang = "en" }: {
             </button>
           </div>
 
+          {peerInputError && (
+            <p role="alert" className="mt-1.5 w-full max-w-[340px] text-[9px] font-semibold leading-relaxed text-amber-300">
+              {peerInputError}
+            </p>
+          )}
           <p className="mt-2 text-[8px] leading-relaxed text-faint">
             {connectedPeer ? `Selected: ${connectedPeer}` : "No peer selected yet."}
             {peerPin ? ` · pairing PIN ${peerPin}` : " · scan the host QR to pick up its PIN"}

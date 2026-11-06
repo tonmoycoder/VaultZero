@@ -192,6 +192,25 @@ export function mergeVaultItems(local: VaultItem[], remote: VaultItem[]): VaultI
  * 6-digit PIN as an address, and then authenticated with the *local* PIN —
  * so connecting to a remote host could never succeed.
  */
+/**
+ * A peer must be a REAL LAN endpoint: four decimal octets, optionally
+ * followed by a port. Truncated IPs (`192.1`), WebView hostnames
+ * (`tauri.localhost`), out-of-range octets/ports and ambiguous leading
+ * zeros must never become a "selected" or "connected" peer.
+ */
+export function isValidPeerAddress(value: string): boolean {
+  const raw = value.trim();
+  const match = /^(\d{1,3}(?:\.\d{1,3}){3})(?::(\d{1,5}))?$/.exec(raw);
+  if (!match) return false;
+  const octets = match[1].split(".");
+  if (!octets.every((part) => /^(0|[1-9]\d{0,2})$/.test(part) && Number(part) <= 255)) return false;
+  if (match[2]) {
+    const port = Number(match[2]);
+    if (port < 1 || port > 65535) return false;
+  }
+  return true;
+}
+
 export function parsePeerInput(input: string): { address: string | null; pin: string | null } {
   const raw = input.trim();
   if (!raw) return { address: null, pin: null };
@@ -201,8 +220,9 @@ export function parsePeerInput(input: string): { address: string | null; pin: st
       const ip = typeof parsed.ip === "string" ? parsed.ip : "";
       const port = typeof parsed.port === "number" ? parsed.port : 0;
       const code = typeof parsed.code === "string" ? parsed.code : "";
+      const candidate = ip && port > 0 && port <= 65535 ? `${ip}:${port}` : ip;
       return {
-        address: ip && port > 0 && port <= 65535 ? `${ip}:${port}` : ip || null,
+        address: isValidPeerAddress(candidate) ? candidate : null,
         pin: /^\d{6}$/.test(code) ? code : null,
       };
     } catch {
@@ -215,14 +235,7 @@ export function parsePeerInput(input: string): { address: string | null; pin: st
   for (const part of parts) {
     const value = part.trim();
     if (/^\d{6}$/.test(value)) { pin = value; continue; }
-    const match = /^(\d{1,3}(?:\.\d{1,3}){3})(?::(\d{1,5}))?$/.exec(value);
-    if (match) {
-      const octets = match[1].split(".").map(Number);
-      const port = match[2] ? Number(match[2]) : 0;
-      if (octets.every((octet) => octet <= 255) && (port === 0 || (port > 0 && port <= 65535))) {
-        address = port > 0 ? `${match[1]}:${port}` : match[1];
-      }
-    }
+    if (isValidPeerAddress(value)) address = value;
   }
   return { address, pin };
 }

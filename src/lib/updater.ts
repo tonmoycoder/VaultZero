@@ -342,16 +342,42 @@ export function clearReleaseCache(): void {
   inFlightCheck = null;
 }
 
+/**
+ * A WebView with no route to GitHub can leave `fetch()` pending forever;
+ * "Check for Updates" then looks frozen. Bound every release request.
+ */
+export const RELEASE_CHECK_TIMEOUT_MS = 8_000;
+
 /** Performs the actual request against the GitHub releases API. */
 async function fetchLatestRelease(): Promise<CheckReleaseStatus> {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), RELEASE_CHECK_TIMEOUT_MS);
+  let res: Response;
   try {
-    const res = await fetch(`https://api.github.com/repos/${GITHUB_REPO}/releases/latest?t=${Date.now()}`, {
+    // Only a NETWORK failure belongs in the "offline" bucket. A rate limit,
+    // an HTTP error or a malformed API body is a different problem and the
+    // UI must not claim the device is air-gapped when it is not.
+    res = await fetch(`https://api.github.com/repos/${GITHUB_REPO}/releases/latest?t=${Date.now()}`, {
       headers: {
         Accept: "application/vnd.github+json",
       },
       cache: "no-store",
+      signal: controller.signal,
     });
+  } catch (err: any) {
+    clearTimeout(timer);
+    return {
+      status: "offline",
+      currentVersion: CURRENT_APP_VERSION,
+      message:
+        err?.name === "AbortError"
+          ? "Release check timed out. The device may be offline or the release server is unreachable."
+          : err?.message || "Air-gapped / offline environment",
+    };
+  }
+  clearTimeout(timer);
 
+  try {
     if (!res.ok) {
       if (res.status === 404) {
         return {
@@ -417,9 +443,9 @@ async function fetchLatestRelease(): Promise<CheckReleaseStatus> {
     };
   } catch (err: any) {
     return {
-      status: "offline",
+      status: "error",
       currentVersion: CURRENT_APP_VERSION,
-      message: err?.message || "Air-gapped / offline environment",
+      message: `Could not read the GitHub release response: ${err?.message || "malformed response"}`,
     };
   }
 }

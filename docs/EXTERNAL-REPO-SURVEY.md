@@ -72,3 +72,40 @@
 ## স্বচ্ছতা
 
 এই জরিপ GitHub-এর public পেইজ/API, README, টেকনিক্যাল ডক ও উল্লিখিত সোর্স ফাইলের **read-only** পর্যালোচনার উপর ভিত্তি করে তৈরি; কোনো বাহ্যিক রিপো ক্লোন করা, বিল্ড করা বা তার টেস্ট চালানো হয়নি। "কাজ করে" বলতে বোঝানো হয়েছে: রিপোতে সংশ্লিষ্ট ফিচারের প্রকৃত কোড/টেস্ট/রিলিজ আছে এবং দাবির সাথে অসঙ্গতি নেই — কোনো স্বাধীন security audit দাবি করা হচ্ছে না। `checkpoint.md` ও `checklistprogress.md`-এ বাকি কাজের হালনাগাদ অবস্থা আছে।
+
+---
+
+## Phase D (2026-11-07) — read-only additions for "make it workable"
+
+**`storytold/craft-anything`** (`gh api repos/storytold/craft-anything`, ★17711, Rust, MIT OR
+Apache-2.0, early alpha). README: *"See how any website, app or game works, then have AI build
+your own version; an open-source, clean-room engine in pure Rust … it studies the original with
+real inspection tools, has a coding agent build a new project, checks the result against the
+original and refines it."* Its **inspect → checklist → verify → refine** loop was applied to
+VaultZero's OWN source in Phase D (test-first repro, then minimal fix, then re-run all gates).
+No code was copied; the framework mismatch (Rust desktop tool vs. Tauri/React app) rules out reuse.
+
+**User-provided RoboForm APK (Dropbox).** The enabled Dropbox connector resolved the share link:
+`/uptodown-com.siber.roboform.apk`, 15,790,385 B, `content_hash
+9265acf0c1c30839b3fad782e3379ac7b91194984d2a31ce53d69f66c06280c9`, server-modified
+2026-11-06T20:20:31Z. A temporary link was issued, but `*.dl.dropboxusercontent.com` is outside
+the sandbox allowlist (`curl` → `SSL_ERROR_SYSCALL`), `fetch_page` → HTTP 500, and
+`apktool`/`jadx`/`aapt`/`java` are ABSENT. **No decompilation, no manifest/permission/dex
+inspection was possible here.** No claim about RoboForm internals is made. The exact local steps
+are in the separate Antigravity prompt.
+
+**GitHub topic search (`gh api search/repositories`, read-only, 3 results per query).**
+- `topic:password-manager offline` → `yogeshpaliyal/KeyPass` ★787, `hmalvee/EnigmaKeep` ★199,
+  `GlitterWare/Passy` ★194. Convention observed in descriptions: offline-first storage with an
+  *optional*, explicit sync path — matches VaultZero's "local vault + opt-in P2P" split.
+- `topic:p2p file-sync` → `syncthing/syncthing-macos` ★4005, `librevault/librevault` ★1203,
+  `anyproto/any-sync-filenode` ★55. Convention: peer discovery is a separate step from transfer;
+  Phase D therefore stopped treating "host started" as "connected".
+- `topic:zero-knowledge vault` → `goduni/unissh` ★144, `itsgoharrehman/vault-zero-knowledge` ★12,
+  `pratham-bhatnagar/zkpVault` ★10. Convention: encryption happens before anything leaves the
+  device; no external feature was imported.
+
+**Net result:** 0 external features copied, 2 conventions reinforced (explicit peer discovery vs.
+connection; no fake "connected" state), 1 methodology adopted (craft-anything's verification
+loop). Same transparency rule as above: public read-only metadata only; nothing cloned, built or
+executed.

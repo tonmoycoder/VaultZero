@@ -2,7 +2,7 @@
 
 Legend: `[x]` done & verified · `[ ]` open · `[!]` blocked (reason)
 Companion state: `checkpoint.md`. Read both before resuming.
-Active branch: `arena/61b1561a-vaultzero` (never rename). PR #2 MERGED.
+Active branch: `arena/317fbb3c-vaultzero` (never rename). PR #2 + #3 MERGED, #1 OPEN/superseded.
 
 ## PHASE A — inherited state (V-01…V-71)
 
@@ -110,3 +110,26 @@ Active branch: `arena/61b1561a-vaultzero` (never rename). PR #2 MERGED.
 - [ ] NOT possible here (defer to Antigravity prompt): 4 Android secrets, Windows `.exe`/WebView2/MSI local checks, real-device camera/LAN P2P/120Hz, <2s cold start, Rust 2024 migration, Beta publication + `check-live-release.mjs` exit 0
 
 - [x] V-84 correction: restore 4 tracked `gen/schemas/*.json`, narrow ignore to `gen/android/`, bound harness cleanup, add regression guard (34/34 harness, verify 0)
+
+## PHASE D / V-86 — workable-app pass on `arena/317fbb3c-vaultzero` (2026-11-07)
+
+- [x] Read-only observation: HEAD `f2e8978` (grafted, count=1), PR #3 MERGED / #2 MERGED / #1 OPEN, live `v2.5.2` 9 assets
+- [x] Root cause of "downloads old version" proven: release 2026-11-02 vs local source 2026-11-06 (`STALE` diagnostic added)
+- [x] All 6 screenshots read; their strings (`Connected: 192.1`, `Keys negotiated via SPAKE2`, `v2.5.0`) are NOT in current source
+- [x] `storytold/craft-anything` methodology read (★17711, inspect → checklist → verify loop) and applied to our own code
+- [x] Dropbox APK metadata observed (15,790,385 B); binary fetch blocked by allowlist + no decompilers → reported honestly
+- [x] Phase D test-first RED: 12 harness FAIL, 4 Playwright FAIL / 1 PASS
+- [x] D-1 lock screen version now `v{APP_VERSION}`; stale-version harness guard added
+- [x] D-2 `isValidPeerAddress()` + strict QR JSON / raw-text / `peerCoordinates()` validation (`192.1` rejected)
+- [x] D-3 hosting no longer flips the banner to green "connected"
+- [x] D-4 invalid `Connect` shows a persistent bilingual `role="alert"` instead of a silent no-op
+- [x] D-5 P2P footer wraps; all 3 actions measured inside 360px (M-13)
+- [x] D-6 denied camera shows an actionable QR-photo hint (M-14)
+- [x] D-7 updater has an 8s AbortController timeout and honest `offline` vs `error` classification
+- [x] D-8 `check-live-release.mjs` prints published/target/local HEAD + STALE
+- [x] Gates: tsc 0 · verify 0 (35 harness) · node20 35/35 · audit 0 · Playwright 142/142 (8.6m)
+- [x] M-11 proves fresh install = SETUP; genuine WebAuthn quick unlock left unchanged (already honest)
+- [!] `check-live-release.mjs` still exit 1 — 2 canonical names missing + stale build; needs a signed Beta
+- [!] NOT possible here: 4 Android secrets, Windows `.exe` smoke test, real-device camera/LAN P2P/120Hz, APK decompilation, <2s cold start, native `.pmv` IPC backup
+- [ ] Phase E (resume with `continue`): publish signed Beta, verify 5/5 assets, close the loop on Windows EXE + physical-device P2P
+

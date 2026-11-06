@@ -20,8 +20,15 @@ const CANONICAL = [
 
 let live = [];
 let tag = "?";
+let published = "?";
+let target = "?";
 try {
-  tag = execFileSync("gh", ["release", "view", "--repo", REPO, "--json", "tagName", "--jq", ".tagName"], { encoding: "utf8" }).trim();
+  const meta = execFileSync(
+    "gh",
+    ["release", "view", "--repo", REPO, "--json", "tagName,publishedAt,targetCommitish", "--jq", "[.tagName,.publishedAt,.targetCommitish]|join(\"|\")"],
+    { encoding: "utf8" },
+  ).trim().split("|");
+  [tag, published, target] = meta;
   live = execFileSync("gh", ["release", "view", "--repo", REPO, "--json", "assets", "--jq", ".assets[].name"], { encoding: "utf8" })
     .trim().split("\n").filter(Boolean);
 } catch (err) {
@@ -32,6 +39,24 @@ try {
 const readme = readFileSync(join(ROOT, "README.md"), "utf8");
 let failures = 0;
 console.log(`=== live latest release: ${tag} (${live.length} assets) ===`);
+const head = (() => {
+  try {
+    return execFileSync("git", ["log", "-1", "--format=%h %cI"], { cwd: ROOT, encoding: "utf8" }).trim();
+  } catch {
+    return "unknown";
+  }
+})();
+console.log(`published: ${published}  target: ${target}`);
+console.log(`local HEAD: ${head}`);
+// The user reported "downloads the old version". A release whose build
+// predates the current source is exactly that, independently of asset names.
+if (/^\d{4}-\d{2}-\d{2}/.test(published) && /^\S+ (\d{4}-\d{2}-\d{2})/.test(head)) {
+  const releaseDay = published.slice(0, 10);
+  const headDay = head.split(" ")[1].slice(0, 10);
+  if (releaseDay < headDay) {
+    console.log(`STALE  release ${tag} predates local source (${releaseDay} < ${headDay}); users download old code until a signed Beta is published.`);
+  }
+}
 for (const name of CANONICAL) {
   const linked = readme.includes(`/releases/latest/download/${name}`);
   const published = live.includes(name);
