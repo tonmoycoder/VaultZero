@@ -150,3 +150,4 @@ Active branch: `arena/317fbb3c-vaultzero` (never rename). PR #2 + #3 MERGED, #1 
 - [!] `check-live-release.mjs` exit 1: STALE `v2.5.2` (2026-11-02) + 2 missing canonical assets
 - [ ] Batch 3 (resume with `continue`): README stale `(v2.5.0)` headings, lock-screen footer reachability, P2P helper-line half-cut polish, then full gates
 - [ ] Final batch: signed Beta publication steps, docs, CI green, Bengali report + English master prompt LAST + separate Antigravity prompt
+- [x] `cd8d5dc` pushed; CI `42296394627` watched to exit 0 — success/success (batch 2 CLOSED)

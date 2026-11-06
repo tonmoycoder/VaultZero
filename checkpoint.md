@@ -393,3 +393,10 @@ secrets + Windows runner), verify 5/5 canonical assets, README `(v2.5.0)` headin
 physical-device status-bar / camera / LAN P2P / 120Hz, Windows `.exe` smoke test,
 APK decompilation (`*.dl.dropboxusercontent.com` outside allowlist; no apktool/jadx),
 absolute <2s cold start, native `.pmv` Rust IPC backup.
+
+### V-87 close-out (CI)
+`cd8d5dc` pushed to `origin/arena/317fbb3c-vaultzero`; `gh run watch 42296394627
+--exit-status` exit 0, `Test & Build Verification` + `Frontend E2E & Security Tests`
+both `success`. Only runner deprecation annotations (Node 20 actions forced to
+Node 24, ubuntu-latest -> Ubuntu 26) — no failures. Local working tree clean at
+this point. Batch 2 is closed; resume with `continue` for batch 3.
