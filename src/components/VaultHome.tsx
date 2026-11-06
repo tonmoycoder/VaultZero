@@ -1080,7 +1080,14 @@ export default function VaultHome({
 
         {/* Sort Controls */}
         <div className="flex min-w-0 items-center gap-2 text-[8px] text-faint">
-          <div className="flex max-w-full flex-wrap items-center justify-center gap-1 rounded-2xl border border-[var(--border-soft)] bg-[var(--glass-soft)] p-0.5 sm:flex-nowrap sm:rounded-full">
+          {/* V-87: on a 390px screen the four labels used to wrap onto two
+              rows, so "Password strength" dropped 23px below the others and
+              the heading looked vertically misaligned. A centred wrapping
+              flex row also cannot be scrolled back to its first item when it
+              overflows, which is the reported "stuck" horizontal scroll.
+              One nowrap, start-aligned, horizontally scrollable row keeps all
+              four controls on the same baseline at every width. */}
+          <div className="thin-scrollbar flex max-w-full flex-nowrap items-center justify-start gap-1 overflow-x-auto rounded-2xl border border-[var(--border-soft)] bg-[var(--glass-soft)] p-0.5 sm:justify-center sm:rounded-full">
             {(
               [
                 { id: "recent", label: t(lang, "sortRecent") },

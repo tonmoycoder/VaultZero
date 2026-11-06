@@ -132,7 +132,6 @@ export function BrandMark({
   url?: string;
   title?: string;
 }) {
-  const [errorStage, setErrorStage] = useState<number>(0);
   const safeDomain = useMemo(() => extractSafeDomain(url, title), [url, title]);
 
   // 1. VaultZero Native Emblem for internal demo/vault items only
@@ -207,33 +206,11 @@ export function BrandMark({
     );
   }
 
-  // 4. Dynamic Favicon Loader with Graceful Dual Fallback (Google s2 -> DuckDuckGo -> Monogram)
-  if (safeDomain && errorStage < 2) {
-    const faviconUrl =
-      errorStage === 0
-        ? `https://www.google.com/s2/favicons?domain=${encodeURIComponent(safeDomain)}&sz=128`
-        : `https://icons.duckduckgo.com/ip3/${encodeURIComponent(safeDomain)}.ico`;
-
-    return (
-      <span
-        className={cn(
-          "brand-tile inline-flex shrink-0 items-center justify-center overflow-hidden rounded-[30%] border border-white/20 bg-white/10 p-1 shadow-sm",
-          className,
-        )}
-        style={{ width: size, height: size }}
-        aria-label={title || safeDomain}
-      >
-        <img
-          key={faviconUrl}
-          src={faviconUrl}
-          alt={title || safeDomain}
-          referrerPolicy="no-referrer"
-          className="h-full w-full object-contain rounded-[20%]"
-          onError={() => setErrorStage((s) => s + 1)}
-        />
-      </span>
-    );
-  }
+  // 4. V-87 — NO remote favicon stage. This is a 100% offline vault: asking
+  //    Google s2 / DuckDuckGo for a favicon leaked every saved domain to a
+  //    third party and printed cert/DNS failures on air-gapped devices. The
+  //    offline SVG map, simple-icons vectors and the monogram below already
+  //    cover every tile, so unknown domains fall through to them directly.
 
   // 5. Ultra-Crisp Vector Monogram Initial fallback
   const initial = (title || (safeDomain ? safeDomain.replace(/^www\./, "") : "")).trim().charAt(0).toUpperCase() || "V";

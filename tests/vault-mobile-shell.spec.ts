@@ -300,3 +300,92 @@ test("M-13 all three P2P footer actions fit on a 360px screen", async ({ page })
     expect(box!.x + box!.width, `${name} must not be cut on the right`).toBeLessThanOrEqual(361);
   }
 });
+
+/* -------------------------------------------------------------------------
+ * V-87 (batch 2) — two defects measured on a real 390x844 Chromium capture:
+ *   1. the four sort controls wrapped onto TWO rows (tops 471 / 471 / 471 /
+ *      494, container height 49px) — "Password strength" fell to line 2.
+ *      A centred flex row that wraps also makes an overflowing row impossible
+ *      to scroll to its first item, which is the reported "stuck scroll".
+ *   2. BrandMark silently fetched Google / DuckDuckGo favicons for unknown
+ *      domains, breaking the offline promise and printing cert errors.
+ * M-16 is a *guard*, not a fix: the P2P body already scrolls (scrollHeight
+ * 634 > client 595); it proves the last helper line is reachable above the
+ * sticky footer instead of being permanently cut off.
+ * ------------------------------------------------------------------------- */
+test("M-15 the four sort controls stay on ONE scrollable row on mobile", async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: MOBILE_HEIGHT });
+  await page.goto("/?unlocked=true");
+  const labels = ["Recently updated", "Name (A–Z)", "Folder (A–Z)", "Password strength"];
+  const buttons = labels.map((label) => page.getByRole("button", { name: label, exact: true }));
+  for (const button of buttons) await expect(button).toBeVisible();
+
+  const metrics = await buttons[0].evaluate((first) => {
+    const row = first.parentElement as HTMLElement;
+    const style = getComputedStyle(row);
+    return {
+      wrap: style.flexWrap,
+      justify: style.justifyContent,
+      overflowX: style.overflowX,
+      height: Math.round(row.getBoundingClientRect().height),
+      tops: [...row.querySelectorAll("button")].map((el) => Math.round(el.getBoundingClientRect().top)),
+      scrollWidth: row.scrollWidth,
+      clientWidth: row.clientWidth,
+    };
+  });
+  expect(metrics.wrap, "sort row must never wrap").toBe("nowrap");
+  expect(new Set(metrics.tops).size, "all four sort controls share one row").toBe(1);
+  expect(metrics.height, "a one-row control stays compact").toBeLessThanOrEqual(30);
+  expect(["auto", "scroll"]).toContain(metrics.overflowX);
+  expect(metrics.justify, "an overflowing row must stay start-aligned, not centred").toBe("flex-start");
+
+  // The four labels measure 384px at 390px width, so the row legitimately
+  // overflows. What matters is that BOTH ends are reachable by scrolling —
+  // a centred flex row used to make the first chip unreachable.
+  expect(metrics.scrollWidth, "the row really overflows on a phone").toBeGreaterThan(metrics.clientWidth);
+  const reach = await buttons[0].evaluate((first) => {
+    const row = first.parentElement as HTMLElement;
+    const chips = [...row.querySelectorAll("button")];
+    row.scrollLeft = 0;
+    const left = Math.round(chips[0].getBoundingClientRect().left - row.getBoundingClientRect().left);
+    row.scrollLeft = row.scrollWidth;
+    const right = Math.round(row.getBoundingClientRect().right - chips[chips.length - 1].getBoundingClientRect().right);
+    return { left, right, scrollLeft: row.scrollLeft };
+  });
+  expect(reach.scrollLeft, "horizontal scrolling actually moves").toBeGreaterThan(0);
+  expect(reach.left, "the first chip is reachable at scrollLeft=0").toBeGreaterThanOrEqual(-1);
+  expect(reach.right, "the last chip is reachable at the far end").toBeGreaterThanOrEqual(-1);
+});
+
+test("M-16 the P2P body scrolls; its last helper line is reachable above the footer", async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: MOBILE_HEIGHT });
+  await page.goto("/?unlocked=true");
+  await openScanTab(page);
+  const dialog = page.locator('[role="dialog"][aria-modal="true"]');
+  const footer = dialog.locator("footer");
+  const note = page.getByText(/Zero-knowledge local connection/);
+  await expect(note).toBeAttached();
+  const footerBox = await footer.boundingBox();
+  expect(footerBox).toBeTruthy();
+
+  const scrollable = await footer.evaluate((f) => {
+    const body = f.previousElementSibling as HTMLElement;
+    body.scrollTop = body.scrollHeight;
+    return { overflowY: getComputedStyle(body).overflowY, scrollTop: body.scrollTop };
+  });
+  expect(scrollable.overflowY).toBe("auto");
+  await expect.poll(async () => {
+    const box = await note.boundingBox();
+    return box ? Math.round(box.y + box.height) : Number.POSITIVE_INFINITY;
+  }, { message: "the helper line must be fully revealed above the footer" })
+    .toBeLessThanOrEqual(Math.round(footerBox!.y) + 1);
+});
+
+test("M-17 no brand tile loads a remote image on the vault screen", async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: MOBILE_HEIGHT });
+  await page.goto("/?unlocked=true");
+  const remote = await page.locator("img").evaluateAll((imgs) =>
+    imgs.map((img) => img.getAttribute("src") || "").filter((src) => /^https?:\/\//i.test(src)),
+  );
+  expect(remote, "offline vault must not fetch third-party images").toEqual([]);
+});

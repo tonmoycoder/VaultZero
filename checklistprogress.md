@@ -133,3 +133,20 @@ Active branch: `arena/317fbb3c-vaultzero` (never rename). PR #2 + #3 MERGED, #1 
 - [!] NOT possible here: 4 Android secrets, Windows `.exe` smoke test, real-device camera/LAN P2P/120Hz, APK decompilation, <2s cold start, native `.pmv` IPC backup
 - [ ] Phase E (resume with `continue`): publish signed Beta, verify 5/5 assets, close the loop on Windows EXE + physical-device P2P
 
+
+## PHASE E / V-87 — batch 2: review -> improve -> review (2026-11-07)
+
+- [x] Re-baselined from the workspace: HEAD `8d1f38c` (V-86 arrived externally); did NOT redo V-86
+- [x] Re-verified V-86 gates: tsc 0 · verify 0 (35) · node20 35/35 · CI `42292104477` success/success
+- [x] Captured 5 real 390x844 screens + DOM measurements; recorded what is NOT reproducible
+- [x] Traced `ERR_CERT_AUTHORITY_INVALID` to the opt-in updater request (expected offline), not a regression
+- [x] RED: new `offline-brand-icons` harness 2 FAIL; M-15 `flex-wrap: wrap` FAIL; M-16/M-17 guards PASS
+- [x] GREEN fix 1: sort row is one nowrap, start-aligned, horizontally scrollable line (tops all 471)
+- [x] GREEN fix 2: removed remote Google/DuckDuckGo favicon stage + `errorStage`; offline tiles only
+- [x] Corrected a wrong assumption in M-15 (384px > 344px); now asserts both scroll ends are reachable
+- [x] M-16 proves the P2P body scrolls and the last helper line is fully revealable (no code change)
+- [x] Gates: tsc 0 · verify 0 (36 harness) · node20 36/36 · audit 0 · Playwright **145/145 (8.6m)** · M-15/16/17 3/3
+- [x] Re-captured screenshots after the fix; no horizontal overflow on any of the 5 screens
+- [!] `check-live-release.mjs` exit 1: STALE `v2.5.2` (2026-11-02) + 2 missing canonical assets
+- [ ] Batch 3 (resume with `continue`): README stale `(v2.5.0)` headings, lock-screen footer reachability, P2P helper-line half-cut polish, then full gates
+- [ ] Final batch: signed Beta publication steps, docs, CI green, Bengali report + English master prompt LAST + separate Antigravity prompt

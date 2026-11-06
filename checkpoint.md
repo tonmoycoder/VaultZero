@@ -332,3 +332,64 @@ native `.pmv` Rust IPC backup; `webviewInstallMode`; Rust edition 2024; global z
 guarantee (`ui.tsx:211-213` favicons, updater, `p2p_lan.rs`); hardcoded `vaultzero123` fallback
 KEPT by earlier user decision. Phased resume: `continue` → Phase E.
 
+
+## V-87 — batch 2 / visual review -> improve -> review (2026-11-07)
+
+**Re-baseline (important).** Between two turns the workspace advanced on its own: HEAD is
+`8d1f38c fix(V-86): honest P2P state, strict peer validation, live version, bounded updater`
+(both local and `origin/arena/317fbb3c-vaultzero`), grafted on top of `f2e8978` V-85.
+V-86 already implemented what the previous turn had planned as batches 1/2/4 (D-1..D-8),
+so it was NOT redone. Re-observed: `gh run view 42292104477` = success / success
+("Test & Build Verification" + "Frontend E2E & Security Tests").
+PR state: #3 MERGED, #2 MERGED, #1 OPEN (never touched). No PR exists for this branch.
+
+**User instruction for this phase:** do NOT do all the work at once; work in small batches
+so errors do not happen. This entry is ONE batch only.
+
+**Empirical review (real Chromium, 390x844, `isMobile+hasTouch`).** Captured 5 screens
+(lock, vault, P2P host, P2P scan, update attempt) with `.artifacts/capture-ui.mjs`
+(gitignored scratch) and measured the DOM with `.artifacts/measure-ui.mjs`.
+- NOT reproducible in current source: horizontal drift / empty side space
+  (`scrollWidth === clientWidth === 390` on all 5 screens), squished fingerprint logo,
+  fresh install asking for a master password (it shows "Create your VaultZero vault"),
+  fake Touch ID button (honest "not enrolled yet"), `Connected: 192.1` (banner reads
+  "Waiting for peer selection… / LAN Port: —"), cut footer buttons.
+- The 5 `ERR_CERT_AUTHORITY_INVALID` console messages were traced to ONE request per page:
+  the opt-in updater `api.github.com/repos/.../releases/latest`. In this offline sandbox
+  that correctly becomes V-86's `offline` status; it is NOT a favicon or a regression.
+- TWO real defects found: (a) the four sort chips wrapped to 2 rows — measured tops
+  471/471/471/494, container height 49px, `flex-wrap: wrap`; (b) `ui.tsx` still fetched
+  Google s2 / DuckDuckGo favicons for unknown domains (offline + privacy violation).
+- P2P body measured `scrollHeight 634 > clientHeight 595`: the last helper line is
+  half-visible at rest but IS reachable by scrolling. Added a guard, no code change.
+
+**Test-first RED -> GREEN.**
+- `tests/harness/offline-brand-icons.test.mjs` (NEW, 36th harness): positive control
+  plants a Google favicon URL + a remote `<img>`; scans all 53 `src/**/*.ts(x)` after
+  stripping comments; rejects the 2 remote hosts, any remote `<img src>`, and
+  `errorStage`. RED = 2 FAIL.
+- `tests/vault-mobile-shell.spec.ts` gained M-15 (one nowrap, start-aligned,
+  horizontally scrollable row; both ends reachable), M-16 (P2P body scroll reveals the
+  helper line above the footer), M-17 (no remote `<img>` on the vault screen).
+  RED = M-15 FAIL (`wrap`), M-16/M-17 PASS (guards).
+- M-15 first draft WRONGLY asserted all 4 labels fit at 390px; measurement after the fix
+  showed `scrollWidth 384 > clientWidth 344`. Assertion replaced with the honest property:
+  the row overflows but `scrollLeft` moves and both first/last chips are reachable.
+  This is exactly the user's "horizontal scroll stuck" defect, now fixed.
+- Fixes (minimal): `VaultHome.tsx` sort container `flex-wrap justify-center` ->
+  `flex-nowrap justify-start overflow-x-auto sm:justify-center`; `ui.tsx` deleted the
+  27-line remote favicon stage and its `errorStage` state, unknown domains now fall
+  through to the existing offline SVG / simple-icons / monogram tiles.
+
+**GREEN gates (all re-run on this batch).** `tsc` 0; `npm run verify` 0 (36 harness,
+23 rustfmt, bundle budget ok); node20 36/36; `npm audit --audit-level=high` 0;
+full `npx playwright test` 145 passed (8.6m); targeted M-15/16/17 3 passed.
+Re-captured screenshots: all 4 sort chips at `top=471`, one row, aligned with
+"All items", no horizontal overflow. `check-live-release.mjs` still exit 1
+(STALE + 2 canonical names) — publication, not a code gate.
+
+**Still open for later batches / Antigravity:** publish a signed Beta (needs 4 Android
+secrets + Windows runner), verify 5/5 canonical assets, README `(v2.5.0)` headings,
+physical-device status-bar / camera / LAN P2P / 120Hz, Windows `.exe` smoke test,
+APK decompilation (`*.dl.dropboxusercontent.com` outside allowlist; no apktool/jadx),
+absolute <2s cold start, native `.pmv` Rust IPC backup.
