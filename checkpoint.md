@@ -449,3 +449,11 @@ Windows runner), 5/5 canonical assets, physical-device status-bar/camera/LAN
 P2P/120Hz, Windows `.exe` smoke test, APK decompilation (Dropbox host outside
 allowlist; no apktool/jadx), <2s cold start, native `.pmv` Rust IPC backup,
 and the English master prompt (LAST) + separate Antigravity prompt.
+
+### V-88 close-out (CI)
+`5c37b57` pushed to `origin/arena/317fbb3c-vaultzero`.
+NOTE: the first `gh run list --limit 1` returned the PREVIOUS docs-only run
+`42297467746` because the new run had not registered yet; that was NOT claimed
+as this batch's CI. Re-listed by headSha and watched the correct run
+`42300864536` (`5c37b576…`) -> exit 0, both jobs `success`. Only runner
+deprecation annotations, no failures. Working tree clean. Batch 3 CLOSED.

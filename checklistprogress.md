@@ -165,3 +165,4 @@ Active branch: `arena/317fbb3c-vaultzero` (never rename). PR #2 + #3 MERGED, #1 
 - [x] Re-captured screenshots: Host body overflow 0, no clipped line, no horizontal overflow on 5 screens
 - [!] `check-live-release.mjs` exit 1: STALE `v2.5.2` (2026-11-02) + 2 missing canonical assets (publication work)
 - [ ] Final batch (resume with `continue`): release/publication plan, docs, CI, Bengali report + English master prompt LAST + separate Antigravity prompt
+- [x] `5c37b57` pushed; correct CI run `42300864536` watched to exit 0 — success/success (batch 3 CLOSED)
