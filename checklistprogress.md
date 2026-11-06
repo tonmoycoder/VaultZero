@@ -166,3 +166,16 @@ Active branch: `arena/317fbb3c-vaultzero` (never rename). PR #2 + #3 MERGED, #1 
 - [!] `check-live-release.mjs` exit 1: STALE `v2.5.2` (2026-11-02) + 2 missing canonical assets (publication work)
 - [ ] Final batch (resume with `continue`): release/publication plan, docs, CI, Bengali report + English master prompt LAST + separate Antigravity prompt
 - [x] `5c37b57` pushed; correct CI run `42300864536` watched to exit 0 — success/success (batch 3 CLOSED)
+
+## PHASE E / V-89 — FINAL batch: release runbook + close-out (2026-11-07)
+
+- [x] Re-baselined: HEAD `363a52d`, clean; all 5 CI runs on this branch green
+- [x] Re-observed live release: `v2.5.2`, 2026-11-02, 9 assets, 2 canonical 404, STALE vs 2026-11-06 source
+- [x] RED: new `release-runbook` harness 1 FAIL (doc absent); positive-control arithmetic slip caught and corrected
+- [x] GREEN: `docs/RELEASE-RUNBOOK.md` — 4 secrets, keytool, beta tag, gates, workflow_dispatch, signed-log gate, 5/5 verification, sha256sum -c, Rollback, honest limits
+- [x] GREEN harness: 26/26, cross-checked against README's 5 canonical links
+- [x] FINAL gates: tsc 0 · verify 0 (38 harness) · node20 38/38 · audit 0 · Playwright **147/147 (8.7m)**
+- [x] Honest inventory: no MCP server, no `.mcp.json`/`.agents/skills` in this clone, Dropbox read-only only, github connector unsupported, signed-log workaround documented
+- [!] `check-live-release.mjs` exit 1 — STALE + 2 missing assets; needs a signed Beta (NOT done here, no secrets/runner)
+- [x] No new branch, no PR opened/merged/closed, no release published, no fabricated assets
+- [x] Delivered: Bengali final report + SEPARATE Bengali Antigravity prompt + English master prompt LAST (both ledgers referenced)

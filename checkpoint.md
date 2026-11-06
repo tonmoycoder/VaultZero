@@ -457,3 +457,75 @@ NOTE: the first `gh run list --limit 1` returned the PREVIOUS docs-only run
 as this batch's CI. Re-listed by headSha and watched the correct run
 `42300864536` (`5c37b576…`) -> exit 0, both jobs `success`. Only runner
 deprecation annotations, no failures. Working tree clean. Batch 3 CLOSED.
+
+## V-89 — FINAL batch / release runbook + close-out (2026-11-07)
+
+**Re-baseline.** HEAD `363a52d`, tree clean, remote in sync. Docs-only CI
+`42301895042` re-observed = success / success (all 5 runs on this branch are
+now green: `42292104477`, `42296394627`, `42297467746`, `42300864536`,
+`42301895042`). PRs: #3 MERGED 2026-11-05, #2 MERGED 2026-11-03, #1 OPEN
+(superseded; never inspected/pushed/merged). Versions all `2.5.2`.
+
+**Root cause, restated with current telemetry.** Live `v2.5.2` published
+`2026-11-02T01:18:40Z`, target `main`, `draft:false prerelease:false`,
+9 assets: `SHA256SUMS.txt`, `VaultZero-Android.apk`, `.idsig`,
+`VaultZero-v2.5.2-Android-arm64.apk`, `VaultZero-Windows-x64-portable.exe`
+(+ its `.manifest`, `.manifest.sha256`, `.exe.sha256`),
+`VaultZero-Windows-x64-Setup.exe`. Missing canonical
+`VaultZero-Windows-x64-Portable.exe` (capital P) and
+`VaultZero-Windows-x64.msi` -> 2 README links 404. `check-live-release.mjs`
+prints `STALE  release v2.5.2 predates local source (2026-11-02 < 2026-11-06)`.
+This is PUBLICATION, not source. No new release was fabricated here.
+
+**Test-first RED -> GREEN (one deliverable).**
+- NEW `tests/harness/release-runbook.test.mjs` (38th harness): positive control
+  plants a runbook with 1 of 5 assets and 0 secrets; then requires
+  `docs/RELEASE-RUNBOOK.md` with all 5 canonical names, all 4 Android secret
+  names, and 11 operational tokens (`workflow_dispatch`, `--clobber`,
+  `--latest`, `--target`, `keytool`, `sha256sum -c`, `v2.5.2-beta.1`, both
+  signed-log strings, `Rollback`, `check-live-release.mjs`), and cross-checks
+  that README really links all 5 names. RED = 1 FAIL (file absent) after a
+  first-draft positive-control arithmetic slip (2 assets vs 1) was corrected.
+- NEW `docs/RELEASE-RUNBOOK.md` (Bengali prose, exact English commands):
+  4 secrets + `keytool` command + base64, `v2.5.2-beta.1` vs the 5 constants
+  needed for `v2.6.0-beta.1`, pre-release gates, `gh workflow run` / tag push,
+  signed-log gate (`Restored the long-lived release signing keystore from
+  GitHub Secrets.` vs STOP on `Using consistent release keystore.`), 5/5
+  verification + `sha256sum -c`, Rollback, and honest limits. GREEN = 26/26.
+
+**FINAL gates (all re-run on this head).** `tsc` 0; `npm run verify` 0
+(38 harness, 23 rustfmt, bundle budget); node20 38/38; `npm audit
+--audit-level=high` 0 vulnerabilities; `npx playwright test` **147 passed (8.7m)**.
+`check-live-release.mjs` exit 1 (STALE + 2 404) — a diagnostic, NOT a gate.
+No app source changed in this batch, so the 147/147 result is also the state
+of batches 1-3.
+
+**Honest inventory at close-out.** `MCP: NO MCP server attached`; `.mcp.json`
+and `.agents/skills/` ABSENT in this grafted clone (the 2 real
+`anthropics/skills` SKILL.md files were installed only on the historical
+branch and are NOT present here — not claimed); `github` connector unsupported;
+Dropbox connector ENABLED and used read-only (RoboForm APK metadata found:
+`/uptodown-com.siber.roboform.apk`, 15,790,385 B, hash `9265acf0…`), but its
+`*.dl.dropboxusercontent.com` host is outside the sandbox allowlist
+(`SSL_ERROR_SYSCALL`, `fetch_page` HTTP 500) and `apktool`/`jadx`/`aapt`/
+`java` are absent -> APK decompilation IMPOSSIBLE here. `gh secret list` 403.
+`storytold/craft-anything` (★17711) read and its inspect/checklist/verify loop
+applied to our own code; GitHub topic survey persisted in
+`docs/EXTERNAL-REPO-SURVEY.md`. Sandbox allowlist: github.com,
+codeload.github.com, api.github.com, registry.npmjs.org, pypi.org,
+files.pythonhosted.org only.
+
+**Never claimed / still unmeasured:** absolute <2s `.exe` cold start (284 ms
+WebView proxy only), native `.pmv` Rust IPC backup (localStorage snapshot
+only), global zero-network guarantee (updater + `p2p_lan.rs` are explicit
+opt-in network features), real-device camera/LAN P2P/120Hz, WebView
+`PermissionRequest` bridging, platform biometric Quick Unlock on Android
+(real session-scoped WebAuthn exists; no native keystore), `webviewInstallMode`
+explicit config, Rust edition 2024 migration. Hardcoded `vaultzero123`
+fallback in `release.yml` KEPT per earlier `keep_document` decision; after
+secrets are confirmed, propose fail-closed — do not silently revert.
+
+**Deliverables:** this ledger + `checklistprogress.md`, `docs/RELEASE-RUNBOOK.md`,
+Bengali final report, a SEPARATE Bengali Antigravity prompt for the local-only
+tasks, and the English master prompt delivered LAST. No new branch was created;
+no PR was opened/merged/closed; no release was published.
