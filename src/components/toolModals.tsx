@@ -1228,7 +1228,13 @@ export function SyncModal({ onClose, onNotify, items, onMerge, lang = "en" }: {
         </div>
       )}
 
-      <div className="mt-3 flex items-center justify-center gap-1.5 text-[8px] text-faint">
+      {/* V-88: on a 390px phone this duplicate footnote pushed the Host tab
+          39px past the scrollport, so it was drawn half-cut behind the fixed
+          footer. The modal subtitle ("Zero servers. Encrypted peer-to-peer
+          sync…") and the desktop footer hint ("PAKE + Channel Binding ·
+          XChaCha20-Poly1305") already carry the same information. Keep the
+          note on desktop, drop it on phones so nothing is clipped. */}
+      <div className="mt-3 hidden items-center justify-center gap-1.5 text-[8px] text-faint sm:flex">
         <Devices size={12} weight="duotone" />
         Zero-knowledge local connection · Authenticated key exchange with channel binding
       </div>

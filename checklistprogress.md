@@ -151,3 +151,17 @@ Active branch: `arena/317fbb3c-vaultzero` (never rename). PR #2 + #3 MERGED, #1 
 - [ ] Batch 3 (resume with `continue`): README stale `(v2.5.0)` headings, lock-screen footer reachability, P2P helper-line half-cut polish, then full gates
 - [ ] Final batch: signed Beta publication steps, docs, CI green, Bengali report + English master prompt LAST + separate Antigravity prompt
 - [x] `cd8d5dc` pushed; CI `42296394627` watched to exit 0 — success/success (batch 2 CLOSED)
+
+## PHASE E / V-88 — batch 3: README version, Host-tab clipping, lock footer guard (2026-11-07)
+
+- [x] Re-baselined: HEAD `e23d00c`, clean; docs-only CI `42297467746` success/success
+- [x] Measured before editing: lock dialog 1013>844 scrollable; Host body 634>595 (19px half-cut); Scan tab 0 overflow
+- [x] RED: new `readme-version` harness 3 FAIL; M-19 FAIL (`634 > 597`); M-18 guard PASS
+- [x] GREEN fix 1: README 2 section headings `(v2.5.0)` -> `(v2.5.2)`; no older release literal remains
+- [x] GREEN fix 2: duplicate P2P footnote hidden on phones (`hidden sm:flex`), still visible on desktop (M-19 proves)
+- [x] M-18 guard: Emergency kit + version footer reachable by scrolling, button enabled and inside viewport
+- [x] Caught a stale TEST assumption in M-16 (not a code regression); rewrote it, corrected its header comment
+- [x] Gates: tsc 0 · verify 0 (37 harness) · node20 37/37 · audit 0 · Playwright **147/147 (8.7m)** · M-16/18/19 3/3
+- [x] Re-captured screenshots: Host body overflow 0, no clipped line, no horizontal overflow on 5 screens
+- [!] `check-live-release.mjs` exit 1: STALE `v2.5.2` (2026-11-02) + 2 missing canonical assets (publication work)
+- [ ] Final batch (resume with `continue`): release/publication plan, docs, CI, Bengali report + English master prompt LAST + separate Antigravity prompt

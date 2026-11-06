@@ -309,9 +309,10 @@ test("M-13 all three P2P footer actions fit on a 360px screen", async ({ page })
  *      to scroll to its first item, which is the reported "stuck scroll".
  *   2. BrandMark silently fetched Google / DuckDuckGo favicons for unknown
  *      domains, breaking the offline promise and printing cert errors.
- * M-16 is a *guard*, not a fix: the P2P body already scrolls (scrollHeight
- * 634 > client 595); it proves the last helper line is reachable above the
- * sticky footer instead of being permanently cut off.
+ * M-16 guards scrolling. V-88 later removed the mobile overflow entirely
+ * (the duplicate footnote in toolModals is hidden on phones), so M-16 now asserts
+ * "nothing clipped at 390x844" plus "scrolling still works on a 360x640
+ * phone". M-19 covers the same invariant for the Host tab.
  * ------------------------------------------------------------------------- */
 test("M-15 the four sort controls stay on ONE scrollable row on mobile", async ({ page }) => {
   await page.setViewportSize({ width: 390, height: MOBILE_HEIGHT });
@@ -357,28 +358,34 @@ test("M-15 the four sort controls stay on ONE scrollable row on mobile", async (
   expect(reach.right, "the last chip is reachable at the far end").toBeGreaterThanOrEqual(-1);
 });
 
-test("M-16 the P2P body scrolls; its last helper line is reachable above the footer", async ({ page }) => {
+test("M-16 the P2P body never traps content behind the footer", async ({ page }) => {
   await page.setViewportSize({ width: 390, height: MOBILE_HEIGHT });
   await page.goto("/?unlocked=true");
   await openScanTab(page);
   const dialog = page.locator('[role="dialog"][aria-modal="true"]');
   const footer = dialog.locator("footer");
-  const note = page.getByText(/Zero-knowledge local connection/);
-  await expect(note).toBeAttached();
-  const footerBox = await footer.boundingBox();
-  expect(footerBox).toBeTruthy();
 
-  const scrollable = await footer.evaluate((f) => {
+  // V-88: the duplicate footnote was hidden on phones, so at 390x844 the
+  // whole body fits and NOTHING is half-drawn behind the fixed footer.
+  const normal = await footer.evaluate((f) => {
     const body = f.previousElementSibling as HTMLElement;
-    body.scrollTop = body.scrollHeight;
-    return { overflowY: getComputedStyle(body).overflowY, scrollTop: body.scrollTop };
+    return { overflowY: getComputedStyle(body).overflowY, scrollHeight: body.scrollHeight, clientHeight: body.clientHeight };
   });
-  expect(scrollable.overflowY).toBe("auto");
-  await expect.poll(async () => {
-    const box = await note.boundingBox();
-    return box ? Math.round(box.y + box.height) : Number.POSITIVE_INFINITY;
-  }, { message: "the helper line must be fully revealed above the footer" })
-    .toBeLessThanOrEqual(Math.round(footerBox!.y) + 1);
+  expect(normal.overflowY, "the body must remain scrollable if it ever grows").toBe("auto");
+  expect(normal.scrollHeight, "no clipped content on a standard phone").toBeLessThanOrEqual(normal.clientHeight + 2);
+
+  // A short phone (360x640) legitimately overflows. Scrolling must still
+  // work — this is the user's "scroll করা যাচ্ছে না" complaint.
+  await page.setViewportSize({ width: 360, height: 640 });
+  await expect(footer).toBeVisible();
+  const short = await footer.evaluate((f) => {
+    const body = f.previousElementSibling as HTMLElement;
+    const before = body.scrollTop;
+    body.scrollTop = body.scrollHeight;
+    return { before, after: body.scrollTop, scrollHeight: body.scrollHeight, clientHeight: body.clientHeight };
+  });
+  expect(short.scrollHeight, "a short phone really does overflow").toBeGreaterThan(short.clientHeight);
+  expect(short.after, "vertical scrolling actually moves").toBeGreaterThan(short.before);
 });
 
 test("M-17 no brand tile loads a remote image on the vault screen", async ({ page }) => {
@@ -388,4 +395,61 @@ test("M-17 no brand tile loads a remote image on the vault screen", async ({ pag
     imgs.map((img) => img.getAttribute("src") || "").filter((src) => /^https?:\/\//i.test(src)),
   );
   expect(remote, "offline vault must not fetch third-party images").toEqual([]);
+});
+
+/* -------------------------------------------------------------------------
+ * V-88 (batch 3) — measured on real 390x844 Chromium:
+ *   - lock dialog: scrollHeight 1013 > clientHeight 844; the "Emergency kit"
+ *     button and the AIR-GAPPED version footer sit ~169px below the fold.
+ *     They ARE reachable (overflow-y:auto), so this is a GUARD, not a fix.
+ *   - P2P Host tab: body scrollHeight 634 > clientHeight 595; the trailing
+ *     security footnote overflowed 19px behind the fixed footer and looked
+ *     cut off. The Scan tab had 0 overflow. The note duplicates the modal
+ *     subtitle and the desktop footer hint, so it is hidden on phones.
+ * ------------------------------------------------------------------------- */
+test("M-18 the lock-screen footer is reachable by scrolling on a phone", async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: MOBILE_HEIGHT });
+  await page.goto("/");
+  const dialog = page.locator('[role="dialog"][aria-modal="true"]');
+  const emergency = dialog.getByRole("button", { name: "Emergency kit", exact: true });
+  const version = page.getByText(new RegExp(`AIR-GAPPED · v${APP_VERSION.replace(/\./g, "\\.")}\\b`));
+
+  const scroll = await dialog.evaluate((d) => ({
+    overflowY: getComputedStyle(d).overflowY,
+    scrollHeight: d.scrollHeight,
+    clientHeight: d.clientHeight,
+  }));
+  expect(scroll.overflowY, "the lock screen must be scrollable").toBe("auto");
+  expect(scroll.scrollHeight, "the lock screen really is taller than a phone").toBeGreaterThan(scroll.clientHeight);
+
+  await dialog.evaluate((d) => { d.scrollTop = d.scrollHeight; });
+  await expect(version).toBeVisible();
+  await expect(emergency).toBeVisible();
+  expect(await emergency.isEnabled()).toBe(true);
+  for (const locator of [version, emergency]) {
+    const box = await locator.boundingBox();
+    expect(box, "footer control must be laid out").toBeTruthy();
+    expect(box!.y, "footer control must not be cut at the top").toBeGreaterThanOrEqual(-1);
+    expect(box!.y + box!.height, "footer control must be fully inside the viewport").toBeLessThanOrEqual(MOBILE_HEIGHT + 1);
+  }
+});
+
+test("M-19 the P2P Host tab fits a phone with no clipped footnote", async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: MOBILE_HEIGHT });
+  await page.goto("/?unlocked=true");
+  await page.getByRole("button", { name: "Sync" }).click();
+  const dialog = page.locator('[role="dialog"][aria-modal="true"]');
+  await expect(dialog.getByRole("button", { name: /Host \/ Show QR/ })).toBeVisible();
+  const footer = dialog.locator("footer");
+  const metrics = await footer.evaluate((f) => {
+    const body = f.previousElementSibling as HTMLElement;
+    return { scrollHeight: body.scrollHeight, clientHeight: body.clientHeight };
+  });
+  expect(metrics.scrollHeight, "no content may be clipped behind the footer on a phone")
+    .toBeLessThanOrEqual(metrics.clientHeight + 2);
+
+  // The security note was hidden on phones, NOT deleted: on a desktop it
+  // must still be visible, so no information was lost.
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await expect(page.getByText(/Zero-knowledge local connection/)).toBeVisible();
 });

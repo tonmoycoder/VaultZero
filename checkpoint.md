@@ -400,3 +400,52 @@ absolute <2s cold start, native `.pmv` Rust IPC backup.
 both `success`. Only runner deprecation annotations (Node 20 actions forced to
 Node 24, ubuntu-latest -> Ubuntu 26) — no failures. Local working tree clean at
 this point. Batch 2 is closed; resume with `continue` for batch 3.
+
+## V-88 — batch 3 / small fixes + guards (2026-11-07)
+
+**Re-baseline.** HEAD `e23d00c` (V-87 close-out docs), tree clean, remote in sync.
+Docs-only CI `42297467746` re-observed = success / success. No external advance
+this time. User instruction stands: small batches only.
+
+**Measurements before touching code (real 390x844 Chromium).**
+- Lock dialog: `overflow-y:auto`, `scrollHeight 1013 > clientHeight 844`; the
+  "Emergency kit" button + `AIR-GAPPED · v2.5.2` footer sit ~169px below the
+  fold but ARE reachable by scrolling. GUARD (M-18), no code change — unlike the
+  old screenshots, nothing is permanently unclickable.
+- P2P **Host** tab (default tab): body `scrollHeight 634 > clientHeight 595`,
+  the trailing footnote rendered at `top 762 / bottom 793` while the fixed
+  footer starts at `774` -> 19px half-cut. The **Scan** tab had 0 overflow.
+- README lines 131/236 advertised `(v2.5.0)` while `APP_VERSION = 2.5.2`;
+  lines 13/32 already said `v2.5.2`. Direct "old version" confusion.
+
+**Test-first RED -> GREEN.**
+- NEW `tests/harness/readme-version.test.mjs` (37th harness): positive control
+  plants a stale heading; reads `APP_VERSION` from `src/lib/version.ts`; compares
+  every versioned README heading and every `vX.Y.Z` literal against the shipped
+  version. RED = 3 FAIL (2 stale headings + 1 stale literal).
+- `tests/vault-mobile-shell.spec.ts` gained M-18 (lock footer reachable, guard)
+  and M-19 (Host tab body must not overflow; security note must still be visible
+  at 1440px so information is not lost). RED = M-19 FAIL (`634 > 597`), M-18 PASS.
+- Fixes (minimal): README 2 headings `v2.5.0 -> v2.5.2`; `toolModals.tsx` added
+  `hidden sm:flex` to the DUPLICATE footnote (the modal subtitle and the desktop
+  footer hint already say the same thing). Nothing was deleted for desktop users.
+- FULL suite first pass: 146 passed / 1 failed — M-16 (written in V-87) assumed
+  the footnote stayed visible on phones. This was a stale TEST assumption, not a
+  code regression. M-16 rewritten to the current invariant: no clipped content
+  at 390x844, vertical scrolling still works on a 360x640 phone. Its V-87
+  header comment was corrected too (typo caught and fixed). Re-ran target then
+  the FULL suite: 147/147.
+
+**GREEN gates (all re-run).** `tsc` 0; `npm run verify` 0 (37 harness, rustfmt,
+bundle budget); node20 37/37; `npm audit --audit-level=high` 0;
+`npx playwright test` **147 passed (8.7m)**; targeted M-18/M-19 2/2, M-16 1/1.
+Re-captured 5 screenshots: Host body `634 -> 591` (overflow 0), half-cut line
+gone, `Close` fully visible, no horizontal overflow on any screen.
+`check-live-release.mjs` still exit 1 (STALE + 2 canonical 404s) — publication,
+not a code gate.
+
+**Still open for the final batch:** signed Beta publication (4 Android secrets +
+Windows runner), 5/5 canonical assets, physical-device status-bar/camera/LAN
+P2P/120Hz, Windows `.exe` smoke test, APK decompilation (Dropbox host outside
+allowlist; no apktool/jadx), <2s cold start, native `.pmv` Rust IPC backup,
+and the English master prompt (LAST) + separate Antigravity prompt.

@@ -128,7 +128,7 @@ VaultZero operates on an unhackable **Fail-Closed Air-Gapped Security Architectu
 
 ---
 
-## 🚀 Core Features Matrix (v2.5.0)
+## 🚀 Core Features Matrix (v2.5.2)
 
 ### 1. 📡 Military-Grade P2P LAN Sync (Zero Cloud)
 *   **Serverless Local Transfer:** Sync credentials between desktop and mobile devices over local Wi-Fi without any third-party cloud servers.
@@ -233,7 +233,7 @@ npx tauri build
 
 ---
 
-## ✨ প্রধান প্রযুক্তিগত সুবিধাসমূহ (v2.5.0)
+## ✨ প্রধান প্রযুক্তিগত সুবিধাসমূহ (v2.5.2)
 
 1. **মিলিটারি-গ্রেড লোকাল P2P সিঙ্ক (P2P LAN Sync):**
    - ক্লাউড সার্ভার ছাড়া লোকাল ওয়াই-ফাইয়ের মাধ্যমে ডেস্কটপ ও মোবাইলের মাঝে নিরাপদ ভল্ট সিঙ্ক।
