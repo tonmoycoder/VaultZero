@@ -221,3 +221,6 @@ Active branch: `arena/317fbb3c-vaultzero` (never rename). PR #2 + #3 MERGED, #1 
 - [ ] Batch 2 (resume with `continue`): Android 36px status-bar clearance, overflow-x lock, All items / touch-scrollable sort pills
 - [ ] Batches 3-7: P2P real LAN IP + camera fallback, updater resilience, OCR/TOTP/logo, DOM audit, CI/release + final loop
 - [ ] Final: Bengali report + SEPARATE Antigravity prompt (local-only work + merge) + English master prompt LAST
+- [x] NEW **PR #4** OPEN (`arena/317fbb3c-vaultzero -> main`) — created after batch 1 because main/branch were identical before
+- [x] CI `42413851086` watched to exit 0; `gh pr checks 4` = pass/pass (8m15s + 2m38s); no merge/close
+- [x] Batch 1 CLOSED — resume with `continue` for Batch 2

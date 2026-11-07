@@ -689,3 +689,13 @@ the same marker also made a browser launch look configured.
 budget); node20 38/38; `npm audit --audit-level=high` 0;
 `npx playwright test` **152 passed (9.0m)**; `check-live-release.mjs` EXIT 0.
 No app assets, no release, no merge performed here.
+
+### V-90 Batch 1 close-out / PR #4
+New PR **#4 OPEN** `arena/317fbb3c-vaultzero -> main`
+(https://github.com/tonmoycoder/VaultZero/pull/4). It was created AFTER the
+batch-1 commit because `main` and the branch were identical beforehand.
+CI `42413851086` (`643f36f7…`) watched to exit 0, both jobs `success`;
+`gh pr checks 4` -> `Frontend E2E & Security Tests pass (8m15s)` +
+`Test & Build Verification pass (2m38s)`. No merge/close performed — an
+explicit user decision is still required. Batch 1 CLOSED; resume with
+`continue` for Batch 2.
