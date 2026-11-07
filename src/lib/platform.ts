@@ -13,6 +13,7 @@ export type VaultErrorCode =
 
 export interface VaultError {
   code: VaultErrorCode;
+  message?: string;
   safeMessage: string;
   retryable: boolean;
 }
@@ -71,6 +72,7 @@ export async function invokeNativeCommand<T>(
   if (!isNativeRuntime()) {
     throw {
       code: 'UNSUPPORTED',
+      message: SAFE_MESSAGES.UNSUPPORTED,
       safeMessage: SAFE_MESSAGES.UNSUPPORTED,
       retryable: false,
     } satisfies VaultError;
@@ -85,6 +87,7 @@ export async function invokeNativeCommand<T>(
     // stays in the Rust-side log; the user sees a fixed, safe message.
     throw {
       code,
+      message: SAFE_MESSAGES[code],
       safeMessage: SAFE_MESSAGES[code],
       retryable: code === 'IO',
     } satisfies VaultError;

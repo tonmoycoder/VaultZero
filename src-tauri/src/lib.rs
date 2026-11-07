@@ -138,6 +138,15 @@ pub mod commands {
         Ok(dir.join("local-vault.pmv").to_string_lossy().to_string())
     }
 
+    #[tauri::command]
+    pub fn has_vault_file(app: tauri::AppHandle) -> bool {
+        if let Ok(dir) = app.path().app_data_dir() {
+            dir.join("local-vault.pmv").exists()
+        } else {
+            false
+        }
+    }
+
     /// Writes an already-verified update artifact to disk and returns its
     /// absolute path.
     ///
@@ -873,6 +882,7 @@ pub fn run() {
             commands::get_vault_status,
             commands::lock_vault,
             commands::vault_file_path,
+            commands::has_vault_file,
             commands::save_update_artifact,
             commands::create_vault,
             commands::unlock_vault,

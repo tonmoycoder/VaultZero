@@ -5,10 +5,21 @@ use zeroize::{Zeroize, ZeroizeOnDrop};
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
 pub enum Category {
     #[default]
+    #[serde(alias = "Logins", alias = "login", alias = "logins")]
     Logins,
+    #[serde(alias = "Bookmarks", alias = "bookmark", alias = "bookmarks")]
     Bookmarks,
+    #[serde(
+        alias = "Safenotes",
+        alias = "safenote",
+        alias = "safenotes",
+        alias = "note",
+        alias = "notes"
+    )]
     Safenotes,
+    #[serde(alias = "Identities", alias = "identity", alias = "identities")]
     Identities,
+    #[serde(alias = "Payments", alias = "payment", alias = "payments")]
     Payments,
 }
 
@@ -90,27 +101,47 @@ impl ZeroizeOnDrop for TotpConfig {}
 pub struct Entry {
     pub id: Uuid,
     pub title: String,
+    #[serde(default)]
     pub url: String,
+    #[serde(default)]
     pub username: String,
+    #[serde(default)]
     pub email: String,
     pub password: String,
+    #[serde(default)]
     pub notes: String,
+    #[serde(default)]
     pub folder_id: Option<Uuid>,
+    #[serde(default)]
     pub category: Category,
+    #[serde(default)]
     pub tags: Vec<String>,
+    #[serde(default)]
     pub favorite: bool,
+    #[serde(default)]
     pub brand_color: Option<String>,
+    #[serde(default)]
     pub brand_icon_slug: Option<String>,
+    #[serde(default)]
     pub custom_icon_base64: Option<String>,
+    #[serde(default)]
     pub totp_config: Option<TotpConfig>,
+    #[serde(default)]
     pub recovery_codes: Vec<RecoveryCode>,
+    #[serde(default)]
     pub last_autofill: Option<u64>,
+    #[serde(default)]
     pub created_at: u64,
+    #[serde(default)]
     pub updated_at: u64,
+    #[serde(default)]
     pub password_history: Vec<PasswordHistoryEntry>,
     // CRDT fields for offline P2P sync
+    #[serde(default)]
     pub hlc_timestamp: u64,
+    #[serde(default)]
     pub device_id: String,
+    #[serde(default)]
     pub is_deleted: bool,
 }
 

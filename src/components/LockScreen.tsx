@@ -20,6 +20,7 @@ import { Logo, Tooltip } from "./ui";
 import { APP_VERSION } from "../lib/version";
 import VaultRecoveryModal from "./VaultRecoveryModal";
 import {
+  checkVaultConfiguredAsync,
   createNewVault,
   downloadKeyfile,
   generateKeyfileBytes,
@@ -67,6 +68,18 @@ export default function LockScreen({
     }
     return "";
   });
+
+  useEffect(() => {
+    let mounted = true;
+    checkVaultConfiguredAsync().then((configured) => {
+      if (mounted && configured) {
+        setIsSetup(false);
+      }
+    });
+    return () => {
+      mounted = false;
+    };
+  }, []);
 
   useEffect(() => {
     const handleProfileUpdate = () => {
@@ -191,7 +204,7 @@ export default function LockScreen({
       hapticSuccess();
       onUnlocked(session);
     } catch (err: any) {
-      setError(err?.message || (lang === "bn" ? "ভল্ট তৈরিতে সমস্যা হয়েছে।" : "Failed to create vault."));
+      setError(err?.safeMessage || err?.message || (lang === "bn" ? "ভল্ট তৈরিতে সমস্যা হয়েছে।" : "Failed to create vault."));
     } finally {
       setLoading(false);
     }
@@ -537,17 +550,19 @@ export default function LockScreen({
           {/* V-53: the old "switch to setup if testing" toggle could overwrite
               an existing vault container. Only offer a setup/unlock switch
               when no vault is actually configured. */}
-          {!isVaultConfigured() && (
-            <div className="mt-3 flex items-center justify-center gap-2 text-[8px] text-faint">
+          {(isSetup || !isVaultConfigured()) && (
+            <div className="mt-3 flex items-center justify-center gap-2 text-[8.5px] text-muted">
               <button
                 type="button"
                 onClick={() => {
                   setIsSetup((v) => !v);
                   setError("");
                 }}
-                className="hover:text-main underline decoration-dotted"
+                className="hover:text-main underline decoration-dotted transition-colors font-medium"
               >
-                {isSetup ? "Already have a vault? Switch to unlock" : "Need a fresh vault? Switch to setup"}
+                {isSetup
+                  ? (lang === "bn" ? "আগে থেকেই ভল্ট আছে? আনলক করুন" : "Already have a vault? Switch to unlock")
+                  : (lang === "bn" ? "নতুন ভল্ট তৈরি করতে চান? সেটআপ করুন" : "Need a fresh vault? Switch to setup")}
               </button>
             </div>
           )}

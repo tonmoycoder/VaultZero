@@ -536,3 +536,49 @@ headSha = `42303831746`, `gh run watch --exit-status` exit 0, both jobs
 `success`. Working tree clean. ALL work on this branch is complete; the only
 remaining action is the human/Antigravity publication in
 `docs/RELEASE-RUNBOOK.md`, which cannot be done inside this sandbox.
+
+
+## V-90 — Native Desktop Vault Creation & Unlock Auto-Detection (2026-11-07)
+
+**User Incident:**
+- The user ran `VaultZero.exe` locally and attempted to create a vault with master password `aA2525@`.
+- The UI displayed a red error: `Failed to create vault.`
+- Repeated attempts failed, leaving the user blocked on the setup screen.
+
+**Root-Cause Analysis (RCA):**
+1. **IPC Deserialization Rejection on Initial Demo Item:**
+   - In `src/lib/storage.ts`, `createNewVault()` successfully invoked native `create_vault` and `unlock_vault`, writing `%APPDATA%\com.vaultzero.app\local-vault.pmv` to disk.
+   - However, immediately after creation, `createNewVault()` attempted to seed `initialItems` by calling `invokeNativeCommand("upsert_entry", { entry: { ... } })`.
+   - The first initial item had `id: "demo-account"` (not a valid UUID string expected by Rust's `uuid::Uuid`), `category: "login"` (lowercase string, whereas Rust's `Category` enum defined `Logins` without Serde aliases), and omitted multiple required struct fields (`email`, `tags`, `device_id`).
+   - Rust's Serde deserializer rejected the payload before executing `upsert_entry`, causing Tauri's IPC promise to reject with a deserialization error.
+   - Because `createNewVault` did not isolate the demo item seeding, this unhandled rejection bubbled up and caused `LockScreen.tsx` to display the fallback error `"Failed to create vault."` even though the encrypted `.pmv` container was already successfully created on disk.
+2. **Native Vault Detection & Screen State Desync:**
+   - `isVaultConfigured()` checked only browser `window.localStorage.getItem(VAULT_STORAGE_KEY)`.
+   - In desktop Tauri runtime, the vault container resides strictly in `%APPDATA%\com.vaultzero.app\local-vault.pmv` (native disk), completely bypassing browser `localStorage`.
+   - Because `isVaultConfigured()` returned `false`, `LockScreen.tsx` initialized `isSetup` to `true` ("Create your VaultZero vault") on every application launch, even after a valid vault was already created with `aA2525@`.
+
+**Remediations Implemented:**
+1. `crates/vault-core/src/models.rs`:
+   - Added Serde aliases to `Category`: `#[serde(alias = "Logins", alias = "login", alias = "logins")]`, `Safenotes`, `Bookmarks`, `Identities`, `Payments`.
+   - Added `#[serde(default)]` to optional/secondary fields on `Entry` (`url`, `username`, `email`, `notes`, `folder_id`, `category`, `tags`, `favorite`, `brand_color`, `brand_icon_slug`, `custom_icon_base64`, `totp_config`, `recovery_codes`, `last_autofill`, `password_history`, `hlc_timestamp`, `device_id`, `is_deleted`).
+2. `src-tauri/src/lib.rs`:
+   - Added `has_vault_file` Tauri command to check if `local-vault.pmv` exists in `app_data_dir()`.
+   - Registered `has_vault_file` in `tauri::generate_handler!`.
+3. `src/lib/platform.ts`:
+   - Added optional `message?: string;` to `VaultError` interface and populated `message: SAFE_MESSAGES[code]` on native command rejections to prevent `undefined` error messages in the UI.
+4. `src/lib/storage.ts`:
+   - Added `checkVaultConfiguredAsync()` to probe `has_vault_file` in native runtime and persist `vaultzero_has_native_vault = "true"` in `localStorage`.
+   - Updated `isVaultConfigured()` to check `vaultzero_has_native_vault === "true"`.
+   - Sanitized initial entry IDs (ensuring valid UUID format) and category mapping in `createNewVault()`.
+   - Wrapped the initial items seeding loop in a non-fatal `try...catch` block with warning telemetry so demo item insertion failures never fail vault creation.
+5. `src/components/LockScreen.tsx`:
+   - Added `useEffect` hook to call `checkVaultConfiguredAsync()` on mount, automatically switching `isSetup` to `false` when a native vault exists on disk.
+   - Enhanced error reporting to check `err?.safeMessage || err?.message`.
+   - Preserved fallback toggle button ("Already have a vault? Switch to unlock") when in setup mode.
+
+**Empirical Verification:**
+- `npx tsc --noEmit` -> PASS (0 errors).
+- `npm run verify` -> PASS (38/38 test harnesses, WCAG 2.1 AA contrast 100%, 23 rustfmt files formatted, chunk budget ok).
+- `cargo test -p vault-core` -> PASS (34/34 passed, 0 failed).
+- `cargo clippy --all-targets -- -D warnings` -> PASS (0 warnings).
+- `cargo build --bin vaultzero-app --release` -> Produced standalone production binary embedding all frontend static assets.

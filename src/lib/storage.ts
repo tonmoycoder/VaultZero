@@ -49,6 +49,7 @@ export class SerializedMutationQueue {
         throw {
           code: "LOCKED",
           safeMessage: "Vault session changed or locked before operation started.",
+          message: "Vault session changed or locked before operation started.",
           retryable: false,
         } satisfies VaultError;
       }
@@ -57,6 +58,7 @@ export class SerializedMutationQueue {
         throw {
           code: "LOCKED",
           safeMessage: "Vault locked while operation was in flight; UI state not updated.",
+          message: "Vault locked while operation was in flight; UI state not updated.",
           retryable: false,
         } satisfies VaultError;
       }
@@ -623,7 +625,28 @@ async function decryptLegacyV2<T>(
 
 export function isVaultConfigured(): boolean {
   if (typeof window === "undefined") return false;
-  return Boolean(window.localStorage.getItem(VAULT_STORAGE_KEY));
+  return Boolean(
+    window.localStorage.getItem(VAULT_STORAGE_KEY) ||
+    window.localStorage.getItem("vaultzero_has_native_vault") === "true"
+  );
+}
+
+export async function checkVaultConfiguredAsync(): Promise<boolean> {
+  if (isNativeRuntime()) {
+    try {
+      const exists = await invokeNativeCommand<boolean>("has_vault_file");
+      if (exists) {
+        if (typeof window !== "undefined") {
+          window.localStorage.setItem("vaultzero_has_native_vault", "true");
+        }
+        return true;
+      }
+    } catch {
+      // fallback
+    }
+    return typeof window !== "undefined" && window.localStorage.getItem("vaultzero_has_native_vault") === "true";
+  }
+  return isVaultConfigured();
 }
 
 /**
@@ -715,41 +738,72 @@ export async function createNewVault(
       keyfileContent: kfHex,
       duressPassword: duressPassword || null,
     });
-    for (const item of initialItems) {
-      await invokeNativeCommand("upsert_entry", {
-        entry: {
-          id: item.id,
-          title: item.title,
-          username: item.username,
-          password: item.password,
-          url: item.url,
-          notes: item.note || "",
-          folder: item.folder || "",
-          category: item.category,
-          brand: item.brand,
-          is_favorite: item.favorite,
-          password_history: (item.passwordHistory || []).map((h) => ({
-            password: h.password,
-            changed_at: 0,
-          })),
-          recovery_codes: (item.recoveryCodes || []).map((code) => ({
-            code,
-            used: false,
-          })),
-          totp_config: item.totp
-            ? {
-                secret: "JBSWY3DPEHPK3PXP",
-                period: 30,
-                digits: 6,
-                algorithm: "SHA1",
-              }
-            : null,
-          created_at: 0,
-          updated_at: 0,
-          hlc_timestamp: 0,
-          is_deleted: false,
-        },
-      });
+    const isUuid = (id: string) =>
+      /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id);
+    const toCategory = (cat?: string) => {
+      switch ((cat || "").toLowerCase()) {
+        case "note":
+        case "notes":
+        case "safenote":
+        case "safenotes":
+          return "Safenotes";
+        case "identity":
+        case "identities":
+          return "Identities";
+        case "payment":
+        case "payments":
+          return "Payments";
+        default:
+          return "Logins";
+      }
+    };
+    try {
+      for (const item of initialItems) {
+        const entryId = isUuid(item.id) ? item.id : "00000000-0000-4000-8000-000000000001";
+        await invokeNativeCommand("upsert_entry", {
+          entry: {
+            id: entryId,
+            title: item.title,
+            username: item.username,
+            email: "",
+            password: item.password,
+            url: item.url,
+            notes: item.note || "",
+            folder_id: null,
+            category: toCategory(item.category),
+            tags: item.tags || [],
+            favorite: Boolean(item.favorite),
+            brand_color: null,
+            brand_icon_slug: item.brand || null,
+            custom_icon_base64: null,
+            password_history: (item.passwordHistory || []).map((h) => ({
+              password: h.password,
+              changed_at: 0,
+            })),
+            recovery_codes: (item.recoveryCodes || []).map((code) => ({
+              code,
+              used: false,
+              note: null,
+            })),
+            totp_config: item.totp
+              ? {
+                  secret: "JBSWY3DPEHPK3PXP",
+                  period: 30,
+                  digits: 6,
+                  algorithm: "SHA1",
+                }
+              : null,
+            last_autofill: null,
+            created_at: 0,
+            updated_at: 0,
+            hlc_timestamp: 0,
+            device_id: "desktop",
+            is_deleted: false,
+          },
+        });
+      }
+    } catch (upsertErr) {
+      console.warn("Seeding initial items to native vault failed non-fatally:", upsertErr);
     }
     // Native path succeeded: the native Rust engine owns the vault from here.
     // Return an in-memory session that mirrors what the native vault holds.
@@ -768,6 +822,9 @@ export async function createNewVault(
     };
     inMemorySession = nativeSession;
     saveActiveSession(nativeSession);
+    if (typeof window !== "undefined") {
+      window.localStorage.setItem("vaultzero_has_native_vault", "true");
+    }
     return nativeSession;
   }
 
@@ -920,6 +977,9 @@ export async function unlockVault(
     };
     inMemorySession = session;
     saveActiveSession(session);
+    if (typeof window !== "undefined") {
+      window.localStorage.setItem("vaultzero_has_native_vault", "true");
+    }
     return session;
   }
 

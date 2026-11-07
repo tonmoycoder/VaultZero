@@ -180,3 +180,16 @@ Active branch: `arena/317fbb3c-vaultzero` (never rename). PR #2 + #3 MERGED, #1 
 - [x] No new branch, no PR opened/merged/closed, no release published, no fabricated assets
 - [x] Delivered: Bengali final report + SEPARATE Bengali Antigravity prompt + English master prompt LAST (both ledgers referenced)
 - [x] `5e74752` pushed; CI `42303831746` watched to exit 0 — success/success (ALL BATCHES CLOSED)
+
+
+## PHASE F / V-90 — Native Desktop Vault Creation & Unlock Auto-Detection (2026-11-07)
+
+- [x] Root cause 1 verified: Serde deserialization failure on `upsert_entry` when seeding `demo-account` (invalid UUID, lowercase `login` category enum, missing fields).
+- [x] Root cause 2 verified: `isVaultConfigured()` checked only browser `localStorage`, ignoring native `%APPDATA%\com.vaultzero.app\local-vault.pmv` on disk.
+- [x] Fixed `crates/vault-core/src/models.rs`: Serde aliases on `Category` enum, `#[serde(default)]` on optional `Entry` fields. Formatted with `scripts/check-rust-format.mjs`.
+- [x] Fixed `src-tauri/src/lib.rs`: Added and registered `has_vault_file` Tauri command.
+- [x] Fixed `src/lib/platform.ts`: Added optional `message?: string;` to `VaultError`, populated `message: SAFE_MESSAGES[code]`.
+- [x] Fixed `src/lib/storage.ts`: Added `checkVaultConfiguredAsync()`, updated `isVaultConfigured()`, sanitized UUID/category in `createNewVault()`, wrapped initial demo items in non-fatal `try...catch`.
+- [x] Fixed `src/components/LockScreen.tsx`: Added `useEffect` with `checkVaultConfiguredAsync()` to automatically set `isSetup: false` when native vault exists; added fallback toggle "Already have a vault? Switch to unlock".
+- [x] Gates: `npx tsc --noEmit` 0 · `npm run verify` 0 (38 harness, 23 rustfmt, bundle budget) · `cargo test -p vault-core` 34/34 · `cargo clippy --all-targets -- -D warnings` 0.
+- [x] Release build: `cargo build --bin vaultzero-app --release` completed, standalone `VaultZero.exe` updated.
