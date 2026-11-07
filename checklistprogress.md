@@ -207,3 +207,17 @@ Active branch: `arena/317fbb3c-vaultzero` (never rename). PR #2 + #3 MERGED, #1 
 - [x] Overwritten GitHub release `v2.5.2` with fresh assets via `gh release upload v2.5.2 ... --clobber`.
 - [x] `node scripts/check-live-release.mjs` -> ALL 5 links resolve (`exit 0`).
 - [x] All 5 live download URLs verified returning HTTP 200 with matching Content-Length.
+
+## PHASE F / V-90 — Step 0 + Batch 1 (2026-11-08) — NEW PR campaign
+
+- [x] Step 0: `npx skills` v1.7.6; 18/19 installs OK -> 38 skill dirs in gitignored `.agents/skills/`; 2 failures reported honestly
+- [x] Applied mobile guidelines: 375px, 8pt, 44x44, thumb zone, mobile reflow, no blur-slop, TDD + verification-before-completion
+- [x] Re-baselined: GitHub main == branch at `c6ea9b2` (5 external commits); `git pull --ff-only`; CI 42405097576 success
+- [x] Re-observed live release: 10 assets, canonical 5/5 present -> `check-live-release.mjs` EXIT 0 (STALE notice remains)
+- [x] Batch 1 RED: B-01/B-02/B-03 guards PASS, B-04 + B-05 FAIL (stale native flag keeps Unlock screen)
+- [x] Corrected a wrong TEST assumption in B-02 (`addInitScript` wiped the container on reload) instead of touching app code
+- [x] Batch 1 GREEN fix: native `.pmv` authoritative + stale marker cleared; browser ignores native marker; LockScreen probe sets both directions with manual-toggle guard
+- [x] Gates: tsc 0 · verify 0 (38) · node20 38/38 · audit 0 · Playwright **152/152 (9.0m)** · live check 0
+- [ ] Batch 2 (resume with `continue`): Android 36px status-bar clearance, overflow-x lock, All items / touch-scrollable sort pills
+- [ ] Batches 3-7: P2P real LAN IP + camera fallback, updater resilience, OCR/TOTP/logo, DOM audit, CI/release + final loop
+- [ ] Final: Bengali report + SEPARATE Antigravity prompt (local-only work + merge) + English master prompt LAST

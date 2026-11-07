@@ -617,3 +617,75 @@ remaining action is the human/Antigravity publication in
    - Executed `gh release upload v2.5.2 ... --clobber` with authenticated `GH_TOKEN`.
    - Verified via `scripts/check-live-release.mjs`: ALL 5 links resolve (`exit 0`).
    - Verified all 5 live download links returned HTTP 200 with exact matching byte counts.
+
+## V-90 — NEW PR CAMPAIGN, Step 0 + Batch 1 (2026-11-08)
+
+**New user instruction.** Put all work in a NEW pull request; work in 7
+micro-batches, one fully verified per turn; anything impossible here goes to a
+SEPARATE Antigravity prompt that must be told to do it locally AND merge.
+User asked for the best coding/reasoning effort. Branch stays
+`arena/317fbb3c-vaultzero` (active); no other branch was created.
+
+**Step 0 — skills (honest).** `npx -y skills` v1.7.6 works. 19 install commands
+attempted, 18 succeeded -> 38 skill directories in gitignored `.agents/skills/`
+(`frontend-design`, `webapp-testing`, `skill-creator`, `test-driven-development`,
+`systematic-debugging`, `verification-before-completion`, `using-superpowers`,
+`brainstorming`, `mobile-app-ui-design`, `mobile-android-design`,
+`antislop-layoutmobile`, `design-mobile-apps`, `mobile-native`,
+`emil-design-eng`, `momentic-mobile-test`, `ui-ux-pro-max`, etc.).
+`git status` stayed clean. TWO failed: `AIBiz-Automatyzacje/workspace-template-mobile`
+(a sibling `freshness-audit/SKILL.md` has a YAML parse error, installer skipped
+the package) and `leonxlnx/taste-skill --skill imagegen-frontend-mobile` (the
+repo exists but that skill is not published). Applied guidelines: 375px
+baseline, 8pt spacing, 44x44 tap targets, thumb zone, no overused blur,
+"mobile is a different layout, not a smaller desktop", TDD + verification
+before completion. Nothing fabricated.
+
+**Re-baseline — the workspace advanced AGAIN.** `gh pr create` failed with
+"No commits between main and arena/317fbb3c-vaultzero": GitHub `main` and this
+branch were IDENTICAL at `c6ea9b2`. Five external commits had landed since
+`ff5ba5a`: `fcf48b1` (custom-protocol default), `ebe805e` (resilient Entry
+deserialization + async native vault detection + unlock toggle),
+`9890618` (workspace deep-clean + fresh production assets), `d139472` (release
+sync doc), `c6ea9b2` (ignore root release artifacts). Fast-forwarded local
+HEAD with `git pull --ff-only`. CI `42405097576` (c6ea9b2) = success.
+LIVE RELEASE CHANGED: `v2.5.2` now has 10 assets including canonical
+`VaultZero-Windows-x64-Portable.exe` and `VaultZero-Windows-x64.msi`, so
+`check-live-release.mjs` is now EXIT 0 (5/5 links resolve). It STILL prints
+`STALE` because publishedAt is 2026-11-02 while source is 2026-11-08.
+PR state unchanged: #3 MERGED, #2 MERGED, #1 OPEN (never touched).
+
+**Batch 1 — "Failed to create vault" + first-run flow.** The `ebe805e` external
+fix already repaired the reported root cause (native `upsert_entry` sent an
+Entry missing Rust-required fields; `crates/vault-core/src/models.rs` gained
+`#[serde(default)]`/aliases; `vault_file_path` already does
+`create_dir_all(app_data_dir())`). It was NOT redone. RED tests were written
+against the exact screenshots instead, exposing ONE remaining real defect:
+`checkVaultConfiguredAsync()` only ever called `setIsSetup(false)`, and when
+`has_vault_file` returned false it still returned the stale
+`vaultzero_has_native_vault` localStorage marker -> a fresh install stayed on
+"Welcome back, Vault Owner." after the .pmv file disappeared. In browser mode
+the same marker also made a browser launch look configured.
+
+- NEW `tests/vault-first-run.spec.ts` (B-01..B-05): B-01 reproduces PC
+  `aA2525@` + EMPTY optional duress + NO keyfile -> vault created, no
+  "Failed to create vault"; B-02 real vault -> reload -> "Welcome back";
+  B-03 stubbed native `has_vault_file=true`, no marker -> "Welcome back";
+  B-04 stale marker + missing .pmv -> must fall back to SETUP and clear the
+  marker; B-05 browser launch must ignore a leftover native-only marker.
+- First run: 1 wrong TEST assumption (B-02 used `addInitScript`, which wiped
+  the container again on reload) -> fixed the TEST, not the app. Clean RED:
+  3 guards PASS, B-04/B-05 FAIL.
+- Minimal fix: `src/lib/storage.ts` — `NATIVE_VAULT_FLAG` constant,
+  `isVaultConfigured()` counts the native marker ONLY in native runtime, and
+  `checkVaultConfiguredAsync()` treats the `.pmv` file as authoritative
+  (sets the marker when present, REMOVES it when absent; browser mode checks
+  only `VAULT_STORAGE_KEY`). `src/components/LockScreen.tsx` — the async probe
+  now sets `isSetup(!configured)` in BOTH directions, guarded by a
+  `manualModeRef` so an explicit user toggle always wins.
+- GREEN: 5/5 first-run tests.
+
+**Gates (batch 1).** `tsc` 0; `npm run verify` 0 (38 harness, rustfmt, bundle
+budget); node20 38/38; `npm audit --audit-level=high` 0;
+`npx playwright test` **152 passed (9.0m)**; `check-live-release.mjs` EXIT 0.
+No app assets, no release, no merge performed here.
