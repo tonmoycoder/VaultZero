@@ -699,3 +699,56 @@ CI `42413851086` (`643f36f7…`) watched to exit 0, both jobs `success`;
 `Test & Build Verification pass (2m38s)`. No merge/close performed — an
 explicit user decision is still required. Batch 1 CLOSED; resume with
 `continue` for Batch 2.
+
+## V-91 — Batch 2 / Android status bar, horizontal lock, All items + sort pills (2026-11-08)
+
+**Re-baseline.** HEAD `52866f1`, tree clean, `origin/arena/317fbb3c-vaultzero`
+and local in sync; PR #4 OPEN with pass/pass checks; no external advance this
+turn. `main` still `c6ea9b2`.
+
+**Measurements BEFORE editing (real 360x800 + 1440x900 Chromium, isMobile).**
+- Header: the "EN" control sat at `top=10px`; `.mobile-safe-top` computed
+  `padding-top: 0px` because headless Chromium (and many Android WebViews)
+  report `env(safe-area-inset-top) = 0px` while still drawing edge-to-edge.
+- `html/body/#root`: `overflow-x: hidden` already, but
+  `overscroll-behavior-x: auto` (sideways rubber-band / canvas drift).
+  `document.scrollWidth === clientWidth === 360` already held.
+- `All items` h2: `white-space: normal; flex-shrink: 1` (one line only by luck
+  at this width; a long folder name would wrap it).
+- Sort row: `flex-wrap: nowrap; overflow-x: auto; justify-content: flex-start`
+  (V-87) but `touch-action: auto` and a visible `thin-scrollbar`.
+- Lock card: `left=17, right=343`, `top=3`, no drift (guard only).
+
+**Test-first RED -> GREEN.** NEW `tests/vault-mobile-layout.spec.ts` B-06..B-10.
+RED = 3 FAIL (B-06 padding 0, B-07 `"auto"`, B-09 `"normal"`), 2 PASS
+(B-08 zero drift, B-10 centred card). Fixes, all minimal:
+- `src/index.css` base layer: `html/body/#root` gained `width:100%`,
+  `margin/padding:0`, `overscroll-behavior-x:none` (overflow-x hidden kept).
+- `src/index.css` mobile `@media (max-width:767px)`:
+  `.mobile-safe-top { padding-top: max(var(--safe-top), 36px) !important; }`.
+  Covers BOTH the vault column and the lock screen; `max()` lets a larger real
+  inset win; `!important` beats Tailwind `pt-3`. Measured after: EN `top=46px`.
+- `src/components/VaultHome.tsx`: h2 -> `min-w-0 max-w-[70vw] shrink-0
+  truncate whitespace-nowrap`; sort row `thin-scrollbar` -> `no-scrollbar` +
+  `touch-pan-x overscroll-x-contain` (the `.no-scrollbar` utility already
+  existed at `src/index.css:743`).
+- `tests/vault-mobile-shell.spec.ts` M-03 was STRENGTHENED, not weakened: its
+  old `dialogPadding === "24px"` expectation conflicts with the new floor, so
+  it now asserts >=36px at inset 0 and 24, AND exactly 64px at inset 64
+  (proving `max()` is live). The `.vault-shell` 24px assertion is unchanged.
+
+**Review -> improve -> review.** Re-captured 360x800: 36px clear band above the
+header, one-line "All items", single swipeable pill row, no horizontal scrollbar
+at document level. Targeted `vault-mobile-layout` + `vault-mobile-shell`
+= 26/26 pass (all M-01..M-19 guards survived).
+
+**Gates.** `tsc` 0; `npm run verify` 0 (38 harness, rustfmt, bundle budget);
+node20 38/38; `npm audit --audit-level=high` 0;
+`npx playwright test` **157 passed (10.1m)**; `check-live-release.mjs` EXIT 0.
+No app assets/release changed; no merge/close performed.
+
+**Honest note.** The trailing "Zero-knowledge, end-to-end encryption..." note
+is partly behind the floating nav at scrollTop=0 (it was before this batch
+too); `.mobile-safe-bottom` reserves 96px so scrolling reveals it (M-04).
+Batch 6 will assert its bounding box explicitly. Real-device status-bar
+insets still need Antigravity verification.

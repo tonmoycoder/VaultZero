@@ -1067,7 +1067,10 @@ export default function VaultHome({
               {checkedIds.size === items.length && <Check size={10} weight="bold" />}
             </button>
           )}
-          <h2 className="font-display text-[13px] font-semibold tracking-[-0.01em] text-main">
+          {/* V-91: a long folder name used to wrap "All items" onto two lines
+              and push the badge/sort row out of alignment. One line, no
+              shrink, ellipsised at 70vw so it can never inflate the page. */}
+          <h2 className="min-w-0 max-w-[70vw] shrink-0 truncate whitespace-nowrap font-display text-[13px] font-semibold tracking-[-0.01em] text-main">
             {heading}
           </h2>
           <span
@@ -1087,7 +1090,7 @@ export default function VaultHome({
               overflows, which is the reported "stuck" horizontal scroll.
               One nowrap, start-aligned, horizontally scrollable row keeps all
               four controls on the same baseline at every width. */}
-          <div className="thin-scrollbar flex max-w-full flex-nowrap items-center justify-start gap-1 overflow-x-auto rounded-2xl border border-[var(--border-soft)] bg-[var(--glass-soft)] p-0.5 sm:justify-center sm:rounded-full">
+          <div className="no-scrollbar flex max-w-full touch-pan-x flex-nowrap items-center justify-start gap-1 overflow-x-auto overscroll-x-contain rounded-2xl border border-[var(--border-soft)] bg-[var(--glass-soft)] p-0.5 sm:justify-center sm:rounded-full">
             {(
               [
                 { id: "recent", label: t(lang, "sortRecent") },

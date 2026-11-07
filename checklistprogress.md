@@ -224,3 +224,18 @@ Active branch: `arena/317fbb3c-vaultzero` (never rename). PR #2 + #3 MERGED, #1 
 - [x] NEW **PR #4** OPEN (`arena/317fbb3c-vaultzero -> main`) — created after batch 1 because main/branch were identical before
 - [x] CI `42413851086` watched to exit 0; `gh pr checks 4` = pass/pass (8m15s + 2m38s); no merge/close
 - [x] Batch 1 CLOSED — resume with `continue` for Batch 2
+
+## PHASE F / V-91 — Batch 2: status bar, overflow lock, All items + sort pills (2026-11-08)
+
+- [x] Re-baselined: HEAD `52866f1`, clean, PR #4 pass/pass, no external advance
+- [x] Measured 360x800: EN top=10px, overscroll `auto`, h2 `white-space:normal`, sort row `touch-action:auto`
+- [x] RED: B-06 padding 0 FAIL · B-07 `auto` FAIL · B-09 `normal` FAIL · B-08/B-10 guards PASS
+- [x] GREEN fix 1: `html/body/#root` width/margin/padding + `overscroll-behavior-x:none`
+- [x] GREEN fix 2: mobile `.mobile-safe-top` = `max(var(--safe-top), 36px) !important` (vault + lock); EN top 10 -> 46
+- [x] GREEN fix 3: `All items` h2 nowrap/shrink-0/truncate at 70vw; sort row `no-scrollbar touch-pan-x overscroll-x-contain`
+- [x] M-03 strengthened (floor >=36 at inset 0/24, exact 64 at inset 64) — no existing guard weakened
+- [x] Re-captured 360x800 screenshot; targeted 26/26 (B-06..B-10 + M-01..M-19)
+- [x] Gates: tsc 0 · verify 0 (38) · node20 38/38 · audit 0 · Playwright **157/157 (10.1m)** · live check 0
+- [!] Trailing footer note partly behind nav at scrollTop=0 (pre-existing, scroll-reachable, M-04); batch 6 will assert its box
+- [ ] Batch 3 (resume with `continue`): P2P real LAN IP, strict RFC-1918 IPv4, camera/QR-photo fallback, footer clipping
+- [ ] Batches 4-7 + final Antigravity prompt (local-only work + merge) + English master prompt LAST

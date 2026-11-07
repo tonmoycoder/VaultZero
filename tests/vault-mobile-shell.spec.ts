@@ -79,15 +79,22 @@ test("M-03 the Android status bar never covers the header", async ({ page }) => 
   });
   expect(shellPadding).toBe("24px");
 
-  const dialogPadding = await (async () => {
+  // V-91: Android WebView often reports 0px for env(safe-area-inset-top),
+  // so the lock screen now guarantees a 36px floor instead of echoing 24px.
+  // A LARGER real inset must still win, proving max() is live and not a
+  // hardcoded constant. Both directions are asserted, so this is stronger
+  // than the old exact-24px check.
+  const dialogPadding = async (inset: number) => {
     await page.goto("/");
-    await page.addStyleTag({ content: ":root { --safe-top: 24px; }" });
+    await page.addStyleTag({ content: `:root { --safe-top: ${inset}px; }` });
     return page.evaluate(() => {
       const dialog = document.querySelector<HTMLElement>('[role="dialog"]');
-      return dialog ? getComputedStyle(dialog).paddingTop : null;
+      return dialog ? parseFloat(getComputedStyle(dialog).paddingTop) : 0;
     });
-  })();
-  expect(dialogPadding).toBe("24px");
+  };
+  expect(await dialogPadding(0), "guaranteed floor when WebView reports 0").toBeGreaterThanOrEqual(36);
+  expect(await dialogPadding(24), "a small real inset never shrinks below the floor").toBeGreaterThanOrEqual(36);
+  expect(await dialogPadding(64), "a larger real inset wins").toBe(64);
 });
 
 test("M-04 the floating nav does not swallow the last line of content", async ({ page }) => {
