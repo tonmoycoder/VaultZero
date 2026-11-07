@@ -37,8 +37,11 @@ yarn-error.log*
 playwright-report/
 test-results/
 
-# Archives and temporary handoff
+# Archives, release assets and temporary handoff
 *.zip
+*.msi
+*.apk
+SHA256SUMS.txt
 .handoff_docs/
 handoff/
 .superpowers/
