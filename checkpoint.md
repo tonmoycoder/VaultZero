@@ -752,3 +752,9 @@ is partly behind the floating nav at scrollTop=0 (it was before this batch
 too); `.mobile-safe-bottom` reserves 96px so scrolling reveals it (M-04).
 Batch 6 will assert its bounding box explicitly. Real-device status-bar
 insets still need Antigravity verification.
+
+### V-91 Batch 2 close-out (CI / PR #4)
+`b99fe78` pushed to `origin/arena/317fbb3c-vaultzero`. Both events watched to
+exit 0: push run `42417004735` and `pull_request` run `42417008987`, each
+`success`. `gh pr checks 4` -> Frontend E2E pass (5m53s) + Test & Build pass
+(2m10s). No merge/close. Batch 2 CLOSED; resume with `continue` for Batch 3.

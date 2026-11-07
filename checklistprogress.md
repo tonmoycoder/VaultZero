@@ -239,3 +239,5 @@ Active branch: `arena/317fbb3c-vaultzero` (never rename). PR #2 + #3 MERGED, #1 
 - [!] Trailing footer note partly behind nav at scrollTop=0 (pre-existing, scroll-reachable, M-04); batch 6 will assert its box
 - [ ] Batch 3 (resume with `continue`): P2P real LAN IP, strict RFC-1918 IPv4, camera/QR-photo fallback, footer clipping
 - [ ] Batches 4-7 + final Antigravity prompt (local-only work + merge) + English master prompt LAST
+- [x] `b99fe78` pushed; push `42417004735` + PR `42417008987` both watched to exit 0; `gh pr checks 4` pass/pass
+- [x] Batch 2 CLOSED — resume with `continue` for Batch 3
