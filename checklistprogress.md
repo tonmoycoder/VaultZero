@@ -193,3 +193,17 @@ Active branch: `arena/317fbb3c-vaultzero` (never rename). PR #2 + #3 MERGED, #1 
 - [x] Fixed `src/components/LockScreen.tsx`: Added `useEffect` with `checkVaultConfiguredAsync()` to automatically set `isSetup: false` when native vault exists; added fallback toggle "Already have a vault? Switch to unlock".
 - [x] Gates: `npx tsc --noEmit` 0 · `npm run verify` 0 (38 harness, 23 rustfmt, bundle budget) · `cargo test -p vault-core` 34/34 · `cargo clippy --all-targets -- -D warnings` 0.
 - [x] Release build: `cargo build --bin vaultzero-app --release` completed, standalone `VaultZero.exe` updated.
+
+
+## PHASE G / V-91 — Workspace Deep-Clean & Fresh Release Sync (2026-11-08)
+
+- [x] Workspace bloat cleaned: removed unneeded zip bundles, cleared `target\debug` build artifacts (>11.2 GB, 18,185 files).
+- [x] File count reduced from 67,509 to 61,380.
+- [x] `.gitignore` updated with archive/handoff ignore rules; `workspace-hygiene.test.mjs` PASS.
+- [x] Local parity: `npx tsc --noEmit` PASS (0 errors), branch `arena/317fbb3c-vaultzero` merged into `main` and pushed to `origin/main` (`9890618`).
+- [x] Fresh production builds: NSIS installer `VaultZero_2.5.2_x64-setup.exe` (12.13 MiB) and MSI installer `VaultZero_2.5.2_x64_en-US.msi` (17.87 MiB) generated via `npx tauri build`.
+- [x] Desktop executable refreshed at `$HOME\Desktop\VaultZero.exe` (18,411,008 bytes).
+- [x] Canonical 5 assets packaged: `VaultZero-Windows-x64-Setup.exe`, `VaultZero-Windows-x64-Portable.exe`, `VaultZero-Windows-x64.msi`, `VaultZero-Android.apk`, `SHA256SUMS.txt`.
+- [x] Overwritten GitHub release `v2.5.2` with fresh assets via `gh release upload v2.5.2 ... --clobber`.
+- [x] `node scripts/check-live-release.mjs` -> ALL 5 links resolve (`exit 0`).
+- [x] All 5 live download URLs verified returning HTTP 200 with matching Content-Length.

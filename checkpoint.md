@@ -582,3 +582,38 @@ remaining action is the human/Antigravity publication in
 - `cargo test -p vault-core` -> PASS (34/34 passed, 0 failed).
 - `cargo clippy --all-targets -- -D warnings` -> PASS (0 warnings).
 - `cargo build --bin vaultzero-app --release` -> Produced standalone production binary embedding all frontend static assets.
+
+
+## V-91 — Workspace Deep-Clean, Local-to-GitHub Parity & Fresh Release Sync (2026-11-08)
+
+**User Incident:**
+- The workspace had accumulated over 67,000 files including old zip bundles, Playwright/harness cache, and debug build artifacts (>11 GB).
+- Local fixes and new features had not been synchronized to the published GitHub release `v2.5.2`, resulting in users downloading stale builds.
+
+**Audit & Actions Executed:**
+1. **Workspace Deep-Clean:**
+   - Pre-clean workspace file count: 67,509 files.
+   - Cleaned `VaultZero-Android-Mobile-Bundle.zip`, `VaultZero-Windows-Installer-Bundle.zip`, `VaultZero-Windows-x64-Portable.zip`.
+   - Cleaned `target\debug\build` and `target\debug\deps` (freeing >11.2 GB and 18,185 debug files).
+   - Post-clean workspace file count: 61,380 files.
+   - Preserved `vaultzero-figmaddd-design-system.zip` as instructed.
+   - Updated `.gitignore` to permanently exclude `*.zip`, `.handoff_docs/`, `handoff/`, `.superpowers/`. Verified via `workspace-hygiene.test.mjs` (PASS).
+2. **Local Code Parity & TypeScript Check:**
+   - `npx tsc --noEmit` -> PASS (0 errors).
+   - Local branch `arena/317fbb3c-vaultzero` fast-forward merged into `main` and pushed to `origin/main` at commit `9890618`.
+3. **Fresh Production Builds:**
+   - Rebuilt frontend with `npm run build` (vite v7.3.7, 54s).
+   - Rebuilt Tauri standalone executable `target\release\vaultzero-app.exe` (18,411,008 bytes).
+   - Built fresh NSIS setup installer `target\release\bundle\nsis\VaultZero_2.5.2_x64-setup.exe` (12,722,588 bytes).
+   - Built fresh MSI enterprise installer `target\release\bundle\msi\VaultZero_2.5.2_x64_en-US.msi` (18,739,200 bytes).
+   - Refreshed user desktop shortcut at `$HOME\Desktop\VaultZero.exe` (18,411,008 bytes).
+4. **Canonical 5-Asset Release Bundle & GitHub Release Overwrite:**
+   - Packaged all 5 canonical assets in workspace root:
+     - `VaultZero-Windows-x64-Setup.exe` (12,722,588 bytes)
+     - `VaultZero-Windows-x64-Portable.exe` (18,411,008 bytes)
+     - `VaultZero-Windows-x64.msi` (18,739,200 bytes)
+     - `VaultZero-Android.apk` (12,839,172 bytes)
+     - `SHA256SUMS.txt` (383 bytes)
+   - Executed `gh release upload v2.5.2 ... --clobber` with authenticated `GH_TOKEN`.
+   - Verified via `scripts/check-live-release.mjs`: ALL 5 links resolve (`exit 0`).
+   - Verified all 5 live download links returned HTTP 200 with exact matching byte counts.
