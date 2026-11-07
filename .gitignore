@@ -37,6 +37,12 @@ yarn-error.log*
 playwright-report/
 test-results/
 
+# Archives and temporary handoff
+*.zip
+.handoff_docs/
+handoff/
+.superpowers/
+
 # Stealth agent exclusions
 .agent/
 .agents/
