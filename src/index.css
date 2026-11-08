@@ -951,6 +951,16 @@ button:active:not(:disabled) {
 .mobile-safe-bottom {
   padding-bottom: calc(86px + env(safe-area-inset-bottom));
 }
+
+/* V-95: the shared Modal action bar used to sit flush with the viewport
+   bottom (measured y=799 on a 360x800 phone), so an edge-to-edge Android
+   gesture bar covered "Receive & Merge". The lock screen and the vault shell
+   already reserved --safe-bottom; this closes the last gap. At an inset of
+   0px the padding stays 14px, so no layout changes on desktop or in tests.
+   `!important` beats the Tailwind `py-3.5` utility of equal specificity. */
+.modal-footer {
+  padding-bottom: calc(14px + var(--safe-bottom)) !important;
+}
 .glowing-orb {
   position: absolute;
   border-radius: 999px;

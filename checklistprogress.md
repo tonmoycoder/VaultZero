@@ -295,3 +295,20 @@ Active branch: `arena/317fbb3c-vaultzero` (never rename). PR #2 + #3 MERGED, #1 
 - [x] Batch 5 CLOSED — resume with `continue` for Batch 6
 - [ ] Batch 6 (resume with `continue`): full verification + explicit 360x800 / 1440x900 bounding-box DOM audit
 - [ ] Batch 7 + final regression loop + Bengali Engineering Report + Antigravity prompt (local work AND merge) + English master prompt LAST
+
+## PHASE F / V-95 — Batch 6: explicit 360x800 / 1440x900 bounding-box DOM audit (2026-11-08)
+
+- [x] Re-baselined: HEAD `da78cf8`, PR #4 `pr_open` pass/pass, worktree clean, no remote advance
+- [x] Measured real boxes at BOTH viewports: Lock/Vault/Sync `scrollWidth===clientWidth`; header y=36 (phone) / y=33 (desktop)
+- [x] Measured all three Sync footer actions after Connect: all fully in bounds at 360x800 and 1440x900
+- [x] Verified `192.1` rejected and a fresh vault created at BOTH viewports (B-27/B-28 GREEN at RED time)
+- [x] FOUND DEFECT: shared Modal footer `py-3.5` (14px) ignored `--safe-bottom`; real 24/48px inset left `Receive & Merge` at bottom=785 of 800
+- [x] RED: 3 harness FAIL + B-26 browser FAIL (`Expected > 14, Received 14`); B-24/B-25/B-27/B-28 GREEN
+- [x] GREEN fix: `ui.tsx` footer += `modal-footer` class; `index.css` `.modal-footer { padding-bottom: calc(14px + var(--safe-bottom)) !important }`
+- [x] No artificial floor deliberately: a floor would steal body height and break M-16 at 390x844
+- [x] Review after fix: inset 0 -> 14px / bottom 785 (unchanged); inset 24 -> 38px / 761; inset 48 -> 62px / 737; body 428/428 and 411/411 unchanged (M-16/M-19 safe)
+- [x] New contracts: 43rd harness `modal-safe-area.test.mjs` (positive control + guards), `vault-bounding-audit.spec.ts` B-24..B-28
+- [x] Gates: tsc 0 · verify 0 (**43 harness**) · node20 43/43 · audit 0 · Playwright **175/175 (10.9m)** · live check 0
+- [!] Whether a real WebView reports the bottom inset correctly needs physical-device/Antigravity verification; no unmeasured floor was faked
+- [ ] Batch 7 (resume with `continue`): CI/CD + 5 canonical release assets + final Batch 1→7 regression loop
+- [ ] Final deliverables: comprehensive Bengali Engineering Report + Antigravity prompt (local work AND merge) + English master prompt LAST

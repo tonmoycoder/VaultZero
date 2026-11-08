@@ -669,7 +669,7 @@ export function Modal({
         </div>
         {footer && (
           <footer
-            className="shrink-0 border-t border-[var(--border-soft)] px-5 py-3.5 sm:px-6"
+            className="modal-footer shrink-0 border-t border-[var(--border-soft)] px-5 py-3.5 sm:px-6"
             style={{ background: "var(--glass-soft)" }}
           >
             {footer}

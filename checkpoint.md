@@ -1006,3 +1006,70 @@ release was published and no merge was performed.
 Verification` and `Frontend End-to-End & Security Tests` (4/4 jobs). Re-observed
 `gh pr checks 4` -> pass (8m46s) + pass (2m38s). PR #4 remains OPEN against
 `main`; no merge/close. Batch 5 CLOSED; resume with `continue` for Batch 6.
+
+### V-95 Batch 6 — explicit 360x800 / 1440x900 bounding-box DOM audit (2026-11-08)
+
+**Inspect exact files + empirical telemetry (real headless Chromium).**
+At BOTH viewports `scrollWidth === clientWidth === viewport` on Lock, Vault
+and Sync; the `VaultZero` header wordmark sits at `y=36` (360x800) and `y=33`
+(1440x900). After `Connect` on the Sync Scan tab, the three footer actions
+measured: 360x800 -> `Close 153..224 / 701..741`,
+`Send Vault 232..339 / 703..739`, `Receive & Merge 198..339 / 749..785`;
+1440x900 -> all three inside `401..1039 / 674..766`. All fully in bounds.
+`192.1` was rejected and a fresh vault was created at both viewports. These
+were GREEN at RED time, so they are GUARDS, not fixes.
+
+**The one real defect.** `src/components/ui.tsx`'s shared `<footer>` used a
+flat `py-3.5` (14px) and NEVER read `--safe-bottom`. Injecting a real 24px or
+48px Android gesture-bar inset left `padding-bottom: 14px` and every button
+unchanged at `bottom=785` of 800 — the bottom of `Receive & Merge` sat under
+system UI, which is exactly the user's "cut-off bottom Close / Send Vault /
+Receive & Merge" complaint. `LockScreen.tsx` and `.mobile-safe-bottom`
+already honoured the variable; only the shared Modal footer did not.
+
+**RED (before any fix).** 3 harness FAIL (`modal-footer` class, CSS rule,
+base-padding `calc`) and B-26 browser FAIL (`Expected > 14, Received 14`).
+B-24 / B-25 / B-27 / B-28 stayed GREEN, proving the fix was narrow.
+
+**Apply minimal clean code fix (2 files).**
+- `src/components/ui.tsx`: added the `modal-footer` class to the shared
+  `<footer>` (one class name, no markup restructuring).
+- `src/index.css`: `.modal-footer { padding-bottom:
+  calc(14px + var(--safe-bottom)) !important; }`. At an inset of 0px the
+  value is still 14px, so desktop and every existing test are unchanged;
+  `!important` beats the equal-specificity Tailwind `py-3.5` utility.
+  NO artificial floor was added: a floor would steal height from the modal
+  body and break M-16's "no clipped content" invariant at 390x844.
+
+### Review -> improve -> review
+Re-measured the real boxes AFTER the fix: inset 0 -> unchanged
+(`padding-bottom 14px`, `Receive & Merge bottom 785`); inset 24 ->
+`38px` / `bottom 761` (clears 776); inset 48 -> `62px` / `bottom 737`
+(clears 752). At 390x844 the inset-24 boxes end at 803 <= 820. The modal body
+`scrollHeight/clientHeight` stayed 428/428 and 411/411 in every case — the
+dialog grows upward instead of squeezing the body, so M-16 / M-19 remain
+valid. No assertion was weakened and no test was deleted.
+
+**New / updated test-enforced contracts.**
+- `tests/harness/modal-safe-area.test.mjs` (43rd harness): positive control
+  proves a flat 14px footer is detected as NOT inset-aware; asserts the class,
+  the `calc(... var(--safe-bottom))` rule, and guards for `--safe-bottom`,
+  `LockScreen`, `.mobile-safe-bottom` and batch 2's 36px top floor.
+- `tests/vault-bounding-audit.spec.ts` B-24..B-28: B-24 header `y>=32` +
+  `scrollWidth<=clientWidth` on Lock/Vault/Sync at both viewports (with a
+  positive control that a clipped box IS rejected by the detector); B-25 all
+  three footer boxes in bounds; B-26 a real 24px inset never covers them;
+  B-27 `192.1` rejected; B-28 a fresh vault really persists.
+
+**Gates.** `npx tsc --noEmit` 0; `npm run verify` 0 (**43 harness files**,
+23 rustfmt, chunk budget); node20 harness 43/43;
+`npm audit --audit-level=high` 0; `npx playwright test`
+**175 passed (10.9m)** (previous 170 + B-24..B-28);
+`check-live-release.mjs` EXIT 0.
+
+**Honest limits.** Whether a specific Android WebView reports
+`env(safe-area-inset-bottom)` correctly (as the top inset was found to be 0px
+in batch 2) can only be confirmed on a physical device; that verification is
+deferred to Antigravity rather than faked with an unmeasured floor. Real
+120Hz jitter, launcher masking and installer artwork remain unverified here.
+No release was published and no merge was performed.
