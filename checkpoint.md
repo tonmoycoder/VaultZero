@@ -835,3 +835,10 @@ Windows-CI-only (no local cargo) and will be confirmed by the watched run.
 WebView `onPermissionRequest` bridging, real-device camera/LAN P2P handshake,
 carrier CG-NAT 10.x mis-detection and 120Hz behaviour need Antigravity on
 real hardware. No release assets/signing secrets touched here.
+
+### V-92 Batch 3 close-out (CI / PR #4)
+`09d5747` pushed. Both events watched to exit 0: push `42435123882` and
+`pull_request` `42435126914`, each `success` for BOTH `Test & Build
+Verification` (Windows Rust compile/clippy) and `Frontend End-to-End &
+Security Tests`. `gh pr checks 4` -> pass (8m57s) + pass (2m2s). No
+merge/close. Batch 3 CLOSED; resume with `continue` for Batch 4.

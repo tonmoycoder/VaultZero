@@ -257,3 +257,5 @@ Active branch: `arena/317fbb3c-vaultzero` (never rename). PR #2 + #3 MERGED, #1 
 - [ ] Batch 4 (resume with `continue`): Check for Updates CSP, resilient GitHub fetch, strict SemVer
 - [ ] Batches 5-7 + final Antigravity prompt (local-only work + merge) + English master prompt LAST
 - [!] `.vztransfer` snapshot-file transfer NOT implemented (reported, not faked); real-device camera/LAN/onPermissionRequest needs Antigravity
+- [x] `09d5747` pushed; push `42435123882` + PR `42435126914` both watched to exit 0 (Windows Rust compile/clippy green); `gh pr checks 4` pass/pass
+- [x] Batch 3 CLOSED — resume with `continue` for Batch 4
