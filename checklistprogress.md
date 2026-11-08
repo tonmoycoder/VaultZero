@@ -276,3 +276,20 @@ Active branch: `arena/317fbb3c-vaultzero` (never rename). PR #2 + #3 MERGED, #1 
 - [ ] Batches 6-7 + final Antigravity prompt (local-only work + merge) + English master prompt LAST
 - [x] `0e616c7` pushed; push `42458168857` + PR `42458173011` both watched to exit 0; `gh pr checks 4` pass/pass
 - [x] Batch 4 CLOSED — resume with `continue` for Batch 5
+
+## PHASE F / V-94 — Batch 5: offline OCR, strict RFC 6238, icon parity (2026-11-08)
+
+- [x] Re-baselined: HEAD `a3fa6cb`, PR #4 `pr_open` pass/pass, worktree clean, no remote advance
+- [x] Inspected exact files: OCR already `worker.recognize()` -> `ret.data.text` (no metadata result), TOTP already 16+ Base32 + RFC 6238 SHA-1/256/512
+- [x] Measured real parity: all 15 Android mipmaps decode to the same emblem (mean-RGB delta <= 9 vs 512px master); Windows `icon.ico`/NSIS referenced
+- [x] RED: `?secret=abc` accepted -> bogus 2FA key (5 harness FAIL + B-23 browser FAIL); `#FFFFFF` adaptive background (2 FAIL); "vision model" caption (1 FAIL)
+- [x] B-21/B-22 GREEN at RED time: real `eng` + dual `eng+ben` OCR text, no filename/size/dimensions, monotonic progress 10 -> 100
+- [x] GREEN fix 1: `parseOtpAuthUri()` validates the inner Base32 secret and returns `cleanKey`; `isValidTotpSecret` + `resolveTotpConfig` now fail closed
+- [x] GREEN fix 2: `ic_launcher_background.xml` `#FFFFFF` -> `#13182D` (master corner 19,24,45)
+- [x] GREEN fix 3: OCR caption -> "on-device offline OCR (Tesseract)"
+- [x] New contracts: 41st harness `totp-uri-strict`, 42nd harness `icon-parity` (pure-Node zlib PNG decoder + fingerprint), +9 `offline-ocr` guards, B-21/B-22/B-23 browser tests
+- [x] Review after fix: guard was reading XML comments -> TEST fixed to parse the actual `<color>` value, assertion NOT weakened; Chromium path corrected to `/tmp/chromium/chrome`
+- [x] Gates: tsc 0 · verify 0 (**42 harness**) · node20 42/42 · audit 0 · Playwright **170/170 (10.2m)** · live check 0
+- [!] Real-device launcher masking, installer artwork and Bengali handwriting accuracy need Antigravity verification; no release published, no merge
+- [ ] Batch 6 (resume with `continue`): full verification + explicit 360x800 / 1440x900 bounding-box DOM audit
+- [ ] Batch 7 + final regression loop + Bengali Engineering Report + Antigravity prompt (local work AND merge) + English master prompt LAST

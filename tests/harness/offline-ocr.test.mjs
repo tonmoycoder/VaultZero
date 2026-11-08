@@ -59,5 +59,17 @@ t("bundles English traineddata", tessdata.includes("eng.traineddata"), tessdata.
 t("bundles Bengali traineddata", tessdata.includes("ben.traineddata"));
 t("OCR language list includes dual eng+ben", /"eng\+ben"/.test(ocr));
 
+console.log("=== V-94: real recognised text, never image metadata ===");
+const capture = read("src/components/captureModals.tsx");
+t("returns the worker's recognised text", /ret\.data\?\.text/.test(ocr) && /rawText\s*=\s*\(ret\.data/.test(ocr));
+t("throws when the worker finds no characters", /No readable characters detected/.test(ocr));
+t("never assigns file.name to rawText", !/rawText\s*=\s*[^;]*file\.name/.test(ocr));
+t("never assigns file.size or dimensions to rawText", !/rawText\s*=\s*[^;]*(file\.size|width|height)/.test(ocr));
+t("progress is streamed from real engine stages", /onProgress\(10\)/.test(ocr) && /onProgress\(25\)/.test(ocr) && /onProgress\(100\)/.test(ocr));
+t("worker logger drives intermediate progress", /recognizing text/.test(ocr) && /onProgress\(Math\.min\(99/.test(ocr));
+t("OCR modal seeds the editable pad with rawText", /const \{ rawText, creds \} = await runLocalOcr/.test(capture) && /OcrCopyPad[\s\S]{0,200}rawText=/.test(capture));
+t("dual eng+ben worker is wired to the language picker", /setOcrLang\(item\.id\)/.test(capture) && /runLocalOcr\(file,\s*\(p\) => setProgress\(p\),\s*ocrLang\)/.test(capture));
+t("OCR caption describes the real engine, not a fake vision model", !/on-device vision model/i.test(capture));
+
 console.log(`\nRESULT: ${failures === 0 ? "all passed" : failures + " failed"}`);
 process.exit(failures === 0 ? 0 : 1);

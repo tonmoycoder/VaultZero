@@ -920,3 +920,82 @@ already had `INTERNET`, so it was not touched.
 Verification` and `Frontend End-to-End & Security Tests`. `gh pr checks 4`
 -> pass (7m37s) + pass (2m35s). No merge/close. Batch 4 CLOSED; resume with
 `continue` for Batch 5.
+
+### V-94 Batch 5 — offline OCR, strict RFC 6238 TOTP, official icon parity (2026-11-08)
+
+**Inspect exact files.** `src/lib/ocr.ts` ALREADY ran a real
+`worker.recognize(processedBlob)` and returned `ret.data.text` (V-74),
+streamed 10 -> 25 -> worker logger -> 100, and
+`src/components/captureModals.tsx` seeded `OcrCopyPad` with `rawText` — the
+image filename, byte size and dimensions never became the extracted result.
+`src/lib/totp.ts` ALREADY enforced 16+ Base32 for pasted setup keys and
+computed the RFC 6238 Appendix B 8-digit vectors correctly
+(SHA-1 `94287082`, SHA-256 `46119246`, SHA-512 `90693936` @ T=59). All 15
+Android mipmap PNGs decode to the SAME dark neon-blue emblem: mean RGB of
+the central region differs from the 512px master by at most 9 per channel.
+So there was nothing to re-implement — the real defects were narrower.
+
+**RED, measured before any fix (3 files, 8 assertions + 1 browser test).**
+- `parseOtpAuthUri()` accepted ANY non-empty `secret=` parameter. Therefore
+  `isValidTotpSecret("otpauth://totp/Acme:bob?secret=abc")` returned TRUE and
+  `resolveTotpConfig()` produced a one-byte HMAC key: a random short input
+  was treated as a valid 2FA account. 5 harness FAIL and B-23 browser FAIL.
+- `src-tauri/icons/android/values/ic_launcher_background.xml` was the generic
+  Tauri white `#FFFFFF` while the official emblem's corner pixel is
+  `(19,24,45)` = `#13182D`; adaptive launchers therefore showed a white tile
+  behind a dark logo. 2 harness FAIL.
+- `captureModals.tsx` caption said "on-device vision model" although the
+  engine is offline Tesseract. 1 harness FAIL.
+- B-21 and B-22 were GREEN at RED time (correctly): real `eng` and dual
+  `eng+ben` offline OCR returned `demo@vaultzero.local` / `S3cret-42`, with
+  NO filename, size or dimensions in the result and a monotonic real
+  progress stream. This is the empirical proof that the old screenshot's
+  "OCR returns metadata" came from the old published APK, not this source.
+
+**Apply minimal clean code fix (3 source lines of behaviour).**
+- `src/lib/totp.ts`: `parseOtpAuthUri()` now runs the inner `secret` through
+  `validateGoogleAuthSecret()` and throws when invalid; it returns the
+  normalised `cleanKey`. This one change fixes BOTH `isValidTotpSecret()`
+  (which catches parse errors) and `resolveTotpConfig()` (fails closed).
+  Both callers (`LiveTotp.tsx`, `toolModals.tsx`) already had try/catch, so
+  no UI change was needed.
+- `ic_launcher_background.xml`: `#FFFFFF` -> `#13182D`.
+- `captureModals.tsx`: caption -> "on-device offline OCR (Tesseract)".
+
+**New / updated test-enforced contracts.**
+- `tests/harness/totp-uri-strict.test.mjs` (41st harness): positive control
+  proves a bare URL parser DOES return `secret=abc`; rejects 6 bad URIs;
+  accepts valid URIs; asserts fail-closed resolution; pins all three RFC
+  vectors.
+- `tests/harness/icon-parity.test.mjs` (42nd harness): pure-Node `zlib` PNG
+  decoder (no image dependency), exact per-density dimensions
+  (48/72/96/144/192 launchers, 108/162/216/324/432 foregrounds), central RGB
+  fingerprint delta <= 20 vs master, adaptive background parsed from the
+  actual `<color>` element, Windows `icon.ico` + NSIS references.
+- `tests/harness/offline-ocr.test.mjs`: +9 guards (recognised text, no
+  metadata assignment, real progress stages, `OcrCopyPad` seeded with
+  `rawText`, `eng+ben` wiring, honest caption).
+- `tests/vault-ocr-totp-icons.spec.ts`: B-21 real text/progress/no metadata,
+  B-22 `eng+ben` worker really recognises, B-23 strict 2FA in a real
+  browser (including the SHA-256 RFC vector).
+
+### Review -> improve -> review
+The first GREEN attempt still had one FAIL: the new background guard read the
+raw XML INCLUDING a comment that mentioned the old white hex literal. The
+TEST was wrong, not the app — it now strips XML comments and parses the
+`<color>` value; the comment was also reworded. The assertion was NOT
+weakened. A second tooling mistake was pointed at `/tmp/chromium` (a
+directory -> `EACCES`); the executable is `/tmp/chromium/chrome`. No feature
+was deleted or stubbed to satisfy a test.
+
+**Gates.** `npx tsc --noEmit` 0; `npm run verify` 0 (**42 harness files**,
+23 rustfmt, chunk budget); node20 harness 42/42;
+`npm audit --audit-level=high` 0 (0 vulnerabilities);
+`npx playwright test` **170 passed (10.2m)** (previous 167 + B-21..B-23);
+`check-live-release.mjs` EXIT 0 (`all 5 links resolve`).
+
+**Honest limits.** Real-device adaptive-icon rendering, Windows installer
+artwork on a real installer, and Bengali handwriting OCR accuracy still need
+Antigravity/physical-device verification; a pixel-fingerprint contract proves
+the shipped assets are the same emblem, not how every launcher masks it. No
+release was published and no merge was performed.
