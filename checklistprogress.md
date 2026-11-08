@@ -310,5 +310,7 @@ Active branch: `arena/317fbb3c-vaultzero` (never rename). PR #2 + #3 MERGED, #1 
 - [x] New contracts: 43rd harness `modal-safe-area.test.mjs` (positive control + guards), `vault-bounding-audit.spec.ts` B-24..B-28
 - [x] Gates: tsc 0 · verify 0 (**43 harness**) · node20 43/43 · audit 0 · Playwright **175/175 (10.9m)** · live check 0
 - [!] Whether a real WebView reports the bottom inset correctly needs physical-device/Antigravity verification; no unmeasured floor was faked
+- [x] `df72f73` pushed; push `42507639824` + PR `42507643399` both watched to exit 0 (4/4 jobs success); `gh pr checks 4` pass/pass
+- [x] Batch 6 CLOSED — resume with `continue` for Batch 7
 - [ ] Batch 7 (resume with `continue`): CI/CD + 5 canonical release assets + final Batch 1→7 regression loop
 - [ ] Final deliverables: comprehensive Bengali Engineering Report + Antigravity prompt (local work AND merge) + English master prompt LAST

@@ -1073,3 +1073,10 @@ in batch 2) can only be confirmed on a physical device; that verification is
 deferred to Antigravity rather than faked with an unmeasured floor. Real
 120Hz jitter, launcher masking and installer artwork remain unverified here.
 No release was published and no merge was performed.
+
+### V-95 Batch 6 close-out (CI / PR #4)
+`df72f73` pushed. Both events watched to exit 0: push `42507639824` and
+`pull_request` `42507643399`, each `success` for BOTH `Test & Build
+Verification` and `Frontend End-to-End & Security Tests` (4/4 jobs). Re-observed
+`gh pr checks 4` -> pass (9m11s) + pass (1m57s). PR #4 remains OPEN against
+`main`; no merge/close. Batch 6 CLOSED; resume with `continue` for Batch 7.
