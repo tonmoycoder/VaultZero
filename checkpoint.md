@@ -1107,3 +1107,13 @@ Re-ran every gate: `tsc` 0; `npm run verify` 0 (43 harness); node20 43/43;
 audit 0; live check 0; `npx playwright test` **176 passed (10.8m)**.
 No assertion was weakened — error detection was widened and the timeout now
 follows the actual cryptographic work.
+
+### V-95 Batch 6 FINAL close-out (CI / PR #4)
+Correction commit `5bc4b42` pushed. Both events watched to exit 0: push
+`42510871635` and `pull_request` `42510875667`, each `success` for BOTH
+`Test & Build Verification` and `Frontend End-to-End & Security Tests`
+(4/4 jobs, 176/176 Playwright). Re-observed `gh pr checks 4` -> pass (9m48s)
++ pass (2m33s). PR #4 remains OPEN against `main`; no merge/close.
+The earlier docs-commit push failure `42508531423` is documented above with
+its signed-log RCA and is superseded — the final head is fully green.
+Batch 6 CLOSED; resume with `continue` for Batch 7.

@@ -322,4 +322,5 @@ Active branch: `arena/317fbb3c-vaultzero` (never rename). PR #2 + #3 MERGED, #1 
 - [x] Hardened B-28: one test per viewport (fresh context), container-absent precondition, ALL creation/validation errors rejected, `expect.poll` on the real vault key (60s), dialog unmount (30s)
 - [x] 8/8 repeat runs GREEN at 8.5-11.5s each; full audit spec 6/6
 - [x] Re-ran all gates: tsc 0 · verify 0 (43 harness) · node20 43/43 · audit 0 · live 0 · Playwright **176/176 (10.8m)**
-- [ ] Push the correction, watch BOTH new push + PR runs to exit 0, then re-observe `gh pr checks 4`
+- [x] `5bc4b42` pushed; push `42510871635` + PR `42510875667` BOTH watched to exit 0 (4/4 jobs success); `gh pr checks 4` pass/pass
+- [x] Batch 6 FULLY CLOSED (including CI flake correction) — resume with `continue` for Batch 7
