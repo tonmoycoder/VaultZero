@@ -314,3 +314,12 @@ Active branch: `arena/317fbb3c-vaultzero` (never rename). PR #2 + #3 MERGED, #1 
 - [x] Batch 6 CLOSED — resume with `continue` for Batch 7
 - [ ] Batch 7 (resume with `continue`): CI/CD + 5 canonical release assets + final Batch 1→7 regression loop
 - [ ] Final deliverables: comprehensive Bengali Engineering Report + Antigravity prompt (local work AND merge) + English master prompt LAST
+
+## PHASE F / V-95b — Batch 6 CI flake RCA + correction (2026-11-08)
+
+- [!] `f21cf4e` docs commit: PR run `42508535834` green (175/175) BUT push run `42508531423` Frontend job FAILED (174/1) — not ignored
+- [x] Signed job log `128816346519` root-caused it: B-28 `toHaveCount(0)` 20s timeout; same commit green in PR run + 4/4 local repeats -> TEST flake, not app regression
+- [x] Hardened B-28: one test per viewport (fresh context), container-absent precondition, ALL creation/validation errors rejected, `expect.poll` on the real vault key (60s), dialog unmount (30s)
+- [x] 8/8 repeat runs GREEN at 8.5-11.5s each; full audit spec 6/6
+- [x] Re-ran all gates: tsc 0 · verify 0 (43 harness) · node20 43/43 · audit 0 · live 0 · Playwright **176/176 (10.8m)**
+- [ ] Push the correction, watch BOTH new push + PR runs to exit 0, then re-observe `gh pr checks 4`

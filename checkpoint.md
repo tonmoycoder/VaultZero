@@ -1080,3 +1080,30 @@ No release was published and no merge was performed.
 Verification` and `Frontend End-to-End & Security Tests` (4/4 jobs). Re-observed
 `gh pr checks 4` -> pass (9m11s) + pass (1m57s). PR #4 remains OPEN against
 `main`; no merge/close. Batch 6 CLOSED; resume with `continue` for Batch 7.
+
+### V-95 Batch 6 CI flake — RCA and correction (signed log evidence)
+The docs commit `f21cf4e` produced TWO runs on the same SHA. The
+`pull_request` run `42508535834` was fully green (175/175) and
+`gh pr checks 4` reported pass/pass, but the `push` run `42508531423` had
+`Frontend End-to-End & Security Tests` = **failure** (174 passed / 1 failed).
+It was NOT ignored: the signed job log for `128816346519` showed the single
+failure was `tests/vault-bounding-audit.spec.ts:141` B-28 —
+`expect(dialog).toHaveCount(0)` timed out after 20s (43 × "resolved to 1
+element"). Because the SAME commit passed 175/175 in the PR run and 4/4 in
+local `--repeat-each=4 --workers=2`, this was a TEST-HARNESS weakness, not an
+application regression:
+  1. two deliberately expensive 600k-PBKDF2 creations shared ONE page/context;
+  2. only one error string (`Failed to create vault`) was checked, so a
+     `Passwords do not match` / validation failure would be invisible;
+  3. a fixed 20s unmount timeout raced the KDF on a loaded CI runner.
+
+**Correction (test only, no app code touched).** B-28 is now one test PER
+viewport, so each gets its own fresh browser context; it asserts the container
+is absent before submitting, rejects ALL creation/validation errors, polls
+the REAL persisted `vaultzero_encrypted_vault_v2` key with a 60s bound, then
+asserts the dialog unmounts with a 30s bound. Measured locally: 8/8 repeat
+runs passed at 8.5–11.5s each (previously ~20s for two in one test).
+Re-ran every gate: `tsc` 0; `npm run verify` 0 (43 harness); node20 43/43;
+audit 0; live check 0; `npx playwright test` **176 passed (10.8m)**.
+No assertion was weakened — error detection was widened and the timeout now
+follows the actual cryptographic work.

@@ -138,8 +138,16 @@ test("B-27 '192.1' is rejected as a peer at both viewports", async ({ page }) =>
   }
 });
 
-test("B-28 a fresh vault is really created at 360x800 and 1440x900", async ({ page }) => {
-  for (const vp of VPS) {
+// Each viewport gets its OWN test, hence its own fresh browser context. Doing
+// two expensive 600k-PBKDF2 creations in one page was flaky on a loaded CI
+// runner (push run 42508531423: B-28 waited 20s for the dialog to unmount).
+// PR run 42508535834 passed 175/175 on the SAME commit, and 4/4 local repeats
+// passed, so this is a test-harness weakness, not an application regression.
+// The hardened version waits for the real persisted container and rejects ALL
+// creation/validation errors instead of one string.
+for (const vp of VPS) {
+  test(`B-28 a fresh vault is really created and persisted at ${vp.width}x${vp.height}`, async ({ page }) => {
+    const KEY = "vaultzero_encrypted_vault_v2";
     await page.setViewportSize(vp);
     await page.goto("/");
     await page.evaluate(() => {
@@ -149,11 +157,21 @@ test("B-28 a fresh vault is really created at 360x800 and 1440x900", async ({ pa
     await page.reload();
     await expect(page.getByRole("heading", { name: /Create your VaultZero vault/i })).toBeVisible();
     const dialog = page.locator('[role="dialog"][aria-modal="true"]');
+    expect(await page.evaluate((k) => localStorage.getItem(k), KEY), "start from a genuinely fresh install").toBeNull();
+
     await dialog.getByRole("textbox", { name: "Master password", exact: true }).fill("aA2525@");
     await dialog.getByRole("textbox", { name: "Confirm master password", exact: true }).fill("aA2525@");
+    const anyError = /Failed to create vault|ভল্ট তৈরিতে সমস্যা|Passwords do not match|at least 6 characters|Enter your master password/i;
+    await expect(page.getByText(anyError), "the form is valid before submitting").toHaveCount(0);
     await dialog.getByRole("button", { name: "Create local vault" }).click();
-    await expect(page.getByText(/Failed to create vault|ভল্ট তৈরিতে সমস্যা/i)).toHaveCount(0);
-    await expect(dialog).toHaveCount(0, { timeout: 20000 });
-    expect(await page.evaluate(() => Boolean(localStorage.getItem("vaultzero_encrypted_vault_v2"))), `container exists at ${vp.width}px`).toBe(true);
-  }
-});
+
+    // 600,000 PBKDF2 iterations are deliberately slow; poll the REAL container
+    // rather than guessing a fixed timeout for the dialog to disappear.
+    await expect.poll(
+      async () => page.evaluate((k) => Boolean(localStorage.getItem(k)), KEY),
+      { timeout: 60000, message: `vault container written at ${vp.width}x${vp.height}` },
+    ).toBe(true);
+    await expect(dialog).toHaveCount(0, { timeout: 30000 });
+    await expect(page.getByText(anyError), "no creation error is shown").toHaveCount(0);
+  });
+}
