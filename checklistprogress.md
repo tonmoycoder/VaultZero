@@ -274,3 +274,5 @@ Active branch: `arena/317fbb3c-vaultzero` (never rename). PR #2 + #3 MERGED, #1 
 - [!] Renderer cannot read the 302 Location (CORS); a native Rust HTTP command to do so is NOT implemented — reported, not faked
 - [ ] Batch 5 (resume with `continue`): offline OCR (eng+ben), strict RFC 6238 TOTP, official APK/Windows logo parity
 - [ ] Batches 6-7 + final Antigravity prompt (local-only work + merge) + English master prompt LAST
+- [x] `0e616c7` pushed; push `42458168857` + PR `42458173011` both watched to exit 0; `gh pr checks 4` pass/pass
+- [x] Batch 4 CLOSED — resume with `continue` for Batch 5

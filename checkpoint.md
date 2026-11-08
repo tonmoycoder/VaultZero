@@ -913,3 +913,10 @@ bundle budget); node20 40/40; `npm audit --audit-level=high` 0;
 which was NOT implemented here — no fake fallback was added. Real-device
 TLS/UA behaviour needs Antigravity verification. `AndroidManifest.xml`
 already had `INTERNET`, so it was not touched.
+
+### V-93 Batch 4 close-out (CI / PR #4)
+`0e616c7` pushed. Both events watched to exit 0: push `42458168857` and
+`pull_request` `42458173011`, each `success` for BOTH `Test & Build
+Verification` and `Frontend End-to-End & Security Tests`. `gh pr checks 4`
+-> pass (7m37s) + pass (2m35s). No merge/close. Batch 4 CLOSED; resume with
+`continue` for Batch 5.
