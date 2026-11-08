@@ -241,3 +241,19 @@ Active branch: `arena/317fbb3c-vaultzero` (never rename). PR #2 + #3 MERGED, #1 
 - [ ] Batches 4-7 + final Antigravity prompt (local-only work + merge) + English master prompt LAST
 - [x] `b99fe78` pushed; push `42417004735` + PR `42417008987` both watched to exit 0; `gh pr checks 4` pass/pass
 - [x] Batch 2 CLOSED — resume with `continue` for Batch 3
+
+## PHASE F / V-92 — Batch 3: P2P real LAN IP, strict peers, camera + footer (2026-11-08)
+
+- [x] Re-baselined: HEAD `a0fc6ec`, PR #4 `pr_open` pass/pass, no remote advance
+- [x] Found UNCOMMITTED V-92 work in the working tree; preserved, reviewed, executed, improved (nothing discarded)
+- [x] Verified strict RFC-1918 validator, Rust `lan_ipv4` UDP-route trick, `generate_handler!` registration, `core:default` ACL
+- [x] Verified `sync_from_peer` really does a WebSocket key-exchange handshake before "Connected" (no fake connection)
+- [x] Verified manifest CAMERA/INTERNET + 44px QR-photo fallback with `capture="environment"` + footer inside 360px
+- [x] B-16 RED (false GREEN first: StrictMode double effect → hardened with probe counter + allow flag); true RED 2==2
+- [x] B-16 GREEN fix: reusable `useCallback probeLanIp`, StrictMode-safe aliveRef, Discover re-probes only when no IP
+- [x] Harness gained reusable-probe + re-probe + positive-control assertions
+- [x] Full-suite regressions resolved honestly: M-19 updated to reachability invariant (NOT weakened), B-16 test race fixed with `expect.poll`
+- [x] Gates: tsc 0 · verify 0 (39 harness, 23 rustfmt) · node20 39/39 · audit 0 · Playwright **163/163 (15.7m)** · live check 0
+- [ ] Batch 4 (resume with `continue`): Check for Updates CSP, resilient GitHub fetch, strict SemVer
+- [ ] Batches 5-7 + final Antigravity prompt (local-only work + merge) + English master prompt LAST
+- [!] `.vztransfer` snapshot-file transfer NOT implemented (reported, not faked); real-device camera/LAN/onPermissionRequest needs Antigravity

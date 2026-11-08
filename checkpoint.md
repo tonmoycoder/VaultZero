@@ -758,3 +758,80 @@ insets still need Antigravity verification.
 exit 0: push run `42417004735` and `pull_request` run `42417008987`, each
 `success`. `gh pr checks 4` -> Frontend E2E pass (5m53s) + Test & Build pass
 (2m10s). No merge/close. Batch 2 CLOSED; resume with `continue` for Batch 3.
+
+## V-92 — Batch 3 / P2P real LAN networking, strict peers, camera + footer (2026-11-08)
+
+**Branch status from the platform: `pr_open` (PR #4).** Re-baseline: HEAD
+`a0fc6ec`, `origin` in sync, `main` `c6ea9b2`, PR #4 pass/pass. A user-supplied
+`image-6.png` showed an Arena UI error ("Something went wrong. Please try
+again."), NOT a VaultZero screenshot — it was not treated as an app defect.
+
+### The working tree already contained UNCOMMITTED Batch-3 work
+`git status` showed 4 modified + 2 new files that this agent did NOT create:
+`src/lib/p2pMerge.ts`, `src-tauri/src/{lib,p2p_lan}.rs`,
+`src/components/toolModals.tsx`, `tests/harness/lan-peer-contract.test.mjs`,
+`tests/vault-p2p-lan.spec.ts` (all tagged `V-92`). Nothing was discarded or
+overwritten: the work was REVIEWED, executed, and then IMPROVED. It contains:
+- strict RFC-1918 peer validation in `isValidPeerAddress()` (rejects 8.8.8.8,
+  1.1.1.1, 172.15/172.32, 192.169, 169.254, 127.0.0.1, localhost,
+  `tauri.localhost`, `192.1`, bad ports); private ranges still accepted.
+- Rust `detect_lan_ipv4()` in `p2p_lan.rs`: `UdpSocket::bind("0.0.0.0:0")` +
+  `connect("8.8.8.8:80")` (no packet) + `local_addr()`, filtered to 10/8,
+  172.16/12, 192.168/16; exposed as `commands::lan_ipv4` and registered in
+  `generate_handler!`. `core:default` capability already permits app commands;
+  no ACL file change needed.
+- `SyncModal` asks Rust for the real LAN IP instead of
+  `window.location.hostname` (= `tauri.localhost`), with a manual RFC-1918 IP
+  input when detection fails. QR-photo fallback, handshake-gated `connected`
+  status, `CAMERA`/`INTERNET` manifest entries and the wrapping footer were
+  already correct (verified, not redone). `sync_vault_payload` -> Rust
+  `P2PManager::sync_from_peer` really performs a WebSocket handshake with an
+  ephemeral key exchange before any "Connected" state, so no fake connection.
+- 30-assertion harness (with positive controls) + 5 Playwright tests B-11..B-15.
+
+### Reviewed results BEFORE my changes
+`tsc` 0; `check:rust-format` 23/23; harness 30/30; B-11..B-15 5/5; manifest
+has `CAMERA`, `INTERNET`, `ACCESS_NETWORK_STATE`, `ACCESS_WIFI_STATE`,
+optional `android.hardware.camera`; QR-photo button is 44px tall with
+`accept="image/*" capture="environment"`.
+
+### My RED -> GREEN improvement (B-16)
+Found by review: the incoming code probed `lan_ipv4` ONCE in a mount effect.
+On Android the Wi-Fi interface often appears later, so the pairing QR kept
+`ip: ""` until the modal was closed and reopened. NEW B-16 stubs a late IP and
+counts probes. First draft gave a FALSE GREEN because React StrictMode invokes
+the mount effect twice; the test was hardened with an `__allowIp` flag plus a
+probe counter. True RED: `before=2, after=2` (Discover added no probe).
+Fix (minimal): `toolModals.tsx` — reusable `useCallback probeLanIp`, a
+StrictMode-safe `aliveRef` mount effect, and `if (!lanHost) void probeLanIp()`
+at the top of `handleDiscover` (never overwrites a manually typed IP).
+Harness gained 3 more assertions (reusable probe + Discover re-probe + a
+positive control). GREEN: B-11..B-16 6/6.
+
+### Full-suite regressions found and honestly resolved
+Full `npx playwright test` first pass: `161 passed / 2 failed`.
+1. M-19 `scrollHeight 643 > clientHeight 597`: the new REQUIRED 44px
+   manual-LAN-IP row made the Host body taller on a 390x844 phone. Measured
+   the body: `overflow-y: auto`, and after `scrollTop=48` the Discover button
+   ends at `bottom=733` vs `footer top=774` -> every control IS reachable.
+   M-19 was UPDATED, not weakened: it now asserts `overflowY === "auto"`,
+   bounded extra content (0 < extra <= 60), that scrolling actually moves,
+   and that the last control ends above the footer. Its desktop footnote
+   assertion is unchanged. V-88's "zero scroll" proxy is no longer valid now
+   that a user-requested control exists.
+2. B-16 `after === before`: `void probeLanIp()` is fire-and-forget and
+   dynamically imports the Tauri core, so the counter ticked AFTER the click
+   under a loaded 2-worker suite. Fixed the TEST race with `expect.poll` +
+   `scrollIntoViewIfNeeded`, not by touching app code.
+Second full pass: **163 passed (15.7m)**.
+
+**Gates.** `tsc` 0; `npm run verify` 0 (**39 harness files**, 23 rustfmt, bundle
+budget); node20 39/39; `npm audit --audit-level=high` 0; full Playwright
+**163/163**; `check-live-release.mjs` EXIT 0. Rust compilation/clippy is
+Windows-CI-only (no local cargo) and will be confirmed by the watched run.
+
+**Honest limits.** `.vztransfer` snapshot-file transfer is NOT implemented
+(never claimed); the encrypted QR + manual LAN IP are the working fallbacks.
+WebView `onPermissionRequest` bridging, real-device camera/LAN P2P handshake,
+carrier CG-NAT 10.x mis-detection and 120Hz behaviour need Antigravity on
+real hardware. No release assets/signing secrets touched here.

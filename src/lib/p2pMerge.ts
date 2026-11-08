@@ -202,8 +202,17 @@ export function isValidPeerAddress(value: string): boolean {
   const raw = value.trim();
   const match = /^(\d{1,3}(?:\.\d{1,3}){3})(?::(\d{1,5}))?$/.exec(raw);
   if (!match) return false;
-  const octets = match[1].split(".");
-  if (!octets.every((part) => /^(0|[1-9]\d{0,2})$/.test(part) && Number(part) <= 255)) return false;
+  const parts = match[1].split(".");
+  if (!parts.every((part) => /^(0|[1-9]\d{0,2})$/.test(part) && Number(part) <= 255)) return false;
+  const [first, second] = parts.map(Number);
+  // V-92: a peer must live on THIS local network. Accepting any dotted IPv4
+  // let 8.8.8.8 / 1.1.1.1 (or a link-local 169.254 address) become a
+  // "selected peer" even though no VaultZero host can ever be there.
+  const isRfc1918 =
+    first === 10 ||
+    (first === 172 && second >= 16 && second <= 31) ||
+    (first === 192 && second === 168);
+  if (!isRfc1918) return false;
   if (match[2]) {
     const port = Number(match[2]);
     if (port < 1 || port > 65535) return false;

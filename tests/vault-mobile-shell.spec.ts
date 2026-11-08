@@ -448,12 +448,33 @@ test("M-19 the P2P Host tab fits a phone with no clipped footnote", async ({ pag
   const dialog = page.locator('[role="dialog"][aria-modal="true"]');
   await expect(dialog.getByRole("button", { name: /Host \/ Show QR/ })).toBeVisible();
   const footer = dialog.locator("footer");
+  // V-92: the Host tab gained a REQUIRED 44px "enter your LAN IP" control, so
+  // a 390x844 phone can no longer show every row without scrolling. The old
+  // `scrollHeight <= clientHeight` proxy is no longer the right invariant:
+  // assert the user-visible property instead — the body is scrollable, the
+  // extra content is bounded, and the LAST control ends above the footer.
   const metrics = await footer.evaluate((f) => {
     const body = f.previousElementSibling as HTMLElement;
-    return { scrollHeight: body.scrollHeight, clientHeight: body.clientHeight };
+    const cs = getComputedStyle(body);
+    const buttons = [...body.querySelectorAll("button")];
+    const last = buttons[buttons.length - 1];
+    body.scrollTop = body.scrollHeight;
+    return {
+      overflowY: cs.overflowY,
+      scrollHeight: body.scrollHeight,
+      clientHeight: body.clientHeight,
+      scrollTop: body.scrollTop,
+      lastBottom: last ? last.getBoundingClientRect().bottom : -1,
+      footerTop: f.getBoundingClientRect().top,
+    };
   });
-  expect(metrics.scrollHeight, "no content may be clipped behind the footer on a phone")
-    .toBeLessThanOrEqual(metrics.clientHeight + 2);
+  expect(metrics.overflowY, "the Host body must be scrollable, not clipped").toBe("auto");
+  const extra = metrics.scrollHeight - metrics.clientHeight;
+  expect(extra, "there is extra content to scroll").toBeGreaterThan(0);
+  expect(extra, "extra content stays bounded").toBeLessThanOrEqual(60);
+  expect(metrics.scrollTop, "scrolling actually moves the content").toBeGreaterThan(0);
+  expect(metrics.lastBottom, "the last control is fully reachable above the footer")
+    .toBeLessThanOrEqual(metrics.footerTop + 1);
 
   // The security note was hidden on phones, NOT deleted: on a desktop it
   // must still be visible, so no information was lost.

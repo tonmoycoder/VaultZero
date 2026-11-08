@@ -21,7 +21,7 @@ import {
   WifiHigh,
 } from "@phosphor-icons/react";
 import { QRCodeSVG } from "qrcode.react";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 /**
  * The QR decoder, loaded on demand.
@@ -53,7 +53,7 @@ import { cn } from "../utils/cn";
 import { BrandMark, Modal, Toggle, Tooltip, TotpRing, useCountdown } from "./ui";
 import { generateTotp, isValidTotpSecret, resolveTotpConfig, validateGoogleAuthSecret } from "../lib/totp";
 import { copySecure } from "../lib/clipboard";
-import { invokeNativeCommand } from "../lib/platform";
+import { invokeNativeCommand, isNativeRuntime } from "../lib/platform";
 import { isValidPeerAddress, mergeSummary, parsePeerInput, parsePeerVaultPayload } from "../lib/p2pMerge";
 
 type Notify = (message: string) => void;
@@ -567,17 +567,48 @@ export function SyncModal({ onClose, onNotify, items, onMerge, lang = "en" }: {
   });
 
   /**
-   * V-52: the QR used to advertise a hardcoded LAN address and port 1420 before the
-   * native host had even started. The real host binds an ephemeral port, so
-   * the QR is only meaningful once `start_p2p_host` returns its live port.
-   * When the app runs inside Tauri the hostname is a loopback alias and is
-   * deliberately left empty: the other device must use Discover Peers.
+   * V-52: the QR used to advertise a hardcoded LAN address and port 1420 before
+   * the native host had even started. The real host binds an ephemeral port.
+   * V-92: `window.location.hostname` is `tauri.localhost` inside the native
+   * WebView, which no other device can reach. Ask the Rust core for the real
+   * private LAN IPv4 instead; a browser launch or a device with no LAN
+   * interface falls back to a manually entered IP (below), never a fake one.
    */
-  const lanHost = useMemo(() => {
-    const hostname = typeof window !== "undefined" ? window.location.hostname : "";
-    const localOnly = !hostname || /^(localhost|tauri\.localhost|127\.0\.0\.1|::1|0\.0\.0\.0)$/i.test(hostname);
-    return localOnly ? "" : hostname;
+  const [lanHost, setLanHost] = useState<string>("");
+  const [manualLanIp, setManualLanIp] = useState<string>("");
+
+  const aliveRef = useRef(true);
+
+  /**
+   * V-92: Android Wi-Fi frequently appears AFTER the Host tab has mounted.
+   * A one-shot mount probe left the pairing QR with `ip: ""` until the modal
+   * was closed and reopened. Keep the probe reusable so Discover can refresh
+   * it; it never overwrites an address the user typed manually.
+   */
+  const probeLanIp = useCallback(async () => {
+    const fromWindow = () => {
+      const hostname = typeof window !== "undefined" ? window.location.hostname : "";
+      return isValidPeerAddress(hostname) ? hostname : "";
+    };
+    if (!isNativeRuntime()) {
+      if (aliveRef.current) setLanHost(fromWindow());
+      return;
+    }
+    try {
+      const ip = await invokeNativeCommand<string | null>("lan_ipv4");
+      if (aliveRef.current) setLanHost(ip && isValidPeerAddress(ip) ? ip : fromWindow());
+    } catch {
+      if (aliveRef.current) setLanHost(fromWindow());
+    }
   }, []);
+
+  useEffect(() => {
+    // StrictMode mounts, cleans up and mounts again: re-arm the guard each
+    // time, otherwise the second mount would see `false` forever.
+    aliveRef.current = true;
+    void probeLanIp();
+    return () => { aliveRef.current = false; };
+  }, [probeLanIp]);
   const hostPayload = useMemo(() => JSON.stringify({
     app: "vaultzero",
     version: 2,
@@ -618,6 +649,10 @@ export function SyncModal({ onClose, onNotify, items, onMerge, lang = "en" }: {
    * Discovers VaultZero peers broadcasting on the local network.
    */
   const handleDiscover = async () => {
+    // V-92: the LAN interface may have come up after this modal mounted.
+    // Re-probe only while no address is known, so a manually entered IP is
+    // never silently replaced by a browser hostname.
+    if (!lanHost) void probeLanIp();
     try {
       const peers = await invokeNativeCommand<Array<{ id: string; name: string; ip: string; port: number }>>(
         "discover_peers",
@@ -1065,6 +1100,38 @@ export function SyncModal({ onClose, onNotify, items, onMerge, lang = "en" }: {
               <Copy size={11} className="text-faint" />
             </button>
           </div>
+
+          {/* V-92: browser / no-LAN fallback. The pairing QR must carry a
+              routable IP, so the user can supply one instead of silently
+              advertising an empty or loopback address. Invalid input is
+              rejected with the same strict RFC-1918 rule as Connect. */}
+          {!lanHost && (
+            <div className="mt-2 flex w-full max-w-[340px] items-center gap-2">
+              <input
+                type="text"
+                inputMode="decimal"
+                value={manualLanIp}
+                onChange={(e) => setManualLanIp(e.target.value)}
+                placeholder={S("নিজের LAN IP লিখুন (যেমন ১৯২.১৬৮.১.৫)", "Enter your LAN IP (e.g. 192.168.1.5)")}
+                className="min-h-[44px] min-w-0 flex-1 rounded-[10px] border border-[var(--border-soft)] bg-[var(--glass-input)] px-3 text-[10px] text-main"
+                aria-label="Manual LAN IP"
+              />
+              <button
+                type="button"
+                onClick={() => {
+                  const candidate = manualLanIp.trim();
+                  if (!isValidPeerAddress(candidate)) {
+                    onNotify(S("এটি বৈধ LAN IP নয়। ১০.x, ১৭২.১৬–৩১.x বা ১৯২.১৬৮.x ব্যবহার করুন।", "Not a valid LAN IP. Use 10.x, 172.16–31.x or 192.168.x."));
+                    return;
+                  }
+                  setLanHost(candidate);
+                }}
+                className="secondary-button h-11 shrink-0 rounded-[10px] px-3 text-[10px] font-semibold"
+              >
+                {S("ব্যবহার করুন", "Use IP")}
+              </button>
+            </div>
+          )}
 
           {/* V-17: the real host control. Without this the QR code advertised a
               transfer that never happened. */}

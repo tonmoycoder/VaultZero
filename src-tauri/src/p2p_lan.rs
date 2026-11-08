@@ -389,3 +389,35 @@ impl P2PManager {
         String::from_utf8(decrypted).map_err(|e| format!("Peer payload was not valid UTF-8: {}", e))
     }
 }
+
+/// Returns this device's REAL private LAN IPv4 address, or `None` when no
+/// usable local interface exists.
+///
+/// `UdpSocket::connect` on a UDP socket only selects the outbound route and
+/// records the default peer — it sends NO packet, so this also works on an
+/// air-gapped device. `window.location.hostname` cannot be used instead:
+/// inside a Tauri WebView it is `tauri.localhost`, which another device on
+/// the Wi-Fi can never reach.
+pub fn detect_lan_ipv4() -> Option<String> {
+    let socket = std::net::UdpSocket::bind("0.0.0.0:0").ok()?;
+    socket.connect("8.8.8.8:80").ok()?;
+    let addr = socket.local_addr().ok()?;
+    let ip = match addr.ip() {
+        std::net::IpAddr::V4(v4) => v4,
+        std::net::IpAddr::V6(_) => return None,
+    };
+    let octets = ip.octets();
+    // Loopback, unspecified and link-local addresses are not LAN peers.
+    if octets[0] == 127 || octets[0] == 0 || (octets[0] == 169 && octets[1] == 254) {
+        return None;
+    }
+    // RFC-1918: 10/8, 172.16/12, 192.168/16. A public address is not a
+    // same-Wi-Fi endpoint and must not be advertised in the pairing QR.
+    let private = octets[0] == 10
+        || (octets[0] == 172 && (16..=31).contains(&octets[1]))
+        || (octets[0] == 192 && octets[1] == 168);
+    if !private {
+        return None;
+    }
+    Some(ip.to_string())
+}
