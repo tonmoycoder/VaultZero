@@ -259,3 +259,18 @@ Active branch: `arena/317fbb3c-vaultzero` (never rename). PR #2 + #3 MERGED, #1 
 - [!] `.vztransfer` snapshot-file transfer NOT implemented (reported, not faked); real-device camera/LAN/onPermissionRequest needs Antigravity
 - [x] `09d5747` pushed; push `42435123882` + PR `42435126914` both watched to exit 0 (Windows Rust compile/clippy green); `gh pr checks 4` pass/pass
 - [x] Batch 3 CLOSED — resume with `continue` for Batch 4
+
+## PHASE F / V-93 — Batch 4: resilient update check, CSP, strict SemVer (2026-11-08)
+
+- [x] Re-baselined: HEAD `8945e62`, PR #4 `pr_open` pass/pass, no remote advance
+- [x] Measured CORS for real: api.github.com = `ACAO:*`; github.com 302 has NO CORS header (cannot read Location from renderer)
+- [x] Reproduced the screenshot's false "Offline" in real Chromium (`ERR_CERT_AUTHORITY_INVALID` -> offline)
+- [x] RED: 11 harness FAIL (CSP tokens, 8s timeout, API version header, no fallback, false offline)
+- [x] GREEN fix 1: connect-src += `*.githubusercontent.com`, `ipc:`, `http://ipc.localhost`
+- [x] GREEN fix 2: 10s timeout, pinned API version, `/releases?per_page=1` fallback, no-cors reachability probe, `error` != `offline`
+- [x] GREEN fix 3: new bilingual `error` render in UpdateModal (previously invisible); up_to_date/Update Now unchanged (already strict SemVer)
+- [x] Review after fix: all 3 endpoints attempted in order; sandbox cert-fails all -> offline is honest; B-17/B-18/B-20 prove online behaviour
+- [x] Gates: tsc 0 · verify 0 (**40 harness**) · node20 40/40 · audit 0 · Playwright **167/167 (13.0m)** · live check 0
+- [!] Renderer cannot read the 302 Location (CORS); a native Rust HTTP command to do so is NOT implemented — reported, not faked
+- [ ] Batch 5 (resume with `continue`): offline OCR (eng+ben), strict RFC 6238 TOTP, official APK/Windows logo parity
+- [ ] Batches 6-7 + final Antigravity prompt (local-only work + merge) + English master prompt LAST

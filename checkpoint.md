@@ -842,3 +842,74 @@ real hardware. No release assets/signing secrets touched here.
 Verification` (Windows Rust compile/clippy) and `Frontend End-to-End &
 Security Tests`. `gh pr checks 4` -> pass (8m57s) + pass (2m2s). No
 merge/close. Batch 3 CLOSED; resume with `continue` for Batch 4.
+
+## V-93 — Batch 4 / "Check for Updates" resilience, CSP, strict SemVer (2026-11-08)
+
+**Branch status from platform: `pr_open` (PR #4).** Baseline HEAD `8945e62`,
+clean, remote in sync, `main` `c6ea9b2`, PR #4 pass/pass. No external advance
+this turn.
+
+### Empirical CORS measurement (no guesses)
+`curl -I -H "Origin: https://tauri.localhost"`:
+- `https://api.github.com/repos/tonmoycoder/VaultZero/releases/latest` -> 200,
+  `access-control-allow-origin: *` (CORS-readable from a WebView).
+- `https://github.com/tonmoycoder/VaultZero/releases/latest` -> **302 ->
+  `/releases/tag/v2.5.2`, but NO CORS header**. A renderer therefore CANNOT
+  read the redirect `Location`; it can only use that URL as an opaque
+  `no-cors` REACHABILITY probe. No `tauri-plugin-http` and no direct
+  `reqwest` dependency were added (over-engineering for this batch).
+- `src-tauri/Cargo.toml` has no HTTP plugin; `reqwest` exists only in
+  Cargo.lock as a transitive dependency.
+
+### Root cause of the screenshot's false "Offline" message
+`fetchLatestRelease()` made ONE request to `/releases/latest` and mapped ANY
+thrown error straight to `status: "offline"`. A TLS/UA/CORS failure on an
+otherwise online phone therefore rendered "Offline / Air-gapped network:
+Cannot reach remote release server." Reproduced in real headless Chromium
+before the fix (`.artifacts/probe-update.mjs`), where the cert error is
+`ERR_CERT_AUTHORITY_INVALID`.
+
+### Test-first RED -> GREEN
+NEW `tests/harness/updater-resilience.test.mjs` (40th harness) stubs
+`globalThis.fetch` and drives `checkReleaseStatus(true)`; NEW
+`tests/vault-updater-resilience.spec.ts` (B-17..B-20) drives the real UI with
+`page.route`. RED = 11 harness FAIL (3 CSP tokens, 8s timeout, missing
+`X-GitHub-Api-Version`, no fallback, false offline) + the real modal showing
+Offline. Guards already passing: strict SemVer (same/newer/prerelease),
+`Accept` header, genuine all-paths-down offline.
+
+### Fixes (minimal)
+- `src-tauri/tauri.conf.json` `connect-src` gained
+  `https://*.githubusercontent.com`, `ipc:`, `http://ipc.localhost`
+  (kept `'self'`, `api.github.com`, `github.com`,
+  `objects.githubusercontent.com`).
+- `src/lib/updater.ts`: `RELEASE_CHECK_TIMEOUT_MS` 8s -> **10s**; pinned
+  `X-GitHub-Api-Version: 2022-11-28`; one `withReleaseTimeout` helper bounds
+  BOTH fetch and JSON body read; `statusFromRelease` extracted so the primary
+  object and the fallback ARRAY share one strict-SemVer path. New chain:
+  `/releases/latest` -> `/releases?per_page=1` (403/429/5xx/throw/404) ->
+  opaque `no-cors` probe of the public redirect URL -> only if all three fail
+  is `offline` returned. A reachable network with unreadable metadata now
+  returns `status: "error"` with "The network IS reachable ...".
+- `src/components/UpdateModal.tsx`: added the missing `status === "error"`
+  bilingual render block; otherwise the new honest message would be invisible.
+  `up_to_date` already printed `v2.5.2` ("✓ ... up-to-date"), so it was NOT
+  changed; `Update Now` still requires `compareSemver(remote, local) > 0`.
+
+### Review -> improve -> review
+Unmocked probe AFTER the fix logs all three attempts in order
+(`/releases/latest`, `/releases?per_page=1`, public redirect), each failing
+with `ERR_CERT_AUTHORITY_INVALID` in this sandbox -> "Offline" here is HONEST,
+not a false claim. On an online device B-17 (primary throw + fallback ->
+up-to-date), B-18 (403 + fallback v2.6.0 -> Update Now) and B-20 (reachable
+but malformed -> honest error) prove the false offline is gone.
+
+**Gates.** `tsc` 0; `npm run verify` 0 (**40 harness files**, 23 rustfmt,
+bundle budget); node20 40/40; `npm audit --audit-level=high` 0;
+`npx playwright test` **167 passed (13.0m)**; `check-live-release.mjs` EXIT 0.
+
+**Honest limits.** The renderer cannot read the 302 `Location` from
+`github.com` (no CORS); reading that tag would need a native Rust HTTP command
+which was NOT implemented here — no fake fallback was added. Real-device
+TLS/UA behaviour needs Antigravity verification. `AndroidManifest.xml`
+already had `INTERNET`, so it was not touched.
