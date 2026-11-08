@@ -999,3 +999,10 @@ artwork on a real installer, and Bengali handwriting OCR accuracy still need
 Antigravity/physical-device verification; a pixel-fingerprint contract proves
 the shipped assets are the same emblem, not how every launcher masks it. No
 release was published and no merge was performed.
+
+### V-94 Batch 5 close-out (CI / PR #4)
+`249f116` pushed. Both events watched to exit 0: push `42503258511` and
+`pull_request` `42503261967`, each `success` for BOTH `Test & Build
+Verification` and `Frontend End-to-End & Security Tests` (4/4 jobs). Re-observed
+`gh pr checks 4` -> pass (8m46s) + pass (2m38s). PR #4 remains OPEN against
+`main`; no merge/close. Batch 5 CLOSED; resume with `continue` for Batch 6.

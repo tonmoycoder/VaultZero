@@ -291,5 +291,7 @@ Active branch: `arena/317fbb3c-vaultzero` (never rename). PR #2 + #3 MERGED, #1 
 - [x] Review after fix: guard was reading XML comments -> TEST fixed to parse the actual `<color>` value, assertion NOT weakened; Chromium path corrected to `/tmp/chromium/chrome`
 - [x] Gates: tsc 0 · verify 0 (**42 harness**) · node20 42/42 · audit 0 · Playwright **170/170 (10.2m)** · live check 0
 - [!] Real-device launcher masking, installer artwork and Bengali handwriting accuracy need Antigravity verification; no release published, no merge
+- [x] `249f116` pushed; push `42503258511` + PR `42503261967` both watched to exit 0 (4/4 jobs success); `gh pr checks 4` pass/pass
+- [x] Batch 5 CLOSED — resume with `continue` for Batch 6
 - [ ] Batch 6 (resume with `continue`): full verification + explicit 360x800 / 1440x900 bounding-box DOM audit
 - [ ] Batch 7 + final regression loop + Bengali Engineering Report + Antigravity prompt (local work AND merge) + English master prompt LAST
