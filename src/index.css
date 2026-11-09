@@ -174,12 +174,18 @@
 @layer base {
 html {
   background: var(--app-base);
+  width: 100%;
+  margin: 0;
+  padding: 0;
   overflow-x: hidden !important;
+  overscroll-behavior-x: none;
   max-width: 100vw;
 }
 
 body {
   margin: 0;
+  padding: 0;
+  width: 100%;
   min-width: 320px;
   max-width: 100vw;
   background: var(--app-base);
@@ -189,10 +195,14 @@ body {
   text-rendering: optimizeLegibility;
   overflow: hidden;
   overflow-x: hidden !important;
+  overscroll-behavior-x: none;
 }
 
 #root {
+  margin: 0;
+  padding: 0;
   overflow-x: hidden !important;
+  overscroll-behavior-x: none;
   max-width: 100vw;
   width: 100%;
 }
@@ -941,6 +951,16 @@ button:active:not(:disabled) {
 .mobile-safe-bottom {
   padding-bottom: calc(86px + env(safe-area-inset-bottom));
 }
+
+/* V-95: the shared Modal action bar used to sit flush with the viewport
+   bottom (measured y=799 on a 360x800 phone), so an edge-to-edge Android
+   gesture bar covered "Receive & Merge". The lock screen and the vault shell
+   already reserved --safe-bottom; this closes the last gap. At an inset of
+   0px the padding stays 14px, so no layout changes on desktop or in tests.
+   `!important` beats the Tailwind `py-3.5` utility of equal specificity. */
+.modal-footer {
+  padding-bottom: calc(14px + var(--safe-bottom)) !important;
+}
 .glowing-orb {
   position: absolute;
   border-radius: 999px;
@@ -1447,6 +1467,14 @@ button:disabled { opacity: 0.5; }
 .mobile-safe-top { padding-top: max(var(--safe-top), 0px); }
 
 @media (max-width: 767px) {
+  /* V-91: Android WebViews frequently report env(safe-area-inset-top) as 0px
+     even while drawing edge-to-edge behind the real status bar. The clock,
+     Wi-Fi and battery icons then sit on top of the header (measured EN control
+     at y=10px on a 360x800 capture). Guarantee a 36px floor on BOTH the vault
+     shell column and the lock screen — a larger real inset still wins because
+     max() is used. `!important` beats the Tailwind `pt-3` utility. */
+  .mobile-safe-top { padding-top: max(var(--safe-top), 36px) !important; }
+
   /* Keep the shell inside the visible area below the status bar. */
   .vault-shell {
     height: calc(100dvh - var(--safe-top));

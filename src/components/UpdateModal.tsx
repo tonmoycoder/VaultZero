@@ -362,6 +362,26 @@ export default function UpdateModal({
           </div>
         )}
 
+        {/* V-93: the network IS reachable but release metadata could not be
+            read (rate limit / blocked WebView UA / malformed body). This is
+            NOT an air-gapped device, so the offline notice must not appear. */}
+        {statusState.status === "error" && (
+          <div className="rounded-[18px] border border-amber-500/25 bg-amber-500/10 p-3.5 text-left">
+            <div className="flex items-center gap-2 text-[10px] font-semibold text-amber-600 dark:text-amber-400">
+              <WarningCircle size={15} weight="duotone" className="shrink-0" />
+              <span>
+                {lang === "bn"
+                  ? "রিলিজ তথ্য পড়া যায়নি — তবে নেটওয়ার্ক চালু আছে"
+                  : "Release information unavailable — the network is reachable"}
+              </span>
+            </div>
+            <p className="mt-1 text-[8.5px] leading-relaxed text-muted">
+              {statusState.message ||
+                (lang === "bn" ? "কিছুক্ষণ পরে আবার চেষ্টা করুন।" : "Please try again shortly.")}
+            </p>
+          </div>
+        )}
+
         {/* State 3: Offline / Air-Gapped Notice */}
         {statusState.status === "offline" && (
           <div className="rounded-[18px] border border-amber-500/25 bg-amber-500/10 p-3.5 text-left">

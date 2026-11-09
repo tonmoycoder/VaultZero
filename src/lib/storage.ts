@@ -623,30 +623,34 @@ async function decryptLegacyV2<T>(
 // Container Management & Public API
 // ---------------------------------------------------------------------
 
+/** Marker for a NATIVE vault on disk. localStorage can outlive the .pmv file
+ *  (uninstall, cleared app data, or opening the web build after the app), so
+ *  it must never make the BROWSER vault look configured. */
+const NATIVE_VAULT_FLAG = "vaultzero_has_native_vault";
+
 export function isVaultConfigured(): boolean {
   if (typeof window === "undefined") return false;
-  return Boolean(
-    window.localStorage.getItem(VAULT_STORAGE_KEY) ||
-    window.localStorage.getItem("vaultzero_has_native_vault") === "true"
-  );
+  if (window.localStorage.getItem(VAULT_STORAGE_KEY)) return true;
+  return isNativeRuntime() && window.localStorage.getItem(NATIVE_VAULT_FLAG) === "true";
 }
 
 export async function checkVaultConfiguredAsync(): Promise<boolean> {
+  if (typeof window === "undefined") return false;
   if (isNativeRuntime()) {
     try {
+      // The .pmv file on disk is authoritative, not a cached localStorage
+      // marker. V-90: a stale marker used to keep a fresh install stuck on
+      // "Welcome back" even after the vault file was gone.
       const exists = await invokeNativeCommand<boolean>("has_vault_file");
-      if (exists) {
-        if (typeof window !== "undefined") {
-          window.localStorage.setItem("vaultzero_has_native_vault", "true");
-        }
-        return true;
-      }
+      if (exists) window.localStorage.setItem(NATIVE_VAULT_FLAG, "true");
+      else window.localStorage.removeItem(NATIVE_VAULT_FLAG);
+      return exists;
     } catch {
-      // fallback
+      // IPC unavailable: keep the last known state, never invent a vault.
+      return isVaultConfigured();
     }
-    return typeof window !== "undefined" && window.localStorage.getItem("vaultzero_has_native_vault") === "true";
   }
-  return isVaultConfigured();
+  return Boolean(window.localStorage.getItem(VAULT_STORAGE_KEY));
 }
 
 /**
@@ -823,7 +827,7 @@ export async function createNewVault(
     inMemorySession = nativeSession;
     saveActiveSession(nativeSession);
     if (typeof window !== "undefined") {
-      window.localStorage.setItem("vaultzero_has_native_vault", "true");
+      window.localStorage.setItem(NATIVE_VAULT_FLAG, "true");
     }
     return nativeSession;
   }
@@ -978,7 +982,7 @@ export async function unlockVault(
     inMemorySession = session;
     saveActiveSession(session);
     if (typeof window !== "undefined") {
-      window.localStorage.setItem("vaultzero_has_native_vault", "true");
+      window.localStorage.setItem(NATIVE_VAULT_FLAG, "true");
     }
     return session;
   }

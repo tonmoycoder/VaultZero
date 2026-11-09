@@ -66,5 +66,15 @@ for (const name of CANONICAL) {
   t(`README really links ${name}`, readme.includes(`/releases/latest/download/${name}`));
 }
 
+console.log("=== V-96: the guide must reflect the CURRENT live release and PR #4 ===");
+// 2026-11-09 observation: v2.5.2 has 10 assets, all 5 canonical links
+// resolve (EXIT 0). The old intro still claimed 9 assets and two 404s, which
+// would send a local operator chasing a defect that no longer exists.
+t("no stale claim that two canonical links 404", !/২টি canonical নাম অনুপস্থিত|README-র ২টি লিংক 404/.test(doc));
+t("runbook states the live release has 10 assets", /১০টি অ্যাসেট/.test(doc));
+t("runbook references the active PR #4", /PR #4/.test(doc));
+t("runbook tells Antigravity to merge explicitly", /gh pr merge 4 --merge/.test(doc));
+t("runbook names the signed-log stop condition", /Using consistent release keystore\./.test(doc));
+
 console.log(`\nRESULT: ${failures === 0 ? "all passed" : failures + " failed"}`);
 process.exit(failures === 0 ? 0 : 1);

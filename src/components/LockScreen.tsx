@@ -69,11 +69,16 @@ export default function LockScreen({
     return "";
   });
 
+  // V-90: an explicit user choice wins over the asynchronous native probe.
+  const manualModeRef = useRef(false);
+
   useEffect(() => {
     let mounted = true;
     checkVaultConfiguredAsync().then((configured) => {
-      if (mounted && configured) {
-        setIsSetup(false);
+      // Both directions matter: a stale marker must send a fresh install
+      // BACK to Setup, not only a found .pmv file to Unlock.
+      if (mounted && !manualModeRef.current) {
+        setIsSetup(!configured);
       }
     });
     return () => {
@@ -555,6 +560,7 @@ export default function LockScreen({
               <button
                 type="button"
                 onClick={() => {
+                  manualModeRef.current = true;
                   setIsSetup((v) => !v);
                   setError("");
                 }}

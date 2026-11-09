@@ -144,6 +144,15 @@ export function parseOtpAuthUri(uri: string): TotpConfig {
     throw new Error("Missing required 'secret' parameter in otpauth URI");
   }
 
+  // V-94: an otpauth URI is only as trustworthy as the Base32 key inside it.
+  // A bare URL parse used to accept `secret=abc`, so a random short input was
+  // treated as a valid 2FA account and produced a bogus code from a one-byte
+  // HMAC key. Apply the same RFC 6238 rule as a pasted setup key, fail closed.
+  const checked = validateGoogleAuthSecret(secret);
+  if (!checked.valid) {
+    throw new Error(checked.error || "Invalid Base32 secret in otpauth URI");
+  }
+
   const algoRaw = url.searchParams.get("algorithm")?.toUpperCase();
   let algorithm: "SHA-1" | "SHA-256" | "SHA-512" = "SHA-1";
   if (algoRaw === "SHA256" || algoRaw === "SHA-256") algorithm = "SHA-256";
@@ -156,7 +165,7 @@ export function parseOtpAuthUri(uri: string): TotpConfig {
   const period = periodRaw >= 15 && periodRaw <= 120 ? periodRaw : 30;
 
   return {
-    secret,
+    secret: checked.cleanKey,
     algorithm,
     digits,
     period,

@@ -815,7 +815,7 @@ export function OcrModal({
             <div className="min-w-0 flex-1">
               <div className="mb-1 flex justify-between text-[8px]"><span className="font-semibold text-main">Reading text locally</span><span className="font-mono text-accent">{progress}%</span></div>
               <div className="h-1.5 overflow-hidden rounded-full bg-[var(--border-ink)]"><div className="h-full rounded-full transition-[width] duration-150" style={{ width: `${progress}%`, background: "linear-gradient(90deg, var(--accent-deep), var(--accent))" }} /></div>
-              <p className="mt-1 text-[7.5px] text-faint">{fileName} · on-device vision model</p>
+              <p className="mt-1 text-[7.5px] text-faint">{fileName} · on-device offline OCR (Tesseract)</p>
             </div>
           </div>
         </div>

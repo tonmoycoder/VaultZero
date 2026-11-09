@@ -1,8 +1,8 @@
 # VaultZero — সাইনড Beta প্রকাশের রানবুক
 
-> **এই ডকumentটি কেন আছে:** "ডাউনলোডে পুরনো ভার্সন আসছে" অভিযোগের মূল কারণ সোর্স কোডের বাগ নয়, **প্রকাশনা**। ২০২৬-১১-০৭ পর্যবেক্ষণে live latest release `v2.5.2`, প্রকাশিত `2026-11-02T01:18:40Z`, target `main`, ৯টি অ্যাসেট; অথচ সোর্সে V-85/V-86/V-87/V-88 পর্যন্ত কাজ হয়েছে। ফলে ব্যবহারকারী ৫ দিন পুরনো বিল্ড পাচ্ছেন। `scripts/check-live-release.mjs` এটাকেই `STALE` বলে ধরে এবং দেখায় যে ২টি canonical নাম অনুপস্থিত (`VaultZero-Windows-x64-Portable.exe`, `VaultZero-Windows-x64.msi`) → README-র ২টি লিংক 404।
+> **এই ডকুমেন্টটি কেন আছে:** "ডাউনলোডে পুরনো ভার্সন আসছে" অভিযোগের মূল কারণ সোর্স কোডের বাগ নয়, **প্রকাশনা**। ২০২৬-১১-০৯ পর্যবেক্ষণে live latest release `v2.5.2`, প্রকাশিত `2026-11-02T01:18:40Z`, target `main`, `draft:false prerelease:false`, **১০টি অ্যাসেট**। ৫টি canonical নামই README-তে আছে এবং published — `node scripts/check-live-release.mjs` → EXIT 0, `RESULT: all 5 links resolve`। তবুও স্ক্রিপ্ট `STALE` দেখায়: release-এর তারিখ সোর্সের (V-90…V-96, PR #4) চেয়ে পুরনো, তাই ব্যবহারকারী পুরনো বিল্ডই ডাউনলোড করছেন। স্ক্রিপ্টের পুরনো স্ট্রিংগুলো (`Connected: 192.1`, `IP: tauri.localhost`, `v2.5.0` ফুটার, "Offline / Air-gapped network") বর্তমান সোর্সে নেই — সেগুলো ঐ পুরনো APK-র। সমাধান একটাই: **এই commit থেকে সাইনড Beta প্রকাশ**।
 >
-> **এখানে (sandbox-এ) প্রকাশ সম্ভব নয়:** ৪টি Android signing secret নেই, `gh secret list` → HTTP 403 (`Resource not accessible by integration`), `keytool`/`java` নেই, Windows runner নেই। নিচের ধাপগুলো মানুষ বা Antigravity-কে locally চালাতে হবে। কোনো fake/debug অ্যাসেট তৈরি করা যাবে না।
+> **এখানে (sandbox-এ) প্রকাশ বা merge সম্ভব নয়:** ৪টি Android signing secret নেই, `gh secret list` → HTTP 403 (`Resource not accessible by integration`), `keytool`/`java` নেই, Windows runner নেই। নিচের ধাপগুলো মানুষ বা Antigravity-কে locally চালাতে হবে। কোনো fake/debug অ্যাসেট তৈরি করা যাবে না।
 
 ---
 
@@ -157,4 +157,48 @@ node scripts/check-live-release.mjs
 - `docs/ANTIGRAVITY-BRIEF.md` একটি **historical** round-2 audit brief (পুরনো ব্রাঞ্চ `arena/79f3d1ba-vaultzero`, PR #1); release-এর জন্য এটা অনুসরণ করবেন না।
 - এই ডকের বাইরের local-only কাজগুলোর জন্য আলাদা Antigravity prompt ব্যবহার করুন।
 
-*সর্বশেষ যাচাই: ২০২৬-১১-০৭, branch `arena/317fbb3c-vaultzero`।*
+---
+
+## ৮. PR #4 / নতুন ক্যাম্পেইন — Antigravity-র local কাজ ও merge
+
+> ২০২৬-১১-০৯: branch `arena/317fbb3c-vaultzero`, **PR #4** (`https://github.com/tonmoycoder/VaultZero/pull/4`) OPEN → `main`। ৭টি micro-batch V-90…V-96 শেষ; `gh pr checks 4` pass/pass; পূর্ণ Playwright ১৭৬/১৭৬; ৪৪টি harness সবুজ। Sandbox থেকে **কোনো merge, tag বা publish করা হয়নি** — নিচের local-only কাজগুলো শেষ করে Antigravity-কেই merge করতে হবে।
+
+### ক) সোর্স sync ও gate পুনরায় চালান (local)
+
+```bash
+git fetch origin
+git checkout arena/317fbb3c-vaultzero
+git pull --ff-only
+npm ci
+npx tsc --noEmit
+npm run verify
+npx -y node@20 scripts/run-harness.mjs
+npx playwright test
+npm audit --audit-level=high
+node scripts/check-live-release.mjs
+gh pr checks 4
+```
+
+`cargo clippy --all-targets -- -D warnings` ও `cargo test` Windows CI-তেই সবুজ; local Rust toolchain না থাকলে বাধ্য করবেন না।
+
+### খ) Physical-device যাচাই (sandbox-এ অসম্ভব)
+
+- **Windows:** `VaultZero-Windows-x64-Setup.exe` / `.msi` / Portable.exe ইনস্টল → প্রথম ভল্ট তৈরি (`aA2525@`), Quick Unlock, `<2s` cold start পরিমাপ, NSIS header/sidebar artwork, অনলাইনে "Check for Updates"।
+- **Android:** signed APK-তে status-bar clearance (header `y>=36`), gesture-nav bar-এ footer-এর তিনটি বাটন (`--safe-bottom` 24/48px), camera permission + real LAN P2P handshake + 120Hz jitter, adaptive icon-এর গাঢ় `#13182D` ব্যাকগ্রাউন্ড, `eng+ben` OCR বাংলা হাতের লেখায়।
+- কোনোটি ফেল করলে **merge আটকান**; আগে fix করে নতুন commit + CI সবুজ করুন।
+
+### গ) সাইনড Beta প্রকাশ (১–৬ নং ধাপ)
+
+৪টি secret, `keytool`, `workflow_dispatch` tag `v2.5.2-beta.1`। Signed log-এ অবশ্যই `Restored the long-lived release signing keystore from GitHub Secrets.` দেখতে হবে; `Using consistent release keystore.` দেখলে **থামুন, publish নয়**। ৫/৫ অ্যাসেট + `sha256sum -c SHA256SUMS.txt` + `node scripts/check-live-release.mjs`-এ আর `STALE` না থাকলেই সফল।
+
+### ঘ) Merge (সব local যাচাই সবুজ হওয়ার পর)
+
+```bash
+gh pr checks 4
+gh pr view 4 --json state,mergeable,baseRefName,headRefName
+gh pr merge 4 --merge
+```
+
+Auto-merge নয়; explicit PR নম্বর `4`। PR #1 (superseded) কখনোই merge/inspect করবেন না; PR #2 ও #3 আগেই MERGED।
+
+*সর্বশেষ যাচাই: ২০২৬-১১-০৯, branch `arena/317fbb3c-vaultzero`, PR #4 OPEN (merge বাকি)।*

@@ -617,3 +617,633 @@ remaining action is the human/Antigravity publication in
    - Executed `gh release upload v2.5.2 ... --clobber` with authenticated `GH_TOKEN`.
    - Verified via `scripts/check-live-release.mjs`: ALL 5 links resolve (`exit 0`).
    - Verified all 5 live download links returned HTTP 200 with exact matching byte counts.
+
+## V-90 — NEW PR CAMPAIGN, Step 0 + Batch 1 (2026-11-08)
+
+**New user instruction.** Put all work in a NEW pull request; work in 7
+micro-batches, one fully verified per turn; anything impossible here goes to a
+SEPARATE Antigravity prompt that must be told to do it locally AND merge.
+User asked for the best coding/reasoning effort. Branch stays
+`arena/317fbb3c-vaultzero` (active); no other branch was created.
+
+**Step 0 — skills (honest).** `npx -y skills` v1.7.6 works. 19 install commands
+attempted, 18 succeeded -> 38 skill directories in gitignored `.agents/skills/`
+(`frontend-design`, `webapp-testing`, `skill-creator`, `test-driven-development`,
+`systematic-debugging`, `verification-before-completion`, `using-superpowers`,
+`brainstorming`, `mobile-app-ui-design`, `mobile-android-design`,
+`antislop-layoutmobile`, `design-mobile-apps`, `mobile-native`,
+`emil-design-eng`, `momentic-mobile-test`, `ui-ux-pro-max`, etc.).
+`git status` stayed clean. TWO failed: `AIBiz-Automatyzacje/workspace-template-mobile`
+(a sibling `freshness-audit/SKILL.md` has a YAML parse error, installer skipped
+the package) and `leonxlnx/taste-skill --skill imagegen-frontend-mobile` (the
+repo exists but that skill is not published). Applied guidelines: 375px
+baseline, 8pt spacing, 44x44 tap targets, thumb zone, no overused blur,
+"mobile is a different layout, not a smaller desktop", TDD + verification
+before completion. Nothing fabricated.
+
+**Re-baseline — the workspace advanced AGAIN.** `gh pr create` failed with
+"No commits between main and arena/317fbb3c-vaultzero": GitHub `main` and this
+branch were IDENTICAL at `c6ea9b2`. Five external commits had landed since
+`ff5ba5a`: `fcf48b1` (custom-protocol default), `ebe805e` (resilient Entry
+deserialization + async native vault detection + unlock toggle),
+`9890618` (workspace deep-clean + fresh production assets), `d139472` (release
+sync doc), `c6ea9b2` (ignore root release artifacts). Fast-forwarded local
+HEAD with `git pull --ff-only`. CI `42405097576` (c6ea9b2) = success.
+LIVE RELEASE CHANGED: `v2.5.2` now has 10 assets including canonical
+`VaultZero-Windows-x64-Portable.exe` and `VaultZero-Windows-x64.msi`, so
+`check-live-release.mjs` is now EXIT 0 (5/5 links resolve). It STILL prints
+`STALE` because publishedAt is 2026-11-02 while source is 2026-11-08.
+PR state unchanged: #3 MERGED, #2 MERGED, #1 OPEN (never touched).
+
+**Batch 1 — "Failed to create vault" + first-run flow.** The `ebe805e` external
+fix already repaired the reported root cause (native `upsert_entry` sent an
+Entry missing Rust-required fields; `crates/vault-core/src/models.rs` gained
+`#[serde(default)]`/aliases; `vault_file_path` already does
+`create_dir_all(app_data_dir())`). It was NOT redone. RED tests were written
+against the exact screenshots instead, exposing ONE remaining real defect:
+`checkVaultConfiguredAsync()` only ever called `setIsSetup(false)`, and when
+`has_vault_file` returned false it still returned the stale
+`vaultzero_has_native_vault` localStorage marker -> a fresh install stayed on
+"Welcome back, Vault Owner." after the .pmv file disappeared. In browser mode
+the same marker also made a browser launch look configured.
+
+- NEW `tests/vault-first-run.spec.ts` (B-01..B-05): B-01 reproduces PC
+  `aA2525@` + EMPTY optional duress + NO keyfile -> vault created, no
+  "Failed to create vault"; B-02 real vault -> reload -> "Welcome back";
+  B-03 stubbed native `has_vault_file=true`, no marker -> "Welcome back";
+  B-04 stale marker + missing .pmv -> must fall back to SETUP and clear the
+  marker; B-05 browser launch must ignore a leftover native-only marker.
+- First run: 1 wrong TEST assumption (B-02 used `addInitScript`, which wiped
+  the container again on reload) -> fixed the TEST, not the app. Clean RED:
+  3 guards PASS, B-04/B-05 FAIL.
+- Minimal fix: `src/lib/storage.ts` — `NATIVE_VAULT_FLAG` constant,
+  `isVaultConfigured()` counts the native marker ONLY in native runtime, and
+  `checkVaultConfiguredAsync()` treats the `.pmv` file as authoritative
+  (sets the marker when present, REMOVES it when absent; browser mode checks
+  only `VAULT_STORAGE_KEY`). `src/components/LockScreen.tsx` — the async probe
+  now sets `isSetup(!configured)` in BOTH directions, guarded by a
+  `manualModeRef` so an explicit user toggle always wins.
+- GREEN: 5/5 first-run tests.
+
+**Gates (batch 1).** `tsc` 0; `npm run verify` 0 (38 harness, rustfmt, bundle
+budget); node20 38/38; `npm audit --audit-level=high` 0;
+`npx playwright test` **152 passed (9.0m)**; `check-live-release.mjs` EXIT 0.
+No app assets, no release, no merge performed here.
+
+### V-90 Batch 1 close-out / PR #4
+New PR **#4 OPEN** `arena/317fbb3c-vaultzero -> main`
+(https://github.com/tonmoycoder/VaultZero/pull/4). It was created AFTER the
+batch-1 commit because `main` and the branch were identical beforehand.
+CI `42413851086` (`643f36f7…`) watched to exit 0, both jobs `success`;
+`gh pr checks 4` -> `Frontend E2E & Security Tests pass (8m15s)` +
+`Test & Build Verification pass (2m38s)`. No merge/close performed — an
+explicit user decision is still required. Batch 1 CLOSED; resume with
+`continue` for Batch 2.
+
+## V-91 — Batch 2 / Android status bar, horizontal lock, All items + sort pills (2026-11-08)
+
+**Re-baseline.** HEAD `52866f1`, tree clean, `origin/arena/317fbb3c-vaultzero`
+and local in sync; PR #4 OPEN with pass/pass checks; no external advance this
+turn. `main` still `c6ea9b2`.
+
+**Measurements BEFORE editing (real 360x800 + 1440x900 Chromium, isMobile).**
+- Header: the "EN" control sat at `top=10px`; `.mobile-safe-top` computed
+  `padding-top: 0px` because headless Chromium (and many Android WebViews)
+  report `env(safe-area-inset-top) = 0px` while still drawing edge-to-edge.
+- `html/body/#root`: `overflow-x: hidden` already, but
+  `overscroll-behavior-x: auto` (sideways rubber-band / canvas drift).
+  `document.scrollWidth === clientWidth === 360` already held.
+- `All items` h2: `white-space: normal; flex-shrink: 1` (one line only by luck
+  at this width; a long folder name would wrap it).
+- Sort row: `flex-wrap: nowrap; overflow-x: auto; justify-content: flex-start`
+  (V-87) but `touch-action: auto` and a visible `thin-scrollbar`.
+- Lock card: `left=17, right=343`, `top=3`, no drift (guard only).
+
+**Test-first RED -> GREEN.** NEW `tests/vault-mobile-layout.spec.ts` B-06..B-10.
+RED = 3 FAIL (B-06 padding 0, B-07 `"auto"`, B-09 `"normal"`), 2 PASS
+(B-08 zero drift, B-10 centred card). Fixes, all minimal:
+- `src/index.css` base layer: `html/body/#root` gained `width:100%`,
+  `margin/padding:0`, `overscroll-behavior-x:none` (overflow-x hidden kept).
+- `src/index.css` mobile `@media (max-width:767px)`:
+  `.mobile-safe-top { padding-top: max(var(--safe-top), 36px) !important; }`.
+  Covers BOTH the vault column and the lock screen; `max()` lets a larger real
+  inset win; `!important` beats Tailwind `pt-3`. Measured after: EN `top=46px`.
+- `src/components/VaultHome.tsx`: h2 -> `min-w-0 max-w-[70vw] shrink-0
+  truncate whitespace-nowrap`; sort row `thin-scrollbar` -> `no-scrollbar` +
+  `touch-pan-x overscroll-x-contain` (the `.no-scrollbar` utility already
+  existed at `src/index.css:743`).
+- `tests/vault-mobile-shell.spec.ts` M-03 was STRENGTHENED, not weakened: its
+  old `dialogPadding === "24px"` expectation conflicts with the new floor, so
+  it now asserts >=36px at inset 0 and 24, AND exactly 64px at inset 64
+  (proving `max()` is live). The `.vault-shell` 24px assertion is unchanged.
+
+**Review -> improve -> review.** Re-captured 360x800: 36px clear band above the
+header, one-line "All items", single swipeable pill row, no horizontal scrollbar
+at document level. Targeted `vault-mobile-layout` + `vault-mobile-shell`
+= 26/26 pass (all M-01..M-19 guards survived).
+
+**Gates.** `tsc` 0; `npm run verify` 0 (38 harness, rustfmt, bundle budget);
+node20 38/38; `npm audit --audit-level=high` 0;
+`npx playwright test` **157 passed (10.1m)**; `check-live-release.mjs` EXIT 0.
+No app assets/release changed; no merge/close performed.
+
+**Honest note.** The trailing "Zero-knowledge, end-to-end encryption..." note
+is partly behind the floating nav at scrollTop=0 (it was before this batch
+too); `.mobile-safe-bottom` reserves 96px so scrolling reveals it (M-04).
+Batch 6 will assert its bounding box explicitly. Real-device status-bar
+insets still need Antigravity verification.
+
+### V-91 Batch 2 close-out (CI / PR #4)
+`b99fe78` pushed to `origin/arena/317fbb3c-vaultzero`. Both events watched to
+exit 0: push run `42417004735` and `pull_request` run `42417008987`, each
+`success`. `gh pr checks 4` -> Frontend E2E pass (5m53s) + Test & Build pass
+(2m10s). No merge/close. Batch 2 CLOSED; resume with `continue` for Batch 3.
+
+## V-92 — Batch 3 / P2P real LAN networking, strict peers, camera + footer (2026-11-08)
+
+**Branch status from the platform: `pr_open` (PR #4).** Re-baseline: HEAD
+`a0fc6ec`, `origin` in sync, `main` `c6ea9b2`, PR #4 pass/pass. A user-supplied
+`image-6.png` showed an Arena UI error ("Something went wrong. Please try
+again."), NOT a VaultZero screenshot — it was not treated as an app defect.
+
+### The working tree already contained UNCOMMITTED Batch-3 work
+`git status` showed 4 modified + 2 new files that this agent did NOT create:
+`src/lib/p2pMerge.ts`, `src-tauri/src/{lib,p2p_lan}.rs`,
+`src/components/toolModals.tsx`, `tests/harness/lan-peer-contract.test.mjs`,
+`tests/vault-p2p-lan.spec.ts` (all tagged `V-92`). Nothing was discarded or
+overwritten: the work was REVIEWED, executed, and then IMPROVED. It contains:
+- strict RFC-1918 peer validation in `isValidPeerAddress()` (rejects 8.8.8.8,
+  1.1.1.1, 172.15/172.32, 192.169, 169.254, 127.0.0.1, localhost,
+  `tauri.localhost`, `192.1`, bad ports); private ranges still accepted.
+- Rust `detect_lan_ipv4()` in `p2p_lan.rs`: `UdpSocket::bind("0.0.0.0:0")` +
+  `connect("8.8.8.8:80")` (no packet) + `local_addr()`, filtered to 10/8,
+  172.16/12, 192.168/16; exposed as `commands::lan_ipv4` and registered in
+  `generate_handler!`. `core:default` capability already permits app commands;
+  no ACL file change needed.
+- `SyncModal` asks Rust for the real LAN IP instead of
+  `window.location.hostname` (= `tauri.localhost`), with a manual RFC-1918 IP
+  input when detection fails. QR-photo fallback, handshake-gated `connected`
+  status, `CAMERA`/`INTERNET` manifest entries and the wrapping footer were
+  already correct (verified, not redone). `sync_vault_payload` -> Rust
+  `P2PManager::sync_from_peer` really performs a WebSocket handshake with an
+  ephemeral key exchange before any "Connected" state, so no fake connection.
+- 30-assertion harness (with positive controls) + 5 Playwright tests B-11..B-15.
+
+### Reviewed results BEFORE my changes
+`tsc` 0; `check:rust-format` 23/23; harness 30/30; B-11..B-15 5/5; manifest
+has `CAMERA`, `INTERNET`, `ACCESS_NETWORK_STATE`, `ACCESS_WIFI_STATE`,
+optional `android.hardware.camera`; QR-photo button is 44px tall with
+`accept="image/*" capture="environment"`.
+
+### My RED -> GREEN improvement (B-16)
+Found by review: the incoming code probed `lan_ipv4` ONCE in a mount effect.
+On Android the Wi-Fi interface often appears later, so the pairing QR kept
+`ip: ""` until the modal was closed and reopened. NEW B-16 stubs a late IP and
+counts probes. First draft gave a FALSE GREEN because React StrictMode invokes
+the mount effect twice; the test was hardened with an `__allowIp` flag plus a
+probe counter. True RED: `before=2, after=2` (Discover added no probe).
+Fix (minimal): `toolModals.tsx` — reusable `useCallback probeLanIp`, a
+StrictMode-safe `aliveRef` mount effect, and `if (!lanHost) void probeLanIp()`
+at the top of `handleDiscover` (never overwrites a manually typed IP).
+Harness gained 3 more assertions (reusable probe + Discover re-probe + a
+positive control). GREEN: B-11..B-16 6/6.
+
+### Full-suite regressions found and honestly resolved
+Full `npx playwright test` first pass: `161 passed / 2 failed`.
+1. M-19 `scrollHeight 643 > clientHeight 597`: the new REQUIRED 44px
+   manual-LAN-IP row made the Host body taller on a 390x844 phone. Measured
+   the body: `overflow-y: auto`, and after `scrollTop=48` the Discover button
+   ends at `bottom=733` vs `footer top=774` -> every control IS reachable.
+   M-19 was UPDATED, not weakened: it now asserts `overflowY === "auto"`,
+   bounded extra content (0 < extra <= 60), that scrolling actually moves,
+   and that the last control ends above the footer. Its desktop footnote
+   assertion is unchanged. V-88's "zero scroll" proxy is no longer valid now
+   that a user-requested control exists.
+2. B-16 `after === before`: `void probeLanIp()` is fire-and-forget and
+   dynamically imports the Tauri core, so the counter ticked AFTER the click
+   under a loaded 2-worker suite. Fixed the TEST race with `expect.poll` +
+   `scrollIntoViewIfNeeded`, not by touching app code.
+Second full pass: **163 passed (15.7m)**.
+
+**Gates.** `tsc` 0; `npm run verify` 0 (**39 harness files**, 23 rustfmt, bundle
+budget); node20 39/39; `npm audit --audit-level=high` 0; full Playwright
+**163/163**; `check-live-release.mjs` EXIT 0. Rust compilation/clippy is
+Windows-CI-only (no local cargo) and will be confirmed by the watched run.
+
+**Honest limits.** `.vztransfer` snapshot-file transfer is NOT implemented
+(never claimed); the encrypted QR + manual LAN IP are the working fallbacks.
+WebView `onPermissionRequest` bridging, real-device camera/LAN P2P handshake,
+carrier CG-NAT 10.x mis-detection and 120Hz behaviour need Antigravity on
+real hardware. No release assets/signing secrets touched here.
+
+### V-92 Batch 3 close-out (CI / PR #4)
+`09d5747` pushed. Both events watched to exit 0: push `42435123882` and
+`pull_request` `42435126914`, each `success` for BOTH `Test & Build
+Verification` (Windows Rust compile/clippy) and `Frontend End-to-End &
+Security Tests`. `gh pr checks 4` -> pass (8m57s) + pass (2m2s). No
+merge/close. Batch 3 CLOSED; resume with `continue` for Batch 4.
+
+## V-93 — Batch 4 / "Check for Updates" resilience, CSP, strict SemVer (2026-11-08)
+
+**Branch status from platform: `pr_open` (PR #4).** Baseline HEAD `8945e62`,
+clean, remote in sync, `main` `c6ea9b2`, PR #4 pass/pass. No external advance
+this turn.
+
+### Empirical CORS measurement (no guesses)
+`curl -I -H "Origin: https://tauri.localhost"`:
+- `https://api.github.com/repos/tonmoycoder/VaultZero/releases/latest` -> 200,
+  `access-control-allow-origin: *` (CORS-readable from a WebView).
+- `https://github.com/tonmoycoder/VaultZero/releases/latest` -> **302 ->
+  `/releases/tag/v2.5.2`, but NO CORS header**. A renderer therefore CANNOT
+  read the redirect `Location`; it can only use that URL as an opaque
+  `no-cors` REACHABILITY probe. No `tauri-plugin-http` and no direct
+  `reqwest` dependency were added (over-engineering for this batch).
+- `src-tauri/Cargo.toml` has no HTTP plugin; `reqwest` exists only in
+  Cargo.lock as a transitive dependency.
+
+### Root cause of the screenshot's false "Offline" message
+`fetchLatestRelease()` made ONE request to `/releases/latest` and mapped ANY
+thrown error straight to `status: "offline"`. A TLS/UA/CORS failure on an
+otherwise online phone therefore rendered "Offline / Air-gapped network:
+Cannot reach remote release server." Reproduced in real headless Chromium
+before the fix (`.artifacts/probe-update.mjs`), where the cert error is
+`ERR_CERT_AUTHORITY_INVALID`.
+
+### Test-first RED -> GREEN
+NEW `tests/harness/updater-resilience.test.mjs` (40th harness) stubs
+`globalThis.fetch` and drives `checkReleaseStatus(true)`; NEW
+`tests/vault-updater-resilience.spec.ts` (B-17..B-20) drives the real UI with
+`page.route`. RED = 11 harness FAIL (3 CSP tokens, 8s timeout, missing
+`X-GitHub-Api-Version`, no fallback, false offline) + the real modal showing
+Offline. Guards already passing: strict SemVer (same/newer/prerelease),
+`Accept` header, genuine all-paths-down offline.
+
+### Fixes (minimal)
+- `src-tauri/tauri.conf.json` `connect-src` gained
+  `https://*.githubusercontent.com`, `ipc:`, `http://ipc.localhost`
+  (kept `'self'`, `api.github.com`, `github.com`,
+  `objects.githubusercontent.com`).
+- `src/lib/updater.ts`: `RELEASE_CHECK_TIMEOUT_MS` 8s -> **10s**; pinned
+  `X-GitHub-Api-Version: 2022-11-28`; one `withReleaseTimeout` helper bounds
+  BOTH fetch and JSON body read; `statusFromRelease` extracted so the primary
+  object and the fallback ARRAY share one strict-SemVer path. New chain:
+  `/releases/latest` -> `/releases?per_page=1` (403/429/5xx/throw/404) ->
+  opaque `no-cors` probe of the public redirect URL -> only if all three fail
+  is `offline` returned. A reachable network with unreadable metadata now
+  returns `status: "error"` with "The network IS reachable ...".
+- `src/components/UpdateModal.tsx`: added the missing `status === "error"`
+  bilingual render block; otherwise the new honest message would be invisible.
+  `up_to_date` already printed `v2.5.2` ("✓ ... up-to-date"), so it was NOT
+  changed; `Update Now` still requires `compareSemver(remote, local) > 0`.
+
+### Review -> improve -> review
+Unmocked probe AFTER the fix logs all three attempts in order
+(`/releases/latest`, `/releases?per_page=1`, public redirect), each failing
+with `ERR_CERT_AUTHORITY_INVALID` in this sandbox -> "Offline" here is HONEST,
+not a false claim. On an online device B-17 (primary throw + fallback ->
+up-to-date), B-18 (403 + fallback v2.6.0 -> Update Now) and B-20 (reachable
+but malformed -> honest error) prove the false offline is gone.
+
+**Gates.** `tsc` 0; `npm run verify` 0 (**40 harness files**, 23 rustfmt,
+bundle budget); node20 40/40; `npm audit --audit-level=high` 0;
+`npx playwright test` **167 passed (13.0m)**; `check-live-release.mjs` EXIT 0.
+
+**Honest limits.** The renderer cannot read the 302 `Location` from
+`github.com` (no CORS); reading that tag would need a native Rust HTTP command
+which was NOT implemented here — no fake fallback was added. Real-device
+TLS/UA behaviour needs Antigravity verification. `AndroidManifest.xml`
+already had `INTERNET`, so it was not touched.
+
+### V-93 Batch 4 close-out (CI / PR #4)
+`0e616c7` pushed. Both events watched to exit 0: push `42458168857` and
+`pull_request` `42458173011`, each `success` for BOTH `Test & Build
+Verification` and `Frontend End-to-End & Security Tests`. `gh pr checks 4`
+-> pass (7m37s) + pass (2m35s). No merge/close. Batch 4 CLOSED; resume with
+`continue` for Batch 5.
+
+### V-94 Batch 5 — offline OCR, strict RFC 6238 TOTP, official icon parity (2026-11-08)
+
+**Inspect exact files.** `src/lib/ocr.ts` ALREADY ran a real
+`worker.recognize(processedBlob)` and returned `ret.data.text` (V-74),
+streamed 10 -> 25 -> worker logger -> 100, and
+`src/components/captureModals.tsx` seeded `OcrCopyPad` with `rawText` — the
+image filename, byte size and dimensions never became the extracted result.
+`src/lib/totp.ts` ALREADY enforced 16+ Base32 for pasted setup keys and
+computed the RFC 6238 Appendix B 8-digit vectors correctly
+(SHA-1 `94287082`, SHA-256 `46119246`, SHA-512 `90693936` @ T=59). All 15
+Android mipmap PNGs decode to the SAME dark neon-blue emblem: mean RGB of
+the central region differs from the 512px master by at most 9 per channel.
+So there was nothing to re-implement — the real defects were narrower.
+
+**RED, measured before any fix (3 files, 8 assertions + 1 browser test).**
+- `parseOtpAuthUri()` accepted ANY non-empty `secret=` parameter. Therefore
+  `isValidTotpSecret("otpauth://totp/Acme:bob?secret=abc")` returned TRUE and
+  `resolveTotpConfig()` produced a one-byte HMAC key: a random short input
+  was treated as a valid 2FA account. 5 harness FAIL and B-23 browser FAIL.
+- `src-tauri/icons/android/values/ic_launcher_background.xml` was the generic
+  Tauri white `#FFFFFF` while the official emblem's corner pixel is
+  `(19,24,45)` = `#13182D`; adaptive launchers therefore showed a white tile
+  behind a dark logo. 2 harness FAIL.
+- `captureModals.tsx` caption said "on-device vision model" although the
+  engine is offline Tesseract. 1 harness FAIL.
+- B-21 and B-22 were GREEN at RED time (correctly): real `eng` and dual
+  `eng+ben` offline OCR returned `demo@vaultzero.local` / `S3cret-42`, with
+  NO filename, size or dimensions in the result and a monotonic real
+  progress stream. This is the empirical proof that the old screenshot's
+  "OCR returns metadata" came from the old published APK, not this source.
+
+**Apply minimal clean code fix (3 source lines of behaviour).**
+- `src/lib/totp.ts`: `parseOtpAuthUri()` now runs the inner `secret` through
+  `validateGoogleAuthSecret()` and throws when invalid; it returns the
+  normalised `cleanKey`. This one change fixes BOTH `isValidTotpSecret()`
+  (which catches parse errors) and `resolveTotpConfig()` (fails closed).
+  Both callers (`LiveTotp.tsx`, `toolModals.tsx`) already had try/catch, so
+  no UI change was needed.
+- `ic_launcher_background.xml`: `#FFFFFF` -> `#13182D`.
+- `captureModals.tsx`: caption -> "on-device offline OCR (Tesseract)".
+
+**New / updated test-enforced contracts.**
+- `tests/harness/totp-uri-strict.test.mjs` (41st harness): positive control
+  proves a bare URL parser DOES return `secret=abc`; rejects 6 bad URIs;
+  accepts valid URIs; asserts fail-closed resolution; pins all three RFC
+  vectors.
+- `tests/harness/icon-parity.test.mjs` (42nd harness): pure-Node `zlib` PNG
+  decoder (no image dependency), exact per-density dimensions
+  (48/72/96/144/192 launchers, 108/162/216/324/432 foregrounds), central RGB
+  fingerprint delta <= 20 vs master, adaptive background parsed from the
+  actual `<color>` element, Windows `icon.ico` + NSIS references.
+- `tests/harness/offline-ocr.test.mjs`: +9 guards (recognised text, no
+  metadata assignment, real progress stages, `OcrCopyPad` seeded with
+  `rawText`, `eng+ben` wiring, honest caption).
+- `tests/vault-ocr-totp-icons.spec.ts`: B-21 real text/progress/no metadata,
+  B-22 `eng+ben` worker really recognises, B-23 strict 2FA in a real
+  browser (including the SHA-256 RFC vector).
+
+### Review -> improve -> review
+The first GREEN attempt still had one FAIL: the new background guard read the
+raw XML INCLUDING a comment that mentioned the old white hex literal. The
+TEST was wrong, not the app — it now strips XML comments and parses the
+`<color>` value; the comment was also reworded. The assertion was NOT
+weakened. A second tooling mistake was pointed at `/tmp/chromium` (a
+directory -> `EACCES`); the executable is `/tmp/chromium/chrome`. No feature
+was deleted or stubbed to satisfy a test.
+
+**Gates.** `npx tsc --noEmit` 0; `npm run verify` 0 (**42 harness files**,
+23 rustfmt, chunk budget); node20 harness 42/42;
+`npm audit --audit-level=high` 0 (0 vulnerabilities);
+`npx playwright test` **170 passed (10.2m)** (previous 167 + B-21..B-23);
+`check-live-release.mjs` EXIT 0 (`all 5 links resolve`).
+
+**Honest limits.** Real-device adaptive-icon rendering, Windows installer
+artwork on a real installer, and Bengali handwriting OCR accuracy still need
+Antigravity/physical-device verification; a pixel-fingerprint contract proves
+the shipped assets are the same emblem, not how every launcher masks it. No
+release was published and no merge was performed.
+
+### V-94 Batch 5 close-out (CI / PR #4)
+`249f116` pushed. Both events watched to exit 0: push `42503258511` and
+`pull_request` `42503261967`, each `success` for BOTH `Test & Build
+Verification` and `Frontend End-to-End & Security Tests` (4/4 jobs). Re-observed
+`gh pr checks 4` -> pass (8m46s) + pass (2m38s). PR #4 remains OPEN against
+`main`; no merge/close. Batch 5 CLOSED; resume with `continue` for Batch 6.
+
+### V-95 Batch 6 — explicit 360x800 / 1440x900 bounding-box DOM audit (2026-11-08)
+
+**Inspect exact files + empirical telemetry (real headless Chromium).**
+At BOTH viewports `scrollWidth === clientWidth === viewport` on Lock, Vault
+and Sync; the `VaultZero` header wordmark sits at `y=36` (360x800) and `y=33`
+(1440x900). After `Connect` on the Sync Scan tab, the three footer actions
+measured: 360x800 -> `Close 153..224 / 701..741`,
+`Send Vault 232..339 / 703..739`, `Receive & Merge 198..339 / 749..785`;
+1440x900 -> all three inside `401..1039 / 674..766`. All fully in bounds.
+`192.1` was rejected and a fresh vault was created at both viewports. These
+were GREEN at RED time, so they are GUARDS, not fixes.
+
+**The one real defect.** `src/components/ui.tsx`'s shared `<footer>` used a
+flat `py-3.5` (14px) and NEVER read `--safe-bottom`. Injecting a real 24px or
+48px Android gesture-bar inset left `padding-bottom: 14px` and every button
+unchanged at `bottom=785` of 800 — the bottom of `Receive & Merge` sat under
+system UI, which is exactly the user's "cut-off bottom Close / Send Vault /
+Receive & Merge" complaint. `LockScreen.tsx` and `.mobile-safe-bottom`
+already honoured the variable; only the shared Modal footer did not.
+
+**RED (before any fix).** 3 harness FAIL (`modal-footer` class, CSS rule,
+base-padding `calc`) and B-26 browser FAIL (`Expected > 14, Received 14`).
+B-24 / B-25 / B-27 / B-28 stayed GREEN, proving the fix was narrow.
+
+**Apply minimal clean code fix (2 files).**
+- `src/components/ui.tsx`: added the `modal-footer` class to the shared
+  `<footer>` (one class name, no markup restructuring).
+- `src/index.css`: `.modal-footer { padding-bottom:
+  calc(14px + var(--safe-bottom)) !important; }`. At an inset of 0px the
+  value is still 14px, so desktop and every existing test are unchanged;
+  `!important` beats the equal-specificity Tailwind `py-3.5` utility.
+  NO artificial floor was added: a floor would steal height from the modal
+  body and break M-16's "no clipped content" invariant at 390x844.
+
+### Review -> improve -> review
+Re-measured the real boxes AFTER the fix: inset 0 -> unchanged
+(`padding-bottom 14px`, `Receive & Merge bottom 785`); inset 24 ->
+`38px` / `bottom 761` (clears 776); inset 48 -> `62px` / `bottom 737`
+(clears 752). At 390x844 the inset-24 boxes end at 803 <= 820. The modal body
+`scrollHeight/clientHeight` stayed 428/428 and 411/411 in every case — the
+dialog grows upward instead of squeezing the body, so M-16 / M-19 remain
+valid. No assertion was weakened and no test was deleted.
+
+**New / updated test-enforced contracts.**
+- `tests/harness/modal-safe-area.test.mjs` (43rd harness): positive control
+  proves a flat 14px footer is detected as NOT inset-aware; asserts the class,
+  the `calc(... var(--safe-bottom))` rule, and guards for `--safe-bottom`,
+  `LockScreen`, `.mobile-safe-bottom` and batch 2's 36px top floor.
+- `tests/vault-bounding-audit.spec.ts` B-24..B-28: B-24 header `y>=32` +
+  `scrollWidth<=clientWidth` on Lock/Vault/Sync at both viewports (with a
+  positive control that a clipped box IS rejected by the detector); B-25 all
+  three footer boxes in bounds; B-26 a real 24px inset never covers them;
+  B-27 `192.1` rejected; B-28 a fresh vault really persists.
+
+**Gates.** `npx tsc --noEmit` 0; `npm run verify` 0 (**43 harness files**,
+23 rustfmt, chunk budget); node20 harness 43/43;
+`npm audit --audit-level=high` 0; `npx playwright test`
+**175 passed (10.9m)** (previous 170 + B-24..B-28);
+`check-live-release.mjs` EXIT 0.
+
+**Honest limits.** Whether a specific Android WebView reports
+`env(safe-area-inset-bottom)` correctly (as the top inset was found to be 0px
+in batch 2) can only be confirmed on a physical device; that verification is
+deferred to Antigravity rather than faked with an unmeasured floor. Real
+120Hz jitter, launcher masking and installer artwork remain unverified here.
+No release was published and no merge was performed.
+
+### V-95 Batch 6 close-out (CI / PR #4)
+`df72f73` pushed. Both events watched to exit 0: push `42507639824` and
+`pull_request` `42507643399`, each `success` for BOTH `Test & Build
+Verification` and `Frontend End-to-End & Security Tests` (4/4 jobs). Re-observed
+`gh pr checks 4` -> pass (9m11s) + pass (1m57s). PR #4 remains OPEN against
+`main`; no merge/close. Batch 6 CLOSED; resume with `continue` for Batch 7.
+
+### V-95 Batch 6 CI flake — RCA and correction (signed log evidence)
+The docs commit `f21cf4e` produced TWO runs on the same SHA. The
+`pull_request` run `42508535834` was fully green (175/175) and
+`gh pr checks 4` reported pass/pass, but the `push` run `42508531423` had
+`Frontend End-to-End & Security Tests` = **failure** (174 passed / 1 failed).
+It was NOT ignored: the signed job log for `128816346519` showed the single
+failure was `tests/vault-bounding-audit.spec.ts:141` B-28 —
+`expect(dialog).toHaveCount(0)` timed out after 20s (43 × "resolved to 1
+element"). Because the SAME commit passed 175/175 in the PR run and 4/4 in
+local `--repeat-each=4 --workers=2`, this was a TEST-HARNESS weakness, not an
+application regression:
+  1. two deliberately expensive 600k-PBKDF2 creations shared ONE page/context;
+  2. only one error string (`Failed to create vault`) was checked, so a
+     `Passwords do not match` / validation failure would be invisible;
+  3. a fixed 20s unmount timeout raced the KDF on a loaded CI runner.
+
+**Correction (test only, no app code touched).** B-28 is now one test PER
+viewport, so each gets its own fresh browser context; it asserts the container
+is absent before submitting, rejects ALL creation/validation errors, polls
+the REAL persisted `vaultzero_encrypted_vault_v2` key with a 60s bound, then
+asserts the dialog unmounts with a 30s bound. Measured locally: 8/8 repeat
+runs passed at 8.5–11.5s each (previously ~20s for two in one test).
+Re-ran every gate: `tsc` 0; `npm run verify` 0 (43 harness); node20 43/43;
+audit 0; live check 0; `npx playwright test` **176 passed (10.8m)**.
+No assertion was weakened — error detection was widened and the timeout now
+follows the actual cryptographic work.
+
+### V-95 Batch 6 FINAL close-out (CI / PR #4)
+Correction commit `5bc4b42` pushed. Both events watched to exit 0: push
+`42510871635` and `pull_request` `42510875667`, each `success` for BOTH
+`Test & Build Verification` and `Frontend End-to-End & Security Tests`
+(4/4 jobs, 176/176 Playwright). Re-observed `gh pr checks 4` -> pass (9m48s)
++ pass (2m33s). PR #4 remains OPEN against `main`; no merge/close.
+The earlier docs-commit push failure `42508531423` is documented above with
+its signed-log RCA and is superseded — the final head is fully green.
+Batch 6 CLOSED; resume with `continue` for Batch 7.
+
+### V-96 Batch 7 — CI/CD gates, 5 canonical assets, final Batch 1→7 regression loop (2026-11-08)
+
+**Inspect exact files.** `.github/workflows/ci.yml` step "Verify TypeScript &
+Frontend Build" ran ONLY `npm run build` (a Vite transpile): there was NO
+`npx tsc --noEmit` anywhere in either workflow, although it is a mandatory
+local gate. A type error could therefore reach `main` with a green CI.
+`.github/workflows/release.yml` built ONE combined `SHA256SUMS.txt` but never
+ran `sha256sum -c` on it, so a truncated/corrupt manifest could be published.
+Everything else was already correct and was kept as a GUARD: the exact 5
+canonical names in README / `check-live-release.mjs` / publish verification,
+`--latest` with no `--prerelease`, `--clobber`, no `|| true` on uploads,
+fail-closed signing, Rust fmt/clippy/test, Playwright, npm audit, Node 20.
+
+**RED.** New 44th harness `tests/harness/ci-release-gates.test.mjs` failed
+EXACTLY 2 assertions: `CI runs npx tsc --noEmit` and
+`workflow verifies SHA256SUMS.txt with sha256sum -c`. Its 4 positive controls
+proved both detectors really detect the gaps; every other assertion was
+already GREEN.
+
+**Apply minimal clean code fix (2 workflow files, no app code).**
+- `.github/workflows/ci.yml`: new `Verify TypeScript (no emit)` step running
+  `npx tsc --noEmit` immediately after `npm ci`, before the Vite build.
+- `.github/workflows/release.yml`: `sha256sum -c SHA256SUMS.txt` immediately
+  after the manifest is written and before any upload.
+
+### Review -> improve -> review
+The harness alone would only be a text match, so the EXACT workflow shell
+snippet was replayed against six dummy assets in `/tmp/b7-manifest`:
+`sha256sum -c` printed `OK` for all six and exited 0. YAML indentation was
+checked structurally (step at 6 spaces, `run:` at 8, shell line at 10) and
+GitHub Actions parses both files when CI runs. No local YAML dependency was
+installed. No assertion was weakened.
+
+**Final regression loop — Batch 1 → 7, once, zero regressions.**
+- All gates: `npx tsc --noEmit` 0; `npm run verify` 0 (**44 harness files**,
+  23 rustfmt, chunk budget); node20 harness 44/44;
+  `npm audit --audit-level=high` 0 (0 vulnerabilities);
+  `check-live-release.mjs` EXIT 0 (`all 5 links resolve`).
+- Batch-specific suites run IN ORDER (`vault-first-run`,
+  `vault-mobile-layout`, `vault-mobile-shell`, `vault-p2p-lan`,
+  `vault-updater-resilience`, `vault-ocr-totp-icons`,
+  `vault-bounding-audit`): **50 passed (3.3m)**, 0 failed.
+- Batch 7's own contract: `ci-release-gates.test.mjs` 44/44 harness GREEN.
+- FULL suite once more: `npx playwright test` **176 passed (11.7m)**,
+  0 failures. Batches 1-6 behaviour is unchanged by the two workflow fixes.
+
+**Honest limits.** No release was published, no tag was created and PR #4 was
+NOT merged: that requires the 4 Android signing secrets, `keytool`, a Windows
+runner and the signed-log gate in `docs/RELEASE-RUNBOOK.md`. The live `v2.5.2`
+release still has all 5 canonical assets but is STALE relative to source, so
+downloading the old APK still shows the old screenshot defects until a signed
+Beta is published by a human/Antigravity. Real-device camera/LAN P2P, 120Hz
+jitter, launcher masking, installer artwork and `<2s` cold start remain
+unmeasured here. No fake assets, debug keystore or fallback were added.
+
+### V-96 Batch 7 FINAL close-out (CI / PR #4)
+`6a564a6` pushed. Both events watched to exit 0: push `42546855522` and
+`pull_request` `42546859915`, each `success` for BOTH `Test & Build
+Verification` and `Frontend End-to-End & Security Tests` (4/4 jobs). The PR
+build-job step list proves the new gate really ran:
+`Verify TypeScript (no emit) -> success`, followed by `Verify TypeScript &
+Frontend Build -> success`, contrast, bundle budget, 44 harnesses, rustfmt,
+clippy, cargo test and audits. Re-observed `gh pr checks 4` -> pass (9m57s)
++ pass (2m52s).
+
+**Docs correction (second RED → GREEN in this batch).**
+`tests/harness/release-runbook.test.mjs` gained 5 V-96 assertions: 4 FAILED
+against the old guide (it still claimed 9 assets and two canonical 404s, and
+named neither PR #4 nor an explicit merge command). `docs/RELEASE-RUNBOOK.md`
+was then corrected to the 2026-11-09 observation — `v2.5.2`, 10 assets,
+`check-live-release.mjs` EXIT 0 / `all 5 links resolve`, still `STALE` — and
+section 8 was added: local sync + gates, physical-device verification, the
+signed-Beta/4-secret/`keytool`/signed-log gate, and finally
+`gh pr merge 4 --merge` (explicit PR number, no auto-merge; PR #1 never
+touched). Re-ran `npx tsc --noEmit` 0, `npm run verify` 0 (44 harness),
+node20 44/44 — all green. No source or Playwright spec changed after the
+176/176 full-suite run, and CI re-runs the full suite on the final head.
+
+**Campaign complete.** Batches 1-7 are CLOSED, both ledgers are current,
+PR #4 remains OPEN against `main` with pass/pass checks. No merge, no tag, no
+release publication from this agent. All remaining work is local-only and is
+handed to Antigravity with an explicit merge instruction in the separate
+Bengali prompt; the English master prompt is the final deliverable.
+
+## V-97 — Release Keystore Secrets, ManifestMerger2 Duplicate Attribute Fix & Signed Release Pipeline (2026-11-09)
+
+**Step 1: Keystore & GitHub Secrets Setup.**
+- Generated long-lived 2048-bit RSA PKCS12 release keystore valid for 10,000 days at `C:\Users\Tonmoy\.vaultzero-keys\vaultzero-release.jks` with alias `vaultzero` and distinguished name `CN=VaultZero, OU=Security, O=VaultZero, L=Dhaka, ST=Dhaka, C=BD` via Microsoft OpenJDK 17 `keytool`.
+- Configured all 4 production repository secrets on `tonmoycoder/VaultZero` via `gh secret set`: `ANDROID_KEYSTORE_BASE64`, `ANDROID_KEYSTORE_PASSWORD`, `ANDROID_KEY_ALIAS`, `ANDROID_KEY_PASSWORD`. Verified active via `gh secret list`.
+
+**Step 3: Local Windows Telemetry & Cold Start SLA.**
+- Executed `scratch/measure-coldstart.ps1` measuring `$HOME\Desktop\VaultZero.exe` (v2.5.2 binary, 18,411,008 B).
+- Measured cold start latency: **146 ms** (WaitForInputIdle: `True`, PID 2272), well below the 2000 ms SLA.
+- Verified 176/176 Playwright tests passing locally (including warmed cold-start runs of Pentest 1, Pentest 3, and password strength meter in 5.1s, 7.2s, 9.5s).
+
+**Release Run 42668919907 RCA & Android Build Failure.**
+- Dispatched release workflow `release.yml` with `tag_name=v2.5.2-beta.1`.
+- Job `Build Windows Installer & Portable` succeeded in 9m12s, building and uploading NSIS (`VaultZero-Windows-x64-Setup.exe`), Portable (`VaultZero-Windows-x64-Portable.exe`), and MSI (`VaultZero-Windows-x64.msi`).
+- Job `Build Android APK` failed with `ManifestMerger2$MergeFailureException: Error parsing /home/runner/work/VaultZero/VaultZero/src-tauri/gen/android/app/src/main/AndroidManifest.xml`.
+- RCA from signed log chunk 1579: Tauri CLI template already provides `android:usesCleartextTraffic="${usesCleartextTraffic}"`. The previous check in `scripts/patch-android-manifest.mjs` only checked `if (!/android:usesCleartextTraffic="true"/.test(manifest))`, causing it to append `android:usesCleartextTraffic="true"` right next to `${usesCleartextTraffic}`. AGP 9.0's ManifestMerger2 rejected the resulting duplicate XML attribute.
+
+**RED -> GREEN Fix & Guards.**
+- Modified `scripts/patch-android-manifest.mjs` to replace any existing `android:usesCleartextTraffic="[^"]*"` with `'android:usesCleartextTraffic="true"'`, and only append if missing entirely. Validated against 4 distinct manifest structures with Python `xml.etree.ElementTree`.
+- Extended `tests/harness/android-runtime.test.mjs` with assertions ensuring `${usesCleartextTraffic}` is cleanly replaced and no duplicate attributes are created.
+- Local verification gates all re-run and passing: `npx tsc --noEmit` exit 0; `npm run verify` exit 0 (44/44 harness files pass, WCAG 2.1 AA 100%, 23 Rust files formatted, bundle budget ok); `cargo clippy --all-targets -- -D warnings` exit 0; `cargo test -p vault-core` exit 0 (34 passed).
+- In release run `42674563823`:
+  - `Build Windows Installer & Portable` succeeded in 5m47s.
+  - `Build Signed Android APK` succeeded in 5m30s, verifying `"Restored the long-lived release signing keystore from GitHub Secrets."` in the signed log.
+  - `Publish to GitHub Releases` failed due to legacy manual asset DELETE call against non-existent endpoint `/releases/tags/$TAG/assets`.
+  - Fix: simplified `.github/workflows/release.yml` to rely on native `gh release upload "$TAG" "$file" --clobber` and `gh release view "$TAG" --json assets` for verification. All 44 harness tests pass.
+
+## V-98 — Release Workflow Green Exit, 5 Canonical Assets & Timezone Parity in Live Checker (2026-11-09)
+
+**Release Run 42679507033 Complete & Green.**
+- All 3 jobs completed with exit code 0:
+  - `Build Signed Android APK`: 5m22s (ID 129369930228). Signed log assertion confirmed: `"Restored the long-lived release signing keystore from GitHub Secrets."` (timestamp: `2026-11-09T19:07:51.2348541Z`).
+  - `Build Windows Installer & Portable`: 8m4s (ID 129369930548). Built NSIS installer, Portable exe, and MSI.
+  - `Publish to GitHub Releases`: 20s (ID 129374565199). Successfully uploaded all assets and verified contract against `v2.5.2-beta.1`.
+
+**5 Canonical Release Assets Published.**
+- `VaultZero-Windows-x64-Setup.exe` (12,865,560 bytes)
+- `VaultZero-Windows-x64-Portable.exe` (21,520,896 bytes)
+- `VaultZero-Windows-x64.msi` (14,131,200 bytes)
+- `VaultZero-Android.apk` (19,691,780 bytes)
+- `SHA256SUMS.txt` (691 bytes)
+
+**Live Checker Parity.**
+- Fixed `scripts/check-live-release.mjs` date comparison: converted both GitHub `publishedAt` ISO string and git commit timestamp to UTC day via `.toISOString().slice(0, 10)`, eliminating spurious `STALE` notice caused by UTC vs local timezone offset (+06:00).
+- `node scripts/check-live-release.mjs` exits with code 0 and ZERO `STALE` notices (`RESULT: all 5 links resolve`).

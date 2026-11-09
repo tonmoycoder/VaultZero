@@ -28,6 +28,12 @@ jobs:
       - name: Install Frontend Dependencies
         run: npm ci
 
+      # V-96: `npm run build` is a Vite transpile, NOT a type check. A type
+      # error could reach main even though the local gate `npx tsc --noEmit`
+      # would have caught it. CI now enforces the same contract.
+      - name: Verify TypeScript (no emit)
+        run: npx tsc --noEmit
+
       - name: Verify TypeScript & Frontend Build
         run: npm run build
 

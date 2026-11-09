@@ -346,40 +346,128 @@ export function clearReleaseCache(): void {
  * A WebView with no route to GitHub can leave `fetch()` pending forever;
  * "Check for Updates" then looks frozen. Bound every release request.
  */
-export const RELEASE_CHECK_TIMEOUT_MS = 8_000;
+export const RELEASE_CHECK_TIMEOUT_MS = 10_000;
 
-/** Performs the actual request against the GitHub releases API. */
-async function fetchLatestRelease(): Promise<CheckReleaseStatus> {
+/** CORS-enabled fallback endpoint when `/releases/latest` is rate-limited,
+ *  blocked by the WebView user agent, or served a transient error.
+ *  `api.github.com` sends `access-control-allow-origin: *`. */
+export const RELEASE_FALLBACK_URL = `https://api.github.com/repos/${GITHUB_REPO}/releases?per_page=1`;
+
+/** The public 302 redirect (`.../releases/latest -> .../releases/tag/vX.Y.Z`).
+ *  `github.com` sends NO CORS header, so a WebView cannot read the Location.
+ *  It is still usable as an opaque `no-cors` REACHABILITY probe: if the
+ *  request resolves the device is online, and claiming "air-gapped" would be
+ *  a lie. Reading the tag itself would require a native Rust HTTP command. */
+export const RELEASE_REDIRECT_URL = `https://github.com/${GITHUB_REPO}/releases/latest`;
+
+const GITHUB_API_HEADERS: Record<string, string> = {
+  Accept: "application/vnd.github+json",
+  "X-GitHub-Api-Version": "2022-11-28",
+};
+
+/** One timeout covers BOTH the request and the JSON body read. */
+async function withReleaseTimeout<T>(fn: (signal: AbortSignal) => Promise<T>): Promise<T> {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), RELEASE_CHECK_TIMEOUT_MS);
-  let res: Response;
   try {
-    // Only a NETWORK failure belongs in the "offline" bucket. A rate limit,
-    // an HTTP error or a malformed API body is a different problem and the
-    // UI must not claim the device is air-gapped when it is not.
-    res = await fetch(`https://api.github.com/repos/${GITHUB_REPO}/releases/latest?t=${Date.now()}`, {
-      headers: {
-        Accept: "application/vnd.github+json",
-      },
-      cache: "no-store",
-      signal: controller.signal,
-    });
-  } catch (err: any) {
+    return await fn(controller.signal);
+  } finally {
     clearTimeout(timer);
+  }
+}
+
+/** Maps one GitHub release object to the status the UI renders. */
+function statusFromRelease(data: any): CheckReleaseStatus {
+  const tagName = data.tag_name || "";
+  const cleanVersion = tagName.replace(/^v/i, "").trim();
+  const assets: GitHubAsset[] = Array.isArray(data.assets)
+    ? data.assets.map((a: any) => ({
+        name: a.name,
+        browser_download_url: a.browser_download_url,
+        size: a.size,
+      }))
+    : [];
+
+  const installerAsset = assets.find(
+    (a) => a.name.endsWith(".exe") && (a.name.includes("Setup") || a.name.includes("Installer") || a.name.includes("setup"))
+  );
+  const portableAsset = assets.find(
+    (a) => a.name.includes("portable") || a.name.includes("Portable") || a.name.endsWith(".exe")
+  );
+  const androidAsset = assets.find((a) => a.name.endsWith(".apk"));
+
+  const updateInfo: UpdateInfo = {
+    version: cleanVersion,
+    tagName,
+    name: data.name || `VaultZero ${tagName}`,
+    body: data.body || "",
+    publishedAt: data.published_at || new Date().toISOString(),
+    htmlUrl: data.html_url || RELEASE_REDIRECT_URL,
+    installerAsset,
+    portableAsset,
+    androidAsset,
+  };
+
+  // Strict SemVer 2.0.0 (prereleases sort below their release). Only a
+  // strictly newer version may offer "Update Now".
+  if (isNewerVersion(cleanVersion, CURRENT_APP_VERSION)) {
     return {
-      status: "offline",
+      status: "update_available",
       currentVersion: CURRENT_APP_VERSION,
-      message:
-        err?.name === "AbortError"
-          ? "Release check timed out. The device may be offline or the release server is unreachable."
-          : err?.message || "Air-gapped / offline environment",
+      remoteVersion: cleanVersion,
+      updateInfo,
     };
   }
-  clearTimeout(timer);
+  return {
+    status: "up_to_date",
+    currentVersion: CURRENT_APP_VERSION,
+    remoteVersion: cleanVersion,
+    updateInfo,
+  };
+}
 
-  try {
-    if (!res.ok) {
-      if (res.status === 404) {
+/**
+ * V-93: an online device must NEVER be told it is "Offline / Air-gapped"
+ * just because one GitHub request failed. Measured: the API host is
+ * CORS-enabled, the public redirect host is not.
+ *
+ *   1. `/releases/latest`            -> version (normal path)
+ *   2. `/releases?per_page=1`        -> version (403 / 429 / 5xx / TLS throw)
+ *   3. public redirect, `no-cors`    -> prove the network is reachable
+ *   4. only if ALL of them fail      -> genuine "offline"
+ */
+async function fetchLatestRelease(): Promise<CheckReleaseStatus> {
+  const attempts = [
+    `https://api.github.com/repos/${GITHUB_REPO}/releases/latest?t=${Date.now()}`,
+    RELEASE_FALLBACK_URL,
+  ];
+  let lastProblem = "";
+  let sawHttpError = false;
+
+  for (const url of attempts) {
+    let outcome: { data?: any; httpError?: number };
+    try {
+      outcome = await withReleaseTimeout(async (signal) => {
+        const res = await fetch(url, {
+          headers: GITHUB_API_HEADERS,
+          cache: "no-store",
+          signal,
+        });
+        if (!res.ok) return { httpError: res.status };
+        return { data: await res.json() };
+      });
+    } catch (err: any) {
+      lastProblem =
+        err?.name === "AbortError"
+          ? "Release check timed out."
+          : err?.message || "Could not reach the release server.";
+      continue; // a network/TLS throw is NOT yet proof of being offline
+    }
+
+    if (outcome.httpError !== undefined) {
+      sawHttpError = true;
+      lastProblem = `GitHub API returned HTTP status ${outcome.httpError}`;
+      if (outcome.httpError === 404 && url === attempts[0]) {
         return {
           status: "up_to_date",
           currentVersion: CURRENT_APP_VERSION,
@@ -387,67 +475,46 @@ async function fetchLatestRelease(): Promise<CheckReleaseStatus> {
           message: "No releases found on remote repository.",
         };
       }
-      return {
-        status: "error",
-        currentVersion: CURRENT_APP_VERSION,
-        message: `GitHub API returned HTTP status ${res.status}`,
-      };
+      continue; // rate limit, UA block or transient 5xx -> try the fallback
     }
 
-    const data = await res.json();
-    const tagName = data.tag_name || "";
-    const cleanVersion = tagName.replace(/^v/i, "").trim();
-
-    const assets: GitHubAsset[] = Array.isArray(data.assets)
-      ? data.assets.map((a: any) => ({
-          name: a.name,
-          browser_download_url: a.browser_download_url,
-          size: a.size,
-        }))
-      : [];
-
-    const installerAsset = assets.find(
-      (a) => a.name.endsWith(".exe") && (a.name.includes("Setup") || a.name.includes("Installer") || a.name.includes("setup"))
-    );
-    const portableAsset = assets.find(
-      (a) => a.name.includes("portable") || a.name.includes("Portable") || a.name.endsWith(".exe")
-    );
-    const androidAsset = assets.find((a) => a.name.endsWith(".apk"));
-
-    const updateInfo: UpdateInfo = {
-      version: cleanVersion,
-      tagName,
-      name: data.name || `VaultZero ${tagName}`,
-      body: data.body || "",
-      publishedAt: data.published_at || new Date().toISOString(),
-      htmlUrl: data.html_url || `https://github.com/${GITHUB_REPO}/releases/latest`,
-      installerAsset,
-      portableAsset,
-      androidAsset,
-    };
-
-    if (isNewerVersion(cleanVersion, CURRENT_APP_VERSION)) {
-      return {
-        status: "update_available",
-        currentVersion: CURRENT_APP_VERSION,
-        remoteVersion: cleanVersion,
-        updateInfo,
-      };
+    const data = Array.isArray(outcome.data) ? outcome.data[0] : outcome.data;
+    if (!data || typeof data.tag_name !== "string" || !data.tag_name) {
+      lastProblem = "The GitHub release response did not contain a version tag.";
+      continue;
     }
+    try {
+      return statusFromRelease(data);
+    } catch (err: any) {
+      lastProblem = `Could not read the GitHub release response: ${err?.message || "malformed response"}`;
+    }
+  }
 
+  // Both CORS-enabled API paths failed. Probe a DIFFERENT host before
+  // claiming the device is air-gapped. `no-cors` yields an opaque response
+  // that cannot be read, but a resolved promise proves the network is up.
+  const reachable = await withReleaseTimeout(async (signal) => {
+    await fetch(RELEASE_REDIRECT_URL, { mode: "no-cors", cache: "no-store", signal });
+    return true;
+  }).catch(() => false);
+
+  if (!reachable) {
     return {
-      status: "up_to_date",
+      status: "offline",
       currentVersion: CURRENT_APP_VERSION,
-      remoteVersion: cleanVersion,
-      updateInfo,
-    };
-  } catch (err: any) {
-    return {
-      status: "error",
-      currentVersion: CURRENT_APP_VERSION,
-      message: `Could not read the GitHub release response: ${err?.message || "malformed response"}`,
+      message: /timed out/i.test(lastProblem)
+        ? "Release check timed out. The device may be offline or the release server is unreachable."
+        : lastProblem || "Air-gapped / offline environment",
     };
   }
+
+  return {
+    status: "error",
+    currentVersion: CURRENT_APP_VERSION,
+    message: sawHttpError
+      ? "GitHub release metadata could not be read (rate-limited, or the WebView user agent was blocked). The network IS reachable — please try again shortly."
+      : `Could not read the GitHub release response. The network IS reachable — please try again shortly. ${lastProblem}`.trim(),
+  };
 }
 
 /**

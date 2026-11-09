@@ -138,6 +138,13 @@ pub mod commands {
         Ok(dir.join("local-vault.pmv").to_string_lossy().to_string())
     }
 
+    /// Real LAN IPv4 for the P2P Host QR. Delegates to the P2P module so the
+    /// UDP-route trick and the RFC-1918 filter live next to the transport.
+    #[tauri::command]
+    pub fn lan_ipv4() -> Option<String> {
+        crate::p2p_lan::detect_lan_ipv4()
+    }
+
     #[tauri::command]
     pub fn has_vault_file(app: tauri::AppHandle) -> bool {
         if let Ok(dir) = app.path().app_data_dir() {
@@ -883,6 +890,7 @@ pub fn run() {
             commands::lock_vault,
             commands::vault_file_path,
             commands::has_vault_file,
+            commands::lan_ipv4,
             commands::save_update_artifact,
             commands::create_vault,
             commands::unlock_vault,

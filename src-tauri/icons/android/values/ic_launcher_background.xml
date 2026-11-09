@@ -1,4 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-  <color name="ic_launcher_background">#FFFFFF</color>
+  <!-- V-94: match the official dark navy emblem (src-tauri/icons/icon.png
+       corner pixel 19,24,45). The generic white default made adaptive
+       launchers show a white tile behind a dark logo. -->
+  <color name="ic_launcher_background">#13182D</color>
 </resources>
