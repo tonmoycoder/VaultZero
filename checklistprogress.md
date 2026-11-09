@@ -354,4 +354,20 @@ Active branch: `arena/317fbb3c-vaultzero` (never rename). PR #2 + #3 MERGED, #1 
 - [x] Gates Verified: `npx tsc --noEmit` exit 0, `npm run verify` exit 0 (44/44 harness pass, contrast AA 100%, 23 rustfmt, bundle budget ok), `cargo test -p vault-core` 34/34 pass, `cargo clippy` 0 warnings.
 - [x] RCA of Publish Job 129355385531: Windows installer & portable succeeded (5m47s) and Android signed build succeeded (5m30s) verifying `"Restored the long-lived release signing keystore from GitHub Secrets."` in the signed log. The publish job failed trying to query non-existent `/releases/tags/$TAG/assets` and passing the 404 JSON to `gh api -X DELETE`. Fixed `.github/workflows/release.yml` to rely on native `gh release upload --clobber` and `gh release view "$TAG" --json assets` for asset verification.
 
+## PHASE G / V-98 — Release Workflow Green Exit, 5 Canonical Assets & Timezone Parity in Live Checker (2026-11-09)
+
+- [x] Release Run 42679507033 Complete & Green:
+  - `Build Signed Android APK`: SUCCESS in 5m22s (ID 129369930228).
+  - Signed log assertion confirmed: `"Restored the long-lived release signing keystore from GitHub Secrets."` (timestamp: 2026-11-09T19:07:51.2348541Z).
+  - `Build Windows Installer & Portable`: SUCCESS in 8m4s (ID 129369930548).
+  - `Publish to GitHub Releases`: SUCCESS in 20s (ID 129374565199).
+- [x] All 5 Canonical Assets Published & Verified:
+  - `VaultZero-Windows-x64-Setup.exe` (12,865,560 B)
+  - `VaultZero-Windows-x64-Portable.exe` (21,520,896 B)
+  - `VaultZero-Windows-x64.msi` (14,131,200 B)
+  - `VaultZero-Android.apk` (19,691,780 B)
+  - `SHA256SUMS.txt` (691 B)
+- [x] Live Checker Parity: Fixed date string comparison in `scripts/check-live-release.mjs` to compare ISO 8601 UTC dates (`.toISOString().slice(0, 10)`), resolving UTC/local offset mismatch. `node scripts/check-live-release.mjs` exits with code 0 and ZERO `STALE` notices (`RESULT: all 5 links resolve`).
+
+
 

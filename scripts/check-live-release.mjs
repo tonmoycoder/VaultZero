@@ -51,8 +51,8 @@ console.log(`local HEAD: ${head}`);
 // The user reported "downloads the old version". A release whose build
 // predates the current source is exactly that, independently of asset names.
 if (/^\d{4}-\d{2}-\d{2}/.test(published) && /^\S+ (\d{4}-\d{2}-\d{2})/.test(head)) {
-  const releaseDay = published.slice(0, 10);
-  const headDay = head.split(" ")[1].slice(0, 10);
+  const releaseDay = new Date(published).toISOString().slice(0, 10);
+  const headDay = new Date(head.split(" ")[1]).toISOString().slice(0, 10);
   if (releaseDay < headDay) {
     console.log(`STALE  release ${tag} predates local source (${releaseDay} < ${headDay}); users download old code until a signed Beta is published.`);
   }

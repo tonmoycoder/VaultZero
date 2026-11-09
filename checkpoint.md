@@ -1228,3 +1228,22 @@ Bengali prompt; the English master prompt is the final deliverable.
   - `Build Signed Android APK` succeeded in 5m30s, verifying `"Restored the long-lived release signing keystore from GitHub Secrets."` in the signed log.
   - `Publish to GitHub Releases` failed due to legacy manual asset DELETE call against non-existent endpoint `/releases/tags/$TAG/assets`.
   - Fix: simplified `.github/workflows/release.yml` to rely on native `gh release upload "$TAG" "$file" --clobber` and `gh release view "$TAG" --json assets` for verification. All 44 harness tests pass.
+
+## V-98 — Release Workflow Green Exit, 5 Canonical Assets & Timezone Parity in Live Checker (2026-11-09)
+
+**Release Run 42679507033 Complete & Green.**
+- All 3 jobs completed with exit code 0:
+  - `Build Signed Android APK`: 5m22s (ID 129369930228). Signed log assertion confirmed: `"Restored the long-lived release signing keystore from GitHub Secrets."` (timestamp: `2026-11-09T19:07:51.2348541Z`).
+  - `Build Windows Installer & Portable`: 8m4s (ID 129369930548). Built NSIS installer, Portable exe, and MSI.
+  - `Publish to GitHub Releases`: 20s (ID 129374565199). Successfully uploaded all assets and verified contract against `v2.5.2-beta.1`.
+
+**5 Canonical Release Assets Published.**
+- `VaultZero-Windows-x64-Setup.exe` (12,865,560 bytes)
+- `VaultZero-Windows-x64-Portable.exe` (21,520,896 bytes)
+- `VaultZero-Windows-x64.msi` (14,131,200 bytes)
+- `VaultZero-Android.apk` (19,691,780 bytes)
+- `SHA256SUMS.txt` (691 bytes)
+
+**Live Checker Parity.**
+- Fixed `scripts/check-live-release.mjs` date comparison: converted both GitHub `publishedAt` ISO string and git commit timestamp to UTC day via `.toISOString().slice(0, 10)`, eliminating spurious `STALE` notice caused by UTC vs local timezone offset (+06:00).
+- `node scripts/check-live-release.mjs` exits with code 0 and ZERO `STALE` notices (`RESULT: all 5 links resolve`).
