@@ -1117,3 +1117,58 @@ Correction commit `5bc4b42` pushed. Both events watched to exit 0: push
 The earlier docs-commit push failure `42508531423` is documented above with
 its signed-log RCA and is superseded — the final head is fully green.
 Batch 6 CLOSED; resume with `continue` for Batch 7.
+
+### V-96 Batch 7 — CI/CD gates, 5 canonical assets, final Batch 1→7 regression loop (2026-11-08)
+
+**Inspect exact files.** `.github/workflows/ci.yml` step "Verify TypeScript &
+Frontend Build" ran ONLY `npm run build` (a Vite transpile): there was NO
+`npx tsc --noEmit` anywhere in either workflow, although it is a mandatory
+local gate. A type error could therefore reach `main` with a green CI.
+`.github/workflows/release.yml` built ONE combined `SHA256SUMS.txt` but never
+ran `sha256sum -c` on it, so a truncated/corrupt manifest could be published.
+Everything else was already correct and was kept as a GUARD: the exact 5
+canonical names in README / `check-live-release.mjs` / publish verification,
+`--latest` with no `--prerelease`, `--clobber`, no `|| true` on uploads,
+fail-closed signing, Rust fmt/clippy/test, Playwright, npm audit, Node 20.
+
+**RED.** New 44th harness `tests/harness/ci-release-gates.test.mjs` failed
+EXACTLY 2 assertions: `CI runs npx tsc --noEmit` and
+`workflow verifies SHA256SUMS.txt with sha256sum -c`. Its 4 positive controls
+proved both detectors really detect the gaps; every other assertion was
+already GREEN.
+
+**Apply minimal clean code fix (2 workflow files, no app code).**
+- `.github/workflows/ci.yml`: new `Verify TypeScript (no emit)` step running
+  `npx tsc --noEmit` immediately after `npm ci`, before the Vite build.
+- `.github/workflows/release.yml`: `sha256sum -c SHA256SUMS.txt` immediately
+  after the manifest is written and before any upload.
+
+### Review -> improve -> review
+The harness alone would only be a text match, so the EXACT workflow shell
+snippet was replayed against six dummy assets in `/tmp/b7-manifest`:
+`sha256sum -c` printed `OK` for all six and exited 0. YAML indentation was
+checked structurally (step at 6 spaces, `run:` at 8, shell line at 10) and
+GitHub Actions parses both files when CI runs. No local YAML dependency was
+installed. No assertion was weakened.
+
+**Final regression loop — Batch 1 → 7, once, zero regressions.**
+- All gates: `npx tsc --noEmit` 0; `npm run verify` 0 (**44 harness files**,
+  23 rustfmt, chunk budget); node20 harness 44/44;
+  `npm audit --audit-level=high` 0 (0 vulnerabilities);
+  `check-live-release.mjs` EXIT 0 (`all 5 links resolve`).
+- Batch-specific suites run IN ORDER (`vault-first-run`,
+  `vault-mobile-layout`, `vault-mobile-shell`, `vault-p2p-lan`,
+  `vault-updater-resilience`, `vault-ocr-totp-icons`,
+  `vault-bounding-audit`): **50 passed (3.3m)**, 0 failed.
+- Batch 7's own contract: `ci-release-gates.test.mjs` 44/44 harness GREEN.
+- FULL suite once more: `npx playwright test` **176 passed (11.7m)**,
+  0 failures. Batches 1-6 behaviour is unchanged by the two workflow fixes.
+
+**Honest limits.** No release was published, no tag was created and PR #4 was
+NOT merged: that requires the 4 Android signing secrets, `keytool`, a Windows
+runner and the signed-log gate in `docs/RELEASE-RUNBOOK.md`. The live `v2.5.2`
+release still has all 5 canonical assets but is STALE relative to source, so
+downloading the old APK still shows the old screenshot defects until a signed
+Beta is published by a human/Antigravity. Real-device camera/LAN P2P, 120Hz
+jitter, launcher masking, installer artwork and `<2s` cold start remain
+unmeasured here. No fake assets, debug keystore or fallback were added.

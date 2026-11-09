@@ -324,3 +324,16 @@ Active branch: `arena/317fbb3c-vaultzero` (never rename). PR #2 + #3 MERGED, #1 
 - [x] Re-ran all gates: tsc 0 · verify 0 (43 harness) · node20 43/43 · audit 0 · live 0 · Playwright **176/176 (10.8m)**
 - [x] `5bc4b42` pushed; push `42510871635` + PR `42510875667` BOTH watched to exit 0 (4/4 jobs success); `gh pr checks 4` pass/pass
 - [x] Batch 6 FULLY CLOSED (including CI flake correction) — resume with `continue` for Batch 7
+
+## PHASE F / V-96 — Batch 7: CI/CD + 5 canonical assets + final Batch 1→7 loop (2026-11-08)
+
+- [x] Re-baselined: HEAD `fb692d7`, PR #4 `pr_open` pass/pass, worktree clean
+- [x] Inspected both workflows: CI had NO `npx tsc --noEmit` (only Vite build); release built `SHA256SUMS.txt` but never ran `sha256sum -c`
+- [x] Guards confirmed already correct: exact 5 canonical names in README / checker / publish verify, `--latest` no `--prerelease`, `--clobber`, no `|| true`, Rust fmt/clippy/test, Playwright, audit, Node 20
+- [x] RED: 44th harness `ci-release-gates.test.mjs` failed EXACTLY 2 assertions; 4 positive controls prove both detectors work
+- [x] GREEN fix 1: `ci.yml` += `Verify TypeScript (no emit)` step (`npx tsc --noEmit`) after `npm ci`
+- [x] GREEN fix 2: `release.yml` += `sha256sum -c SHA256SUMS.txt` before upload
+- [x] Review: exact shell snippet replayed on 6 dummy assets -> all `OK`, exit 0; YAML indentation structurally verified; no dependency installed
+- [x] FINAL LOOP Batch 1→7: tsc 0 · verify 0 (**44 harness**) · node20 44/44 · audit 0 · live 5/5 · batch suites in order **50 passed (3.3m)** · FULL Playwright **176/176 (11.7m)** — zero regressions
+- [!] No release/tag/merge: needs 4 signing secrets + keytool + Windows runner + signed-log gate; live `v2.5.2` still STALE; real-device checks remain for Antigravity
+- [ ] Final deliverables (this turn): comprehensive Bengali Engineering Report, SEPARATE Bengali Antigravity prompt (local work AND merge), English master prompt LAST

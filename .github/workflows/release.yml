@@ -328,6 +328,10 @@ jobs:
             printf '%s  %s\n' "$hash" "$file" >> SHA256SUMS.txt
           done <<< "$files"
           cat SHA256SUMS.txt
+          # V-96: verify the manifest BEFORE uploading. A truncated or
+          # corrupt SHA256SUMS.txt must fail the release instead of shipping
+          # to users who run `sha256sum -c` after download.
+          sha256sum -c SHA256SUMS.txt
 
       - name: Create or Update GitHub Release & Upload Assets
         env:
