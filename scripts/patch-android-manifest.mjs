@@ -57,21 +57,22 @@ if (additions.length) {
 }
 
 // Local LAN P2P uses plain HTTP; Android 9+ blocks cleartext by default.
-if (!/android:usesCleartextTraffic="true"/.test(manifest)) {
-  if (/<application\b[^>]*>/.test(manifest)) {
-    // V-84: `tauri android init` emits a SELF-CLOSING <application ... />.
-    // Appending an attribute after the slash produced invalid XML
-    // (`<application ... / android:...>`) and broke the APK build. Preserve
-    // the original tag form instead of blindly string-concatenating.
-    manifest = manifest.replace(/<application\b[^>]*>/, (tag) => {
-      const selfClosing = /\/>$/.test(tag);
-      const attrs = tag.replace(/^<application\b/, "").replace(/\s*\/?>$/, "").trimEnd();
-      return `<application${attrs} android:usesCleartextTraffic="true"${selfClosing ? " />" : ">"}`;
-    });
-  } else {
-    console.error("[android-manifest] generated manifest has no <application> element — cannot enable LAN P2P.");
-    process.exit(1);
-  }
+// Tauri's generated manifest includes `android:usesCleartextTraffic="${usesCleartextTraffic}"`.
+// Replacing it prevents duplicate attribute errors in ManifestMerger2.
+if (/android:usesCleartextTraffic="[^"]*"/.test(manifest)) {
+  manifest = manifest.replace(
+    /android:usesCleartextTraffic="[^"]*"/,
+    'android:usesCleartextTraffic="true"'
+  );
+} else if (/<application\b[^>]*>/.test(manifest)) {
+  manifest = manifest.replace(/<application\b[^>]*>/, (tag) => {
+    const selfClosing = /\/>$/.test(tag);
+    const attrs = tag.replace(/^<application\b/, "").replace(/\s*\/?>$/, "").trimEnd();
+    return `<application${attrs} android:usesCleartextTraffic="true"${selfClosing ? " />" : ">"}`;
+  });
+} else {
+  console.error("[android-manifest] generated manifest has no <application> element — cannot enable LAN P2P.");
+  process.exit(1);
 }
 
 writeFileSync(GENERATED, manifest, "utf8");

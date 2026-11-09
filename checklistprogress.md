@@ -341,3 +341,15 @@ Active branch: `arena/317fbb3c-vaultzero` (never rename). PR #2 + #3 MERGED, #1 
 - [x] Re-ran after docs edit: tsc 0 · verify 0 (44 harness) · node20 44/44
 - [x] Batches 1-7 CLOSED · final Batch 1→7 loop zero regressions · PR #4 OPEN pass/pass · NO merge/tag/publish
 - [x] Final deliverables delivered in chat: comprehensive Bengali Engineering Report + SEPARATE Bengali Antigravity prompt (local work AND merge) + English master prompt LAST
+
+## PHASE G / V-97 — Release Keystore Secrets, ManifestMerger2 Duplicate Attribute Fix & Signed Release Pipeline (2026-11-09)
+
+- [x] Step 1 Keystore: Generated 2048-bit RSA PKCS12 release keystore valid for 10,000 days at `C:\Users\Tonmoy\.vaultzero-keys\vaultzero-release.jks` with alias `vaultzero` and distinguished name `CN=VaultZero, OU=Security, O=VaultZero, L=Dhaka, ST=Dhaka, C=BD` via OpenJDK 17 `keytool`.
+- [x] Step 1 Secrets: Configured all 4 production repository secrets on `tonmoycoder/VaultZero` via `gh secret set`: `ANDROID_KEYSTORE_BASE64`, `ANDROID_KEYSTORE_PASSWORD`, `ANDROID_KEY_ALIAS`, `ANDROID_KEY_PASSWORD`. Confirmed active via `gh secret list`.
+- [x] Step 3 Local Telemetry: Measured Windows cold start latency on `Desktop\VaultZero.exe`: **146 ms** (WaitForInputIdle: True, PID 2272), well within the < 2000 ms SLA.
+- [x] Playwright 176/176 Verified: All 176 tests passed on local (including 3 cold-start suites verified in 5.1s, 7.2s, 9.5s).
+- [x] RCA of Android Release Build Failure: In `release.yml` run `42668919907`, `Build Windows Installer & Portable` succeeded in 9m12s (NSIS, Portable, MSI built), but Android build failed with `ManifestMerger2$MergeFailureException: Error parsing ... AndroidManifest.xml`. Root-caused from signed log chunk 1579: Tauri CLI template already provides `android:usesCleartextTraffic="${usesCleartextTraffic}"`. The previous check in `scripts/patch-android-manifest.mjs` only looked for `="true"`, causing a duplicate attribute `android:usesCleartextTraffic="${usesCleartextTraffic}" android:usesCleartextTraffic="true"` which broke the XML parser.
+- [x] RED -> GREEN Fix: Updated `scripts/patch-android-manifest.mjs` to replace any existing `android:usesCleartextTraffic="[^"]*"` with `"true"`, or append cleanly if missing.
+- [x] Guard Added: `tests/harness/android-runtime.test.mjs` extended to assert that Tauri template `${usesCleartextTraffic}` is replaced with `"true"` and contains exactly 1 attribute with no duplicate XML attributes.
+- [x] Gates Verified: `npx tsc --noEmit` exit 0, `npm run verify` exit 0 (44/44 harness pass, contrast AA 100%, 23 rustfmt, bundle budget ok), `cargo test -p vault-core` 34/34 pass, `cargo clippy` 0 warnings.
+

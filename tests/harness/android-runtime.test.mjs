@@ -136,6 +136,17 @@ try {
   t("self-closing form is preserved", /<application[^>]*\/>/.test(out));
   t("camera feature is injected into the generated manifest", /uses-feature[^>]*required="false"/.test(out));
   t("a second run injects nothing (idempotent)", /0 newly injected/.test(run()));
+
+  // Test real Tauri CLI template containing ${usesCleartextTraffic}
+  writeFileSync(
+    genPath,
+    '<?xml version="1.0" encoding="utf-8"?>\n<manifest xmlns:android="http://schemas.android.com/apk/res/android">\n    <application android:label="VaultZero" android:usesCleartextTraffic="${usesCleartextTraffic}">\n        <activity android:name=".MainActivity" />\n    </application>\n</manifest>\n',
+    "utf8"
+  );
+  run();
+  const tauriOut = readFileSync(genPath, "utf8");
+  t("tauri template has cleartext set to true", /android:usesCleartextTraffic="true"/.test(tauriOut));
+  t("no duplicate usesCleartextTraffic attribute", (tauriOut.match(/android:usesCleartextTraffic=/g) || []).length === 1);
 } catch (err) {
   t("patch step executes without throwing", false, err.message);
 } finally {

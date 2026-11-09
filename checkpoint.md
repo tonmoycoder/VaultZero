@@ -1201,3 +1201,25 @@ PR #4 remains OPEN against `main` with pass/pass checks. No merge, no tag, no
 release publication from this agent. All remaining work is local-only and is
 handed to Antigravity with an explicit merge instruction in the separate
 Bengali prompt; the English master prompt is the final deliverable.
+
+## V-97 — Release Keystore Secrets, ManifestMerger2 Duplicate Attribute Fix & Signed Release Pipeline (2026-11-09)
+
+**Step 1: Keystore & GitHub Secrets Setup.**
+- Generated long-lived 2048-bit RSA PKCS12 release keystore valid for 10,000 days at `C:\Users\Tonmoy\.vaultzero-keys\vaultzero-release.jks` with alias `vaultzero` and distinguished name `CN=VaultZero, OU=Security, O=VaultZero, L=Dhaka, ST=Dhaka, C=BD` via Microsoft OpenJDK 17 `keytool`.
+- Configured all 4 production repository secrets on `tonmoycoder/VaultZero` via `gh secret set`: `ANDROID_KEYSTORE_BASE64`, `ANDROID_KEYSTORE_PASSWORD`, `ANDROID_KEY_ALIAS`, `ANDROID_KEY_PASSWORD`. Verified active via `gh secret list`.
+
+**Step 3: Local Windows Telemetry & Cold Start SLA.**
+- Executed `scratch/measure-coldstart.ps1` measuring `$HOME\Desktop\VaultZero.exe` (v2.5.2 binary, 18,411,008 B).
+- Measured cold start latency: **146 ms** (WaitForInputIdle: `True`, PID 2272), well below the 2000 ms SLA.
+- Verified 176/176 Playwright tests passing locally (including warmed cold-start runs of Pentest 1, Pentest 3, and password strength meter in 5.1s, 7.2s, 9.5s).
+
+**Release Run 42668919907 RCA & Android Build Failure.**
+- Dispatched release workflow `release.yml` with `tag_name=v2.5.2-beta.1`.
+- Job `Build Windows Installer & Portable` succeeded in 9m12s, building and uploading NSIS (`VaultZero-Windows-x64-Setup.exe`), Portable (`VaultZero-Windows-x64-Portable.exe`), and MSI (`VaultZero-Windows-x64.msi`).
+- Job `Build Android APK` failed with `ManifestMerger2$MergeFailureException: Error parsing /home/runner/work/VaultZero/VaultZero/src-tauri/gen/android/app/src/main/AndroidManifest.xml`.
+- RCA from signed log chunk 1579: Tauri CLI template already provides `android:usesCleartextTraffic="${usesCleartextTraffic}"`. The previous check in `scripts/patch-android-manifest.mjs` only checked `if (!/android:usesCleartextTraffic="true"/.test(manifest))`, causing it to append `android:usesCleartextTraffic="true"` right next to `${usesCleartextTraffic}`. AGP 9.0's ManifestMerger2 rejected the resulting duplicate XML attribute.
+
+**RED -> GREEN Fix & Guards.**
+- Modified `scripts/patch-android-manifest.mjs` to replace any existing `android:usesCleartextTraffic="[^"]*"` with `'android:usesCleartextTraffic="true"'`, and only append if missing entirely. Validated against 4 distinct manifest structures with Python `xml.etree.ElementTree`.
+- Extended `tests/harness/android-runtime.test.mjs` with assertions ensuring `${usesCleartextTraffic}` is cleanly replaced and no duplicate attributes are created.
+- Local verification gates all re-run and passing: `npx tsc --noEmit` exit 0; `npm run verify` exit 0 (44/44 harness files pass, WCAG 2.1 AA 100%, 23 Rust files formatted, bundle budget ok); `cargo clippy --all-targets -- -D warnings` exit 0; `cargo test -p vault-core` exit 0 (34 passed).
