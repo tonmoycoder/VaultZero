@@ -1223,3 +1223,8 @@ Bengali prompt; the English master prompt is the final deliverable.
 - Modified `scripts/patch-android-manifest.mjs` to replace any existing `android:usesCleartextTraffic="[^"]*"` with `'android:usesCleartextTraffic="true"'`, and only append if missing entirely. Validated against 4 distinct manifest structures with Python `xml.etree.ElementTree`.
 - Extended `tests/harness/android-runtime.test.mjs` with assertions ensuring `${usesCleartextTraffic}` is cleanly replaced and no duplicate attributes are created.
 - Local verification gates all re-run and passing: `npx tsc --noEmit` exit 0; `npm run verify` exit 0 (44/44 harness files pass, WCAG 2.1 AA 100%, 23 Rust files formatted, bundle budget ok); `cargo clippy --all-targets -- -D warnings` exit 0; `cargo test -p vault-core` exit 0 (34 passed).
+- In release run `42674563823`:
+  - `Build Windows Installer & Portable` succeeded in 5m47s.
+  - `Build Signed Android APK` succeeded in 5m30s, verifying `"Restored the long-lived release signing keystore from GitHub Secrets."` in the signed log.
+  - `Publish to GitHub Releases` failed due to legacy manual asset DELETE call against non-existent endpoint `/releases/tags/$TAG/assets`.
+  - Fix: simplified `.github/workflows/release.yml` to rely on native `gh release upload "$TAG" "$file" --clobber` and `gh release view "$TAG" --json assets` for verification. All 44 harness tests pass.
