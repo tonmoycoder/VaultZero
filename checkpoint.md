@@ -1172,3 +1172,32 @@ downloading the old APK still shows the old screenshot defects until a signed
 Beta is published by a human/Antigravity. Real-device camera/LAN P2P, 120Hz
 jitter, launcher masking, installer artwork and `<2s` cold start remain
 unmeasured here. No fake assets, debug keystore or fallback were added.
+
+### V-96 Batch 7 FINAL close-out (CI / PR #4)
+`6a564a6` pushed. Both events watched to exit 0: push `42546855522` and
+`pull_request` `42546859915`, each `success` for BOTH `Test & Build
+Verification` and `Frontend End-to-End & Security Tests` (4/4 jobs). The PR
+build-job step list proves the new gate really ran:
+`Verify TypeScript (no emit) -> success`, followed by `Verify TypeScript &
+Frontend Build -> success`, contrast, bundle budget, 44 harnesses, rustfmt,
+clippy, cargo test and audits. Re-observed `gh pr checks 4` -> pass (9m57s)
++ pass (2m52s).
+
+**Docs correction (second RED → GREEN in this batch).**
+`tests/harness/release-runbook.test.mjs` gained 5 V-96 assertions: 4 FAILED
+against the old guide (it still claimed 9 assets and two canonical 404s, and
+named neither PR #4 nor an explicit merge command). `docs/RELEASE-RUNBOOK.md`
+was then corrected to the 2026-11-09 observation — `v2.5.2`, 10 assets,
+`check-live-release.mjs` EXIT 0 / `all 5 links resolve`, still `STALE` — and
+section 8 was added: local sync + gates, physical-device verification, the
+signed-Beta/4-secret/`keytool`/signed-log gate, and finally
+`gh pr merge 4 --merge` (explicit PR number, no auto-merge; PR #1 never
+touched). Re-ran `npx tsc --noEmit` 0, `npm run verify` 0 (44 harness),
+node20 44/44 — all green. No source or Playwright spec changed after the
+176/176 full-suite run, and CI re-runs the full suite on the final head.
+
+**Campaign complete.** Batches 1-7 are CLOSED, both ledgers are current,
+PR #4 remains OPEN against `main` with pass/pass checks. No merge, no tag, no
+release publication from this agent. All remaining work is local-only and is
+handed to Antigravity with an explicit merge instruction in the separate
+Bengali prompt; the English master prompt is the final deliverable.

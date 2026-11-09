@@ -336,4 +336,8 @@ Active branch: `arena/317fbb3c-vaultzero` (never rename). PR #2 + #3 MERGED, #1 
 - [x] Review: exact shell snippet replayed on 6 dummy assets -> all `OK`, exit 0; YAML indentation structurally verified; no dependency installed
 - [x] FINAL LOOP Batch 1→7: tsc 0 · verify 0 (**44 harness**) · node20 44/44 · audit 0 · live 5/5 · batch suites in order **50 passed (3.3m)** · FULL Playwright **176/176 (11.7m)** — zero regressions
 - [!] No release/tag/merge: needs 4 signing secrets + keytool + Windows runner + signed-log gate; live `v2.5.2` still STALE; real-device checks remain for Antigravity
-- [ ] Final deliverables (this turn): comprehensive Bengali Engineering Report, SEPARATE Bengali Antigravity prompt (local work AND merge), English master prompt LAST
+- [x] `6a564a6` pushed; push `42546855522` + PR `42546859915` both watched to exit 0 (4/4 jobs success); CI step `Verify TypeScript (no emit) -> success` confirmed; `gh pr checks 4` pass/pass
+- [x] Docs RED→GREEN: 5 new `release-runbook` assertions (4 FAIL -> all pass); runbook intro fixed to 10 assets / 5-of-5 resolving / still STALE; section 8 added with local verification + `gh pr merge 4 --merge`
+- [x] Re-ran after docs edit: tsc 0 · verify 0 (44 harness) · node20 44/44
+- [x] Batches 1-7 CLOSED · final Batch 1→7 loop zero regressions · PR #4 OPEN pass/pass · NO merge/tag/publish
+- [x] Final deliverables delivered in chat: comprehensive Bengali Engineering Report + SEPARATE Bengali Antigravity prompt (local work AND merge) + English master prompt LAST
