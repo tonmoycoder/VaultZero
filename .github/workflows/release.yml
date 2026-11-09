@@ -379,7 +379,7 @@ jobs:
           done
 
           echo "Verifying the published asset contract..."
-          names=$(gh release view "$TAG" --json assets --jq '.[].name // .assets[].name')
+          names=$(gh release view "$TAG" --json assets --jq '.assets[].name')
           for required in \
             "VaultZero-Windows-x64-Setup.exe" \
             "VaultZero-Windows-x64-Portable.exe" \
