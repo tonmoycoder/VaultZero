@@ -175,8 +175,15 @@ export default function LockScreen({
       hapticSuccess();
       onUnlocked(session);
     } catch (err: any) {
-      setError(err?.message || (lang === "bn" ? "পাসওয়ার্ড ভুল হয়েছে।" : "Incorrect credentials."));
-      hapticSuccess();
+      // V-99 / D-01: the native IPC error carries a fixed safeMessage for
+      // the real code (AUTH_FAILED, TAMPERED, INVALID_FORMAT, ...). Showing
+      // that — not a guessed "invalid values" line — is what tells the user
+      // their password was simply wrong. No success haptic on a failure.
+      setError(
+        err?.safeMessage ||
+        err?.message ||
+        (lang === "bn" ? "পাসওয়ার্ড ভুল হয়েছে।" : "Incorrect credentials.")
+      );
     } finally {
       setLoading(false);
     }

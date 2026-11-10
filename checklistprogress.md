@@ -371,3 +371,18 @@ Active branch: `arena/317fbb3c-vaultzero` (never rename). PR #2 + #3 MERGED, #1 
 
 
 
+
+## PHASE H / V-99 — Windows photo RCA: unlock error, native recovery dead-end & clipped bulk bar (2026-11-10)
+
+- [x] Provenance: `gh release list` -> Latest `v2.5.2-beta.1` (8 assets, `2026-11-09T18:36:11Z`, target `071e407`, parent `2280e33`); PR #4 MERGED as `722affc`; beta source still has `includes('VALID')` + `bottom-8` -> defects are in `main`, NOT a stale-binary artefact
+- [x] D-01 RED: `classifyNativeError("Authentication failed: invalid master password ...")` -> VALIDATION; `unlock_vault` leaked `e.to_string()`; safe `AUTH_FAILED` / `INVALID_FORMAT` / `TAMPERED` / `IO` / `CRYPTO_FAILED` messages -> UNKNOWN
+- [x] D-01 GREEN: exact-message + known-prefix classifier (structured codes still accepted; `invalid value:` stays VALIDATION), `safe_error(&e)` in `unlock_vault`, `err.safeMessage` preferred, no success haptic on failure
+- [x] D-02 RED: native `.pmv` header has NO recovery slot, `create_vault(..., None)`, `recoverVaultWithRecoveryKey()` reads only localStorage, Fresh Reset cleared only localStorage -> "Welcome back" loop
+- [x] D-02 GREEN: Rust `reset_vault` (timestamped rename, `MAX_ARCHIVES = 3`, session cleared) + registered command; `resetVaultForForgotPassword()` for both runtimes; native modal hides the impossible key tab, explains why, starts on Fresh Reset
+- [x] D-03 RED measured: 700x1000 overlap 36px; 390x844 bar `x=-132..522`, Delete right `476 > 390`, overlap 36px; 1440x900 fine
+- [x] D-03 GREEN: `.floating-bulk-bar` CSS (`94px`/`32px` + `--safe-bottom`, `width:max-content`, `max-width`, phone wrap / >=640px nowrap, no shrink); 390px -> `12..378`, Delete right `240`, all actions visible, 26px gap; 700px -> `12..688`, 26px gap; 1440px unchanged
+- [x] 45th + 46th harness: RED 12 + 19 FAIL -> GREEN 20/20 + 37/37 PASS (real bundled modules + mocked native IPC)
+- [x] New Playwright: bulk-bar spec RED 4/4 -> GREEN 4/4; native unlock/reset spec proven 2 FAIL on reverted `722affc` -> 2 PASS on fix
+- [x] `scripts/build-test-bundles.mjs` += `platform-built.mjs` so the classifier is tested browserlessly
+- [x] FINAL LOOP: tsc 0 · verify 0 (**46 harness**) · node20 46/46 · audit 0 · live 5/5 · FULL Playwright **182/182 (11.6m)** — zero regressions
+- [!] Full native recovery-key support still requires a new wrapped-key slot in the PMV format; deliberately not faked. Fixes are NOT in `v2.5.2-beta.1` — a new signed build is required; NO tag/sign/merge/publish by this agent

@@ -49,18 +49,63 @@ const SAFE_MESSAGES: Record<VaultErrorCode, string> = {
   UNKNOWN: 'Something went wrong. The vault was not modified.',
 };
 
+/**
+ * The exact, fixed messages the Rust core may put on the IPC boundary.
+ *
+ * V-99 / D-01: the classifier used to look for substrings such as `VALID`.
+ * That matched "inVALID master password", "File header is inVALID" and
+ * "inVALID_FORMAT" alike, so a WRONG master password was reported as
+ * "Some of the values entered were not valid." — the Windows screenshot.
+ * Real AUTH_FAILED / INVALID_FORMAT / TAMPERED / IO failures were never
+ * classified at all. Only exact, known strings are trusted now; anything
+ * unknown is UNKNOWN and never leaks internal detail.
+ */
+const MESSAGE_CODES: Record<string, VaultErrorCode> = {
+  ...(Object.fromEntries(
+    Object.entries(SAFE_MESSAGES).map(([code, message]) => [message, code]),
+  ) as Record<string, VaultErrorCode>),
+  // The Rust core's `user_message()` for VaultMissing is slightly longer
+  // than the frontend's fixed string. Both must classify identically.
+  'No vault was found at this location. Create one to get started.': 'VAULT_MISSING',
+};
+
+/**
+ * Prefixes of the raw `VaultError` Display strings. Some commands still
+ * return `e.to_string()`; map those deterministically instead of guessing
+ * from a word buried inside the sentence.
+ */
+const LEGACY_PREFIX_CODES: ReadonlyArray<readonly [string, VaultErrorCode]> = [
+  ['AUTHENTICATION FAILED:', 'AUTH_FAILED'],
+  ['AUTHENTICATION ERROR:', 'AUTH_FAILED'],
+  ['FILE HEADER IS INVALID', 'INVALID_FORMAT'],
+  ['DATA TAMPERING DETECTED', 'TAMPERED'],
+  ['CORRUPTED DATA:', 'TAMPERED'],
+  ['DECRYPTION FAILED', 'CRYPTO_FAILED'],
+  ['CRYPTOGRAPHIC ERROR:', 'CRYPTO_FAILED'],
+  ['I/O ERROR:', 'IO'],
+  ['STORAGE ERROR:', 'IO'],
+  ['SERIALIZATION ERROR:', 'UNKNOWN'],
+  ['RAM MEMORY LOCK ERROR:', 'UNKNOWN'],
+  ['KEY DERIVATION PARAMETER ERROR:', 'UNKNOWN'],
+  ['VAULT IS LOCKED', 'LOCKED'],
+  // Tauri's own IPC argument errors are the ONLY genuine VALIDATION case.
+  ['INVALID VALUE', 'VALIDATION'],
+];
+
 /** Maps a raw native error message onto a stable error code. */
 export function classifyNativeError(message: string): VaultErrorCode {
-  const upper = message.toUpperCase();
-  if (upper.includes('AUTH_FAILED')) return 'AUTH_FAILED';
-  if (upper.includes('VAULT_MISSING')) return 'VAULT_MISSING';
-  if (upper.includes('INVALID_FORMAT')) return 'INVALID_FORMAT';
-  if (upper.includes('TAMPER')) return 'TAMPERED';
-  if (upper.includes('CRYPTO_FAILED')) return 'CRYPTO_FAILED';
-  if (upper.includes('LOCKED')) return 'LOCKED';
-  if (upper.includes('VALID')) return 'VALIDATION';
-  if (upper.includes('CONFLICT')) return 'CONFLICT';
-  if (upper.includes('IO_FAILED')) return 'IO';
+  const raw = String(message ?? '').trim();
+  const exact = MESSAGE_CODES[raw];
+  if (exact) return exact;
+
+  const upper = raw.toUpperCase();
+  // A structured code-only error (e.g. "AUTH_FAILED") is already safe.
+  if (Object.prototype.hasOwnProperty.call(SAFE_MESSAGES, upper)) {
+    return upper as VaultErrorCode;
+  }
+  for (const [prefix, code] of LEGACY_PREFIX_CODES) {
+    if (upper.startsWith(prefix)) return code;
+  }
   return 'UNKNOWN';
 }
 

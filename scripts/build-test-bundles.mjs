@@ -35,6 +35,9 @@ const targets = [
   { entry: "src/lib/p2pMerge.ts", out: "p2pMerge-built.mjs" },
   { entry: "src/lib/quickUnlock.ts", out: "quickUnlock-built.mjs" },
   { entry: "src/lib/totp.ts", out: "totp-built.mjs" },
+  // V-99: the native IPC error classifier is pure logic, so the desktop
+  // unlock-message regression can be asserted without launching a browser.
+  { entry: "src/lib/platform.ts", out: "platform-built.mjs" },
 ];
 
 for (const target of targets) {

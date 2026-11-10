@@ -9,12 +9,13 @@ import {
 } from "@phosphor-icons/react";
 import { useState, useRef, type FormEvent } from "react";
 import {
-  archiveAndResetVault,
   readKeyfile,
   recoverVaultWithRecoveryKey,
+  resetVaultForForgotPassword,
   type Language,
   type UnlockedSession,
 } from "../lib/vault";
+import { isNativeRuntime } from "../lib/platform";
 import { cn } from "../utils/cn";
 import { Modal } from "./ui";
 
@@ -31,7 +32,12 @@ export default function VaultRecoveryModal({
   onResetVault,
   lang = "en",
 }: VaultRecoveryModalProps) {
-  const [tab, setTab] = useState<"key" | "reset">("key");
+  // V-99 / D-02: the native `.pmv` vault has no recovery-key slot at all.
+  // Offering a 24-character key form there was a dead end — it always read an
+  // empty localStorage container. Desktop therefore starts on the one path
+  // that really works: archive the sealed file and create a fresh vault.
+  const nativeRuntime = isNativeRuntime();
+  const [tab, setTab] = useState<"key" | "reset">(nativeRuntime ? "reset" : "key");
 
   // Recovery Key State
   const [recoveryKey, setRecoveryKey] = useState("");
@@ -101,20 +107,35 @@ export default function VaultRecoveryModal({
     }
   };
 
-  const handleResetVault = () => {
+  const handleResetVault = async () => {
     const confirmText =
       lang === "bn"
-        ? "আপনি কি নিশ্চিতভাবে ভল্ট রিসেট করতে চান? বর্তমান এনক্রিপ্ট করা ডেটা নিরাপদে লোকাল আর্কাইভে জমা থাকবে।"
-        : "Are you sure you want to reset your vault? An emergency backup archive will be preserved locally.";
-    if (window.confirm(confirmText)) {
-      const archiveKey = archiveAndResetVault("user_forgot_password");
+        ? "আপনি কি নিশ্চিতভাবে ভল্ট রিসেট করতে চান? বর্তমান এনক্রিপ্ট করা ফাইল নিরাপদে একটি আর্কাইভে জমা থাকবে।"
+        : "Are you sure you want to reset your vault? The encrypted file will be preserved in a local archive.";
+    if (!window.confirm(confirmText)) return;
+
+    setLoading(true);
+    setError("");
+    try {
+      // Native: archives the real .pmv file. Browser: archives the
+      // localStorage container. Both keep the old encrypted bytes.
+      const archiveKey = await resetVaultForForgotPassword("user_forgot_password");
+      const label = archiveKey || (lang === "bn" ? "কোনো পুরোনো ভল্ট ছিল না" : "no previous vault was found");
       alert(
         lang === "bn"
-          ? `ভল্ট রিসেট করা হয়েছে। পূর্বের ডেটা ব্যাকআপ হিসেবে সংরক্ষিত: ${archiveKey}`
-          : `Vault reset. Previous container archived as: ${archiveKey}`
+          ? `ভল্ট রিসেট করা হয়েছে। পূর্বের ডেটা ব্যাকআপ হিসেবে সংরক্ষিত: ${label}`
+          : `Vault reset. Previous container archived as: ${label}`
       );
       onResetVault();
       onClose();
+    } catch (err: any) {
+      setError(
+        err?.safeMessage ||
+        err?.message ||
+        (lang === "bn" ? "ভল্ট রিসেট করা যায়নি।" : "The vault could not be reset.")
+      );
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -123,27 +144,37 @@ export default function VaultRecoveryModal({
       onClose={onClose}
       title={lang === "bn" ? "ভল্ট রিকভারি উইজার্ড" : "Master Password Recovery"}
       subtitle={
-        lang === "bn"
-          ? "মাস্টার পাসওয়ার্ড ভুলে গেলে নিচে যেকোনো একটি নিরাপদ পদ্ধতি ব্যবহার করুন।"
-          : "Recover your vault if you forgot your master password."
+        nativeRuntime
+          ? (lang === "bn"
+              ? "ডেস্কটপ ভল্ট শুধুমাত্র আপনার মাস্টার পাসওয়ার্ড (ও কি-ফাইল) দিয়েই খোলে। সেটি ছাড়া এনক্রিপ্ট করা ডেটা পুনরুদ্ধার করা সম্ভব নয়; পুরোনো ফাইল আর্কাইভ করে নতুন ভল্ট তৈরি করুন।"
+              : "Desktop vaults are sealed with your master password and keyfile. Without them the encrypted data cannot be decrypted; archive the old file and start a fresh vault.")
+          : (lang === "bn"
+              ? "মাস্টার পাসওয়ার্ড ভুলে গেলে নিচে যেকোনো একটি নিরাপদ পদ্ধতি ব্যবহার করুন।"
+              : "Recover your vault if you forgot your master password.")
       }
       icon={<ShieldWarning size={20} weight="duotone" className="text-accent" />}
       width="max-w-[520px]"
     >
-      {/* Recovery Tabs */}
-      <div className="mb-4 grid grid-cols-2 gap-1 rounded-[14px] border border-[var(--border-soft)] bg-[var(--glass-input)] p-1">
-        <button
-          type="button"
-          onClick={() => { setTab("key"); setError(""); }}
-          className={cn(
-            "h-9 rounded-[10px] text-center text-[11px] font-semibold transition-all whitespace-nowrap",
-            tab === "key"
-              ? "bg-[var(--glass-strong)] text-main shadow-sm"
-              : "text-muted hover:text-main"
-          )}
-        >
-          {lang === "bn" ? "🔑 রিকভারি কি" : "🔑 24-Char Recovery Key"}
-        </button>
+      {/* Recovery Tabs — a native vault has no recovery-key slot, so the
+          impossible tab is not shown there (V-99 / D-02). */}
+      <div className={cn(
+        "mb-4 grid gap-1 rounded-[14px] border border-[var(--border-soft)] bg-[var(--glass-input)] p-1",
+        nativeRuntime ? "grid-cols-1" : "grid-cols-2"
+      )}>
+        {!nativeRuntime && (
+          <button
+            type="button"
+            onClick={() => { setTab("key"); setError(""); }}
+            className={cn(
+              "h-9 rounded-[10px] text-center text-[11px] font-semibold transition-all whitespace-nowrap",
+              tab === "key"
+                ? "bg-[var(--glass-strong)] text-main shadow-sm"
+                : "text-muted hover:text-main"
+            )}
+          >
+            {lang === "bn" ? "🔑 রিকভারি কি" : "🔑 24-Char Recovery Key"}
+          </button>
+        )}
         <button
           type="button"
           onClick={() => { setTab("reset"); setError(""); }}
@@ -158,7 +189,21 @@ export default function VaultRecoveryModal({
         </button>
       </div>
 
-      {tab === "key" && (
+      {nativeRuntime && (
+        <div className="mb-4 rounded-[13px] border border-[var(--border-soft)] bg-[var(--glass-soft)] p-2.5 text-[8.5px] leading-relaxed text-muted">
+          <span className="flex items-center gap-1 font-semibold text-main">
+            <ShieldWarning size={13} weight="duotone" className="text-accent" />
+            {lang === "bn" ? "কেন রিকভারি কি নেই?" : "Why no recovery key?"}
+          </span>
+          <p className="mt-1">
+            {lang === "bn"
+              ? "এই ডেস্কটপ ভল্টের .pmv ফাইলে রিকভারি-কি স্লট নেই এবং অ্যাপ কখনো ২৪-অক্ষরের কি তৈরি করে না। তাই কি দিয়ে রিকভারি এখানে সম্ভব নয়। পুরোনো এনক্রিপ্ট করা ফাইল আর্কাইভ থেকে রেখে নতুন ভল্ট তৈরি করুন।"
+              : "This desktop vault's .pmv file has no recovery-key slot and the app never generates a 24-character key for it. Key-based recovery is therefore impossible here. Archive the old encrypted file and create a new vault."}
+          </p>
+        </div>
+      )}
+
+      {tab === "key" && !nativeRuntime && (
         <form onSubmit={handleRecoverWithKey} className="space-y-3">
           <div>
             <label className="mb-1 block text-[9px] font-semibold uppercase tracking-[0.08em] text-faint">
@@ -264,9 +309,13 @@ export default function VaultRecoveryModal({
               {lang === "bn" ? "জরুরী ফ্রেশ ভল্ট রিসেট" : "Emergency Fresh Vault Reset"}
             </h4>
             <p className="mt-1 text-[8.5px] leading-relaxed text-muted">
-              {lang === "bn"
-                ? "যদি আপনার কাছে মাস্টার পাসওয়ার্ড এবং রিকভারি কি কোনোটাই না থাকে, তবে বর্তমান এনক্রিপ্ট করা ফাইলটি একটি ব্যাকআপ আর্কাইভে সংরক্ষণ করে আপনি নতুন ভল্ট সেটআপ করতে পারেন।"
-                : "If you have lost both your master password and your recovery key, this creates a clean vault while archiving the old encrypted container in your local storage."}
+              {nativeRuntime
+                ? (lang === "bn"
+                    ? "মাস্টার পাসওয়ার্ড ও কি-ফাইল হারালে ডেটা ডিক্রিপ্ট করা যায় না। বর্তমান .pmv ফাইলটি আর্কাইভ করে রেখে আপনি নতুন ভল্ট সেটআপ করতে পারেন।"
+                    : "If the master password and keyfile are lost, the data cannot be decrypted. This archives the current .pmv file and lets you set up a new vault.")
+                : (lang === "bn"
+                    ? "যদি আপনার কাছে মাস্টার পাসওয়ার্ড এবং রিকভারি কি কোনোটাই না থাকে, তবে বর্তমান এনক্রিপ্ট করা ফাইলটি একটি ব্যাকআপ আর্কাইভে সংরক্ষণ করে আপনি নতুন ভল্ট সেটআপ করতে পারেন।"
+                    : "If you have lost both your master password and your recovery key, this creates a clean vault while archiving the old encrypted container in your local storage.")}
             </p>
           </div>
 
@@ -276,11 +325,21 @@ export default function VaultRecoveryModal({
               {lang === "bn" ? "ডেটা লস প্রতিরোধ সক্রিয়" : "Zero Accidental Data Loss Guarantee"}
             </span>
             <p className="mt-1 text-muted">
-              {lang === "bn"
-                ? "রিসেট করার সময় আপনার পুরোনো ভল্ট মোছা হবে না, বরং টাইমস্ট্যাম্প সহ একটি নিরাপদ আর্কাইভে রাখা হবে।"
-                : "The encrypted file is archived to vaultzero_archived_<timestamp> before clearing."}
+              {nativeRuntime
+                ? (lang === "bn"
+                    ? "পুরোনো ভল্ট মোছা হবে না; ভল্ট ফাইলের পাশে local-vault.archived-<timestamp>.pmv নামে (সর্বোচ্চ ৩টি) রাখা হবে।"
+                    : "Your old vault is not deleted; it is kept beside the vault file as local-vault.archived-<timestamp>.pmv (up to 3 archives).")
+                : (lang === "bn"
+                    ? "রিসেট করার সময় আপনার পুরোনো ভল্ট মোছা হবে না, বরং টাইমস্ট্যাম্প সহ একটি নিরাপদ আর্কাইভে রাখা হবে।"
+                    : "The encrypted file is archived to vaultzero_archived_<timestamp> before clearing.")}
             </p>
           </div>
+
+          {error && (
+            <p className="flex items-center gap-1 text-[8.5px] font-medium text-danger animate-rise">
+              <WarningCircle size={12} className="shrink-0" /> {error}
+            </p>
+          )}
 
           <div className="flex gap-2.5 pt-1">
             <button
@@ -293,9 +352,12 @@ export default function VaultRecoveryModal({
             <button
               type="button"
               onClick={handleResetVault}
-              className="h-10 flex-1 whitespace-nowrap rounded-full bg-[var(--danger)] text-[11px] font-semibold text-white shadow-md transition-opacity hover:opacity-90"
+              disabled={loading}
+              className="h-10 flex-1 whitespace-nowrap rounded-full bg-[var(--danger)] text-[11px] font-semibold text-white shadow-md transition-opacity hover:opacity-90 disabled:opacity-50"
             >
-              {lang === "bn" ? "আর্কাইভ ও নিরাপদ রিসেট" : "Archive & Reset Vault"}
+              {loading
+                ? (lang === "bn" ? "আর্কাইভ করা হচ্ছে…" : "Archiving…")
+                : (lang === "bn" ? "আর্কাইভ ও নিরাপদ রিসেট" : "Archive & Reset Vault")}
             </button>
           </div>
         </div>
