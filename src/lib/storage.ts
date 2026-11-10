@@ -1366,3 +1366,29 @@ export function archiveAndResetVault(reason = "emergency_reset"): string {
   clearActiveSession();
   return archiveKey;
 }
+
+/**
+ * V-99 / D-02: one "I forgot my master password" reset for BOTH backends.
+ *
+ * The WebCrypto vault lives in localStorage, but the desktop/mobile app uses
+ * a `.pmv` file in application data. Calling `archiveAndResetVault()` on a
+ * native runtime removed a container that was never authoritative: the app
+ * then reported "Welcome back" again with the same unopenable vault file.
+ * Native now archives the real file through a Rust command and clears the
+ * cached "a vault exists" flag, so the setup screen genuinely starts fresh.
+ */
+export async function resetVaultForForgotPassword(
+  reason = "user_forgot_password"
+): Promise<string> {
+  if (isNativeRuntime()) {
+    const archive = await invokeNativeCommand<string>("reset_vault");
+    clearActiveSession();
+    if (typeof window !== "undefined") {
+      window.localStorage.removeItem(NATIVE_VAULT_FLAG);
+      window.localStorage.removeItem(VAULT_STORAGE_KEY);
+      window.sessionStorage.removeItem(SESSION_STORAGE_KEY);
+    }
+    return archive;
+  }
+  return archiveAndResetVault(reason);
+}

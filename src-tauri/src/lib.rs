@@ -154,6 +154,60 @@ pub mod commands {
         }
     }
 
+    /// Archives the native vault file and drops the in-memory session so a
+    /// user who lost the master password can create a fresh vault.
+    ///
+    /// V-99 / D-02: "Fresh Reset" in the recovery modal used to clear only
+    /// `localStorage`. The desktop vault is a `.pmv` file in app-data, so the
+    /// app immediately went back to "Welcome back" with the very same
+    /// unopenable vault. The file is renamed, NEVER deleted, and the number
+    /// of archives is bounded for the same reason as the WebCrypto path.
+    #[tauri::command]
+    pub fn reset_vault(app: tauri::AppHandle, state: State<AppState>) -> Result<String, String> {
+        const MAX_ARCHIVES: usize = 3;
+
+        let dir = app
+            .path()
+            .app_data_dir()
+            .map_err(|e| format!("Could not resolve the application data directory: {}", e))?;
+        std::fs::create_dir_all(&dir)
+            .map_err(|e| format!("Could not create the application data directory: {}", e))?;
+
+        let vault = dir.join("local-vault.pmv");
+        let archive_name = if vault.exists() {
+            let stamp = std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .map(|d| d.as_millis())
+                .unwrap_or(0);
+            let name = format!("local-vault.archived-{}.pmv", stamp);
+            std::fs::rename(&vault, dir.join(&name))
+                .map_err(|e| format!("Could not archive the vault file: {}", e))?;
+            name
+        } else {
+            String::new()
+        };
+
+        // Repeated resets must not fill the disk with encrypted copies.
+        let mut archives: Vec<PathBuf> = Vec::new();
+        if let Ok(entries) = std::fs::read_dir(&dir) {
+            for entry in entries.flatten() {
+                let name = entry.file_name().to_string_lossy().to_string();
+                if name.starts_with("local-vault.archived-") && name.ends_with(".pmv") {
+                    archives.push(entry.path());
+                }
+            }
+        }
+        archives.sort();
+        let excess = archives.len().saturating_sub(MAX_ARCHIVES);
+        for path in archives.iter().take(excess) {
+            let _ = std::fs::remove_file(path);
+        }
+
+        *state.session.lock().unwrap() = None;
+        *state.vault_path.lock().unwrap() = None;
+        Ok(archive_name)
+    }
+
     /// Writes an already-verified update artifact to disk and returns its
     /// absolute path.
     ///
@@ -463,8 +517,13 @@ pub mod commands {
         let p = PathBuf::from(&path);
         let kf_bytes = keyfile_content.as_ref().map(|s| s.as_bytes());
 
+        // V-99 / D-01: this was the last storage command returning the raw
+        // `VaultError` Display text ("Authentication failed: invalid master
+        // password ..."). The frontend then classified that word "invalid"
+        // as VALIDATION and showed a misleading error on every wrong
+        // password. Keep the internal detail in the Rust-side log.
         let session = StorageEngine::unlock_vault(&p, &master_password, kf_bytes)
-            .map_err(|e| e.to_string())?;
+            .map_err(|e| safe_error(&e))?;
 
         let is_duress = session.is_duress;
         let entry_count = session
@@ -890,6 +949,7 @@ pub fn run() {
             commands::lock_vault,
             commands::vault_file_path,
             commands::has_vault_file,
+            commands::reset_vault,
             commands::lan_ipv4,
             commands::save_update_artifact,
             commands::create_vault,

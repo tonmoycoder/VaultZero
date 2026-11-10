@@ -961,6 +961,47 @@ button:active:not(:disabled) {
 .modal-footer {
   padding-bottom: calc(14px + var(--safe-bottom)) !important;
 }
+
+/* V-99 / D-03: the floating bulk-action bar was a 654px flex row pinned at
+   `bottom-8`. At 390x844 it measured x=-132..522 (clipped on BOTH sides and
+   "Delete selected" unreachable); at 700x1000 it overlapped the z-[60]
+   mobile nav by 36px. Lift it above the nav, cap its width to the viewport,
+   wrap the row on phones so every action is visible, and keep a scrollable
+   overflow as a fallback. `lg` hides the nav, so desktop keeps the original
+   32px offset. Children must not shrink, otherwise the labels would be
+   squeezed into unreadable wrapped text. */
+.floating-bulk-bar {
+  bottom: calc(94px + var(--safe-bottom));
+  /* `left: 50%` + a fixed element otherwise shrink-to-fits to the space on
+     the RIGHT of the centre (195px on a 390px phone), which wrapped the row
+     into six tiny lines. `max-content` keeps the natural 652px pill and lets
+     max-width cap it to the viewport. */
+  width: max-content;
+  max-width: calc(100vw - 24px);
+  /* On a phone the 654px row cannot fit in 366px. Wrap it into two rows so
+     Export / Delete are actually VISIBLE, not merely reachable by a hidden
+     horizontal scrollbar. */
+  flex-wrap: wrap;
+  justify-content: center;
+  border-radius: 26px;
+  overflow-x: auto;
+  overflow-y: hidden;
+  overscroll-behavior-x: contain;
+  scrollbar-width: none;
+}
+.floating-bulk-bar::-webkit-scrollbar { display: none; }
+.floating-bulk-bar > * { flex-shrink: 0; }
+@media (min-width: 640px) {
+  .floating-bulk-bar {
+    flex-wrap: nowrap;
+    border-radius: 9999px;
+  }
+}
+@media (min-width: 1024px) {
+  .floating-bulk-bar {
+    bottom: calc(32px + var(--safe-bottom));
+  }
+}
 .glowing-orb {
   position: absolute;
   border-radius: 999px;
